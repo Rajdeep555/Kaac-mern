@@ -1,33 +1,127 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
+
 enum UserRole {
   ADMIN
   CASHIER
 }
 
+enum Sector {
+  COUNCIL
+  STATE
+}
 
 model User {
-  id      Int @id @default(autoincrement())
-  name    String
-  email   String @unique
-  password String
-  isActive Boolean @default(true)
-  roles UserRole[]
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  isActive  Boolean  @default(true)
+  role      UserRole @default(CASHIER)
 
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
 
+model Division {
+  id            Int      @id @default(autoincrement())
+  divisionName  String
+  divisionCode  String
+  sector        Sector?
+  isActive      Boolean  @default(true)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  ddos      DDO[]
+  cashiers Cashier[]
+}
+
+model DDO {
+  id           Int      @id @default(autoincrement())
+  ddoName      String
+  ddoCode      String?
+  ddoEmail     String?
+  ddoPhone     String?
+  ddoPassword  String?
+  isActive     Boolean  @default(true)
+
+  // Foreign Key
+  divisionId Int
+  division   Division @relation(fields: [divisionId], references: [id])
+
+  // Relations
+  cashiers Cashier[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cashier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String?
+  cashierCode String?
+  phone     String?
+  password  String?
+  isActive  Boolean  @default(true)
+
+  // Foreign Keys
+  divisionId Int
+  ddoId      Int
+
+  // Relations
+  division Division @relation(fields: [divisionId], references: [id])
+  ddo      DDO      @relation(fields: [ddoId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExpenditureType {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PlanNonPlan {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ObjectHead {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

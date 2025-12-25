@@ -1,0 +1,24 @@
+export const createCashier = async (data) => {
+    // check existing cashier
+    const existingCashier = await prisma.cashier.findUnique({
+        where: {
+            cashierCode: data.cashierCode
+        }
+    })
+    if (existingCashier) {
+        logger.info("Cashier already exists");
+        throw new Error("Cashier already exists");
+    }
+    return prisma.cashier.create({
+        data: {
+            name: data.name,
+            email: data.email,
+            cashierCode: data.cashierCode,
+            phone: data.phone,
+            password: data.password,
+            divisionId: data.divisionId,
+            ddoId: data.ddoId,
+            isActive: data.isActive,
+        }
+    })
+}
