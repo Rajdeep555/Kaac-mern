@@ -1,6 +1,7 @@
 import TableButton from "../ui/TableButton";
 import { useDataTable } from "./useDataTable";
 import { IoSearch } from "react-icons/io5";
+import { BsArrowRightShort, BsArrowLeftShort } from "react-icons/bs";
 
 const DataTable = ({
   data,
@@ -8,6 +9,7 @@ const DataTable = ({
   searchableKeys = [],
   statusKey,
   pageSize = 5,
+  actionSlot,
 }) => {
   const {
     search,
@@ -48,7 +50,7 @@ const DataTable = ({
             ))}
           </div>
         )}
-        <div>
+        <div className="flex items-center gap-2">
           <div className="relative">
             <input
               type="text"
@@ -62,16 +64,19 @@ const DataTable = ({
             />
             <IoSearch className="absolute text-xl right-3 top-1/2 -translate-y-1/2 text-gray-900" />
           </div>
+          {actionSlot && actionSlot}
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto border rounded">
+      <div className="overflow-x-auto border border-gray-500 rounded-lg">
         <table className="w-full border-collapse">
           <thead className="bg-gray-100">
             <tr>
               {columns.map((col) => (
-                <th key={col.key} className="text-left px-4 py-2 border-b">
+                <th
+                  key={col.key}
+                  className="text-left px-4 py-2 border-b border-b-gray-500 font-unbounded font-normal">
                   {col.label}
                 </th>
               ))}
@@ -108,7 +113,8 @@ const DataTable = ({
           <button
             disabled={page === 1}
             onClick={() => setPage((p) => p - 1)}
-            className="px-3 py-1 border rounded disabled:opacity-50">
+            className="px-3 py-1 border rounded disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer">
+            <BsArrowLeftShort className="text-xl" />
             Prev
           </button>
 
@@ -119,8 +125,8 @@ const DataTable = ({
           <button
             disabled={page === totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1 border rounded disabled:opacity-50">
-            Next
+            className="px-3 py-1 border rounded disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer">
+            Next <BsArrowRightShort className="text-xl" />
           </button>
         </div>
       )}
