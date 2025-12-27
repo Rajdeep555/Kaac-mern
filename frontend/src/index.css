@@ -3,7 +3,7 @@
 
 @theme {
     --color-button-green: #3bb199;
-    --color-navlink-red: #8b0000;
+    --color-navlink-red: #ff0000;
     --color-active: #99a1af;
     --color-hover: #99a1af;
 
@@ -29,6 +29,9 @@
     .icon-lg {
         @apply w-8 h-8
     }
+    .icon-extra-lg{
+        @apply w-10 h-10
+    }
 
     .icon-cursor {
         @apply cursor-pointer
@@ -41,4 +44,25 @@
     .hover {
         @apply hover:bg-gray-400 p-1 rounded
     }
+}
+
+
+/* width */
+::-webkit-scrollbar {
+    width: 5px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+    background: #a2a2a2;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
