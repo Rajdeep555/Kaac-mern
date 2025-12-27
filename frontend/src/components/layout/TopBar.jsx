@@ -66,7 +66,7 @@ useEffect(() => {
         </div>
       </div>
       {search.length > 0 && searchItem.length > 0 && (
-        <div className="h-auto w-100 bg-gray-300 -mt-5 ml-15 flex flex-col rounded overflow-hidden z-10">
+        <div className="h-auto w-100 bg-gray-300 -mt-5 ml-15 flex flex-col rounded overflow-hidden z-50">
           {searchItem.map((item) => {
             return (
               <NavLink
