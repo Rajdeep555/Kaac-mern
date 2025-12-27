@@ -5,48 +5,44 @@ import { menuItems } from "./SideBar";
 import { NavLink } from "react-router";
 
 const TopBar = () => {
-
-//   console.log("kkk" ,menuLabels);
+  //   console.log("kkk" ,menuLabels);
 
   const [search, setSearch] = useState("");
-//   console.log(search)
+  //   console.log(search)
   const [searchItem, setSearchItem] = useState([]);
 
-//   useEffect(() => {
+  //   useEffect(() => {
 
-//     if(!search){
-//         setSearchItem([])
-//         return
-//     }
+  //     if(!search){
+  //         setSearchItem([])
+  //         return
+  //     }
 
-//       setSearchItem(menuItems.filter(item =>
-//           item.type === "link"  &&
-//           item.label.toLowerCase().includes(search.toLowerCase())))
+  //       setSearchItem(menuItems.filter(item =>
+  //           item.type === "link"  &&
+  //           item.label.toLowerCase().includes(search.toLowerCase())))
 
-          
-//   } , [search])
+  //   } , [search])
 
-useEffect(() => {
-  if (!search) {
-    setSearchItem([]);
-    return;
-  }
+  useEffect(() => {
+    if (!search) {
+      setSearchItem([]);
+      return;
+    }
 
-  const result = menuItems.filter(
-    (item) =>
-      item.type === "link" &&
-      item.label.toLowerCase().includes(search.toLowerCase())
-  );
+    const result = menuItems.filter(
+      (item) =>
+        item.type === "link" &&
+        item.label.toLowerCase().includes(search.toLowerCase())
+    );
 
-  setSearchItem(result);
-}, [search]);
+    setSearchItem(result);
+  }, [search]);
 
   console.log(searchItem);
-  
-
 
   return (
-    <div className="h-[9%] w-full bg-gray-300 ">
+    <div className="h-[10%] w-full bg-gray-300">
       <div className="w-[90%] bg-amber-00 mx-auto h-full flex justify-between items-center">
         <div>
           <input
@@ -73,8 +69,7 @@ useEffect(() => {
                 onClick={() => setSearch("")}
                 to={item.to}
                 className="hover:bg-gray-500 cursor-pointer p-3 w-full"
-                key={item.id}
-              >
+                key={item.id}>
                 {item.label}
               </NavLink>
             );
