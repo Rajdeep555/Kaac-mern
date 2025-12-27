@@ -1,36 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Courgette&family=Inter+Tight:ital,wght@0,100..900;1,100..900&family=Unbounded:wght@200..900&display=swap');
 @import "tailwindcss";
 
+@theme {
+    --color-button-green: #3bb199;
+    --color-navlink-red: #8b0000;
+    --color-active: #99a1af;
+    --color-hover: #99a1af;
 
-@theme {
-    --color-button-green : #3bb199
+    /* font families */
+    --font-unbounded: "Unbounded", sans-serif;
+
+
 }
-.padding{
-    @apply p-1
-}
-.icon-sm{
-    @apply w-4 h-4
-}
-.icon-md{
-    @apply w-6 h-6
-}
-.icon-lg{
-    @apply w-8 h-8
-}
-.icon-cursor{
-    @apply cursor-pointer
-}
-@theme {
-    --color-navlink-red : #8b0000
-}
-@theme {
-    --color-active : #99a1af 
-}
-.active{
-    @apply bg-gray-400 rounded
-}
-/* @theme {
-    --color-hover : #99a1af
-} */
-.hover{
-    @apply hover:bg-gray-400 p-1 rounded
+
+@layer utilities {
+    .padding {
+        @apply p-1
+    }
+
+    .icon-sm {
+        @apply w-4 h-4
+    }
+
+    .icon-md {
+        @apply w-6 h-6
+    }
+
+    .icon-lg {
+        @apply w-8 h-8
+    }
+
+    .icon-cursor {
+        @apply cursor-pointer
+    }
+
+    .active {
+        @apply bg-gray-400 rounded
+    }
+
+    .hover {
+        @apply hover:bg-gray-400 p-1 rounded
+    }
 }
