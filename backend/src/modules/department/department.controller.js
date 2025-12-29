@@ -1,5 +1,5 @@
 import { createDepartmentSchema } from "./department.schema.js"
-import { createDepartment } from "./department.service";
+import { createDepartment } from "./department.service.js";
 
 export const create = async (data) => {
     try {

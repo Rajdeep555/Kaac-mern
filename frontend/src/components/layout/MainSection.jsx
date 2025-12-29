@@ -4,11 +4,11 @@ import TopBar from "./TopBar";
 
 const MainSection = () => {
   return (
-    <div className="h-screen w-full bg-white flex">
+    <div className="h-screen max-w-full bg-white flex overflow-hidden">
       <Sidebar />
       <div className="h-screen w-[80%] bg-red-00 flex flex-col">
         <TopBar />
-        <div className="px-2 py-4">
+        <div className="px-2 py-4 overflow-y-auto ">
           <Outlet />
         </div>
       </div>
