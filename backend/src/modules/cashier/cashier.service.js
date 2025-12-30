@@ -1,3 +1,6 @@
+import prisma from "../../config/database.js";
+import logger from "../../utils/logger.js";
+
 export const createCashier = async (data) => {
     // check existing cashier
     const existingCashier = await prisma.cashier.findUnique({
@@ -21,4 +24,18 @@ export const createCashier = async (data) => {
             isActive: data.isActive,
         }
     })
+}
+
+export const getCashiers = async () => {
+    return prisma.cashier.findMany({
+        orderBy: { createdAt: "desc" },
+        include: {
+            division: {
+                select: { id: true, divisionName: true }
+            },
+            ddo: {
+                select: { id: true, ddoName: true, ddoCode: true }
+            }
+        }
+    });
 }

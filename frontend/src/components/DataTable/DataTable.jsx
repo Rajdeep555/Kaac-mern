@@ -1,47 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useDataTable } from "./useDataTable";
 import { IoSearch } from "react-icons/io5";
 import { BsArrowRightShort, BsArrowLeftShort } from "react-icons/bs";
+import { useDataTable } from "./useDataTable";
+import { toCSV, downloadTextFile } from "../../utils/csvUtils";
+import { handlePrint } from "../../utils/printUtils";
 
-// -------- CSV + download helpers --------
-const csvEscape = (value) => {
-  if (value === null || value === undefined) return "";
-  const s = String(value);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-};
-
-const toCSV = (dataRows, columns) => {
-  const cols = (columns || []).filter((c) => c?.key);
-  const headers = cols.map((c) => csvEscape(c.label)).join(",");
-  const keys = cols.map((c) => c.key);
-
-  const lines = (dataRows || []).map((row) =>
-    keys.map((k) => csvEscape(row?.[k])).join(",")
-  );
-
-  return [headers, ...lines].join("\n");
-};
-
-const downloadTextFile = (
-  content,
-  filename,
-  contentType = "text/csv;charset=utf-8;"
-) => {
-  const blob = new Blob([content], { type: contentType });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-
-  // Delay revoke to avoid "revoked too early" issues in some browsers. [web:146]
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-};
-// ---------------------------------------
+export const ButtonTwo = ({ name, bgColor, onClick, hoverColor = "" }) => (
+  <button
+    onClick={onClick}
+    type="button"
+    className={`${bgColor} ${hoverColor} px-5 py-2 rounded-full text-white text-sm font-unbounded font-light flex items-center justify-center gap-2 cursor-pointer`}>
+    {name}
+  </button>
+);
 
 const DataTable = ({
   data,
@@ -51,7 +22,7 @@ const DataTable = ({
   pageSize = 5,
   actionSlot,
   downloadFileName = "table",
-  printTitle = "Report", // print-only header title
+  printTitle = "Report",
 }) => {
   const {
     search,
@@ -82,8 +53,6 @@ const DataTable = ({
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
 
-  const handlePrint = () => window.print();
-
   const csvColumns = useMemo(
     () => (columns || []).filter((c) => c?.key),
     [columns]
@@ -103,7 +72,7 @@ const DataTable = ({
 
   return (
     <div className="space-y-4">
-      {/* Controls (hidden in print) */}
+      {/* Controls */}
       <div className="flex flex-wrap gap-3 items-center justify-between print:hidden">
         {statusKey && (
           <div className="flex rounded-full overflow-hidden bg-gray-200">
@@ -135,7 +104,6 @@ const DataTable = ({
               onClick={handlePrint}
             />
 
-            {/* Download dropdown */}
             <div className="relative" ref={downloadWrapRef}>
               <ButtonTwo
                 name="Download"
@@ -178,11 +146,10 @@ const DataTable = ({
             <IoSearch className="absolute text-xl right-3 top-1/2 -translate-y-1/2 text-gray-900" />
           </div>
 
-          {actionSlot && actionSlot}
+          {actionSlot}
         </div>
       </div>
-
-      {/* Print-only header (hidden on screen, visible in print) */}
+      {/* Print-only header */}
       <div className="hidden print:block">
         <h1 className="text-2xl font-semibold">{printTitle}</h1>
         <p className="text-sm text-gray-600">
@@ -206,7 +173,6 @@ const DataTable = ({
               ))}
             </tr>
           </thead>
-
           <tbody>
             {rows.length === 0 ? (
               <tr>
@@ -220,9 +186,11 @@ const DataTable = ({
                   key={i}
                   className="hover:bg-gray-50 print:hover:bg-transparent">
                   {columns.map((col) => (
-                    <td key={col.key} className="px-4 py-2 border-b">
+                    <td
+                      key={col.key}
+                      className="px-4 py-2 border-b print:border-b print:border-black">
                       {col.render
-                        ? col.render(row?.[col.key], row)
+                        ? col.render(row?.[col.key], row) 
                         : row?.[col.key]}
                     </td>
                   ))}
@@ -233,7 +201,7 @@ const DataTable = ({
         </table>
       </div>
 
-      {/* Pagination (hidden in print) */}
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-end gap-2 print:hidden">
           <button
@@ -263,14 +231,3 @@ const DataTable = ({
 };
 
 export default DataTable;
-
-export const ButtonTwo = ({ name, bgColor, onClick, hoverColor = "" }) => {
-  return (
-    <button
-      onClick={onClick}
-      type="button"
-      className={`${bgColor} ${hoverColor} px-5 py-2 rounded-full text-white text-sm font-unbounded font-light flex items-center justify-center gap-2 cursor-pointer`}>
-      {name}
-    </button>
-  );
-};

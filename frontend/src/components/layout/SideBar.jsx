@@ -10,6 +10,7 @@ import { AiFillAlert } from "react-icons/ai";
 import { RiFundsFill } from "react-icons/ri";
 import { nanoid } from "nanoid";
 import { FiSettings } from "react-icons/fi";
+import { useAuth } from "../../context/AuthContext";
 
 export const menuItems = [
   {
@@ -131,6 +132,7 @@ const Sidebar = () => {
     head: false,
     reports: false,
   });
+  const { user, role } = useAuth();
 
   const [openHead, setOpenHead] = useState(false);
 
@@ -203,12 +205,11 @@ const Sidebar = () => {
                   </div>
                 );
               }
-
               return null;
             })}
           </div>
         </div>
-        <div className="bg-gray-300 w-full h-30 p-4 flex flex-col gap-5">
+        <div className="bg-gray-300 w-full h-30 py-4 px-10 flex flex-col gap-5">
           <div className="flex items-center gap-3">
             <div>
               <img
@@ -218,8 +219,8 @@ const Sidebar = () => {
               />
             </div>
             <div>
-              <p className="text-sm">Kangkan Baishya</p>
-              <p className="text-sm">Admin</p>
+              <p className="text-sm font-unbounded">{user.name}</p>
+              <p className="text-sm">{role}</p>
             </div>
           </div>
           <div className="bg--600 w-full flex justify-between">

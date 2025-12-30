@@ -1,52 +1,63 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 
-export const useDataTable = ({
+export function useDataTable({
   data = [],
   searchableKeys = [],
   statusKey,
-  pageSize = 5,
-}) => {
+  pageSize = 10,
+}) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
 
   const filteredData = useMemo(() => {
-    let result = [...data];
+    let result = Array.isArray(data) ? [...data] : [];
 
-    // Search
-    if (search) {
+    if (statusKey && status !== "all") {
+      const wantActive = status === "active";
+      result = result.filter((row) => {
+        // Handlingg nested objects and direct boolean
+        const statusValue = row?.[statusKey];
+        const isActiveValue = Boolean(statusValue);
+        return isActiveValue === wantActive;
+      });
+    }
+
+    // 2. SEARCH FILTER
+    if (search.trim() && searchableKeys.length > 0) {
+      const s = search.toLowerCase();
       result = result.filter((row) =>
         searchableKeys.some((key) =>
-          String(row[key] ?? "")
+          String(row?.[key] ?? "")
             .toLowerCase()
-            .includes(search.toLowerCase())
+            .includes(s)
         )
       );
     }
 
-    // Status filter
-    if (status !== "all" && statusKey) {
-      result = result.filter((row) => row[statusKey] === status);
-    }
-
     return result;
-  }, [data, search, status, searchableKeys, statusKey]);
+  }, [data, search, searchableKeys, status, statusKey]);
 
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
 
-  const paginatedData = filteredData.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  );
+  const pageData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
 
   return {
     search,
     setSearch,
     status,
     setStatus,
-    page,
+    page: currentPage,
     setPage,
     totalPages,
-    data: paginatedData,
+    data: pageData,
+    filteredData,
+    loading,
+    setLoading,
   };
-};
+}

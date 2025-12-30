@@ -3,9 +3,9 @@ import { createDDO } from "./ddo.service.js";
 
 export const create = async (req, res) => {
     try {
-        const data = createDDOSchema.safeParse(req.body);
+        const result = createDDOSchema.safeParse(req.body);
 
-        const ddo = await createDDO(data);
+        const ddo = await createDDO(result.data);
 
         return res.status(201).json({
             success: true,

@@ -2,6 +2,9 @@ import prisma from "../../config/database.js"
 import logger from "../../utils/logger.js";
 
 export const createDivison = async (data) => {
+    logger.info("Creating division", data);
+    if (!data?.divisionCode) throw new Error("divisionCode is required");
+    if (!data?.divisionName) throw new Error("divisionName is required");
     // checking division already exists
     const existingDivision = await prisma.division.findUnique({
         where: {

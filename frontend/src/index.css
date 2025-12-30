@@ -45,6 +45,10 @@
     .hover {
         @apply hover:bg-gray-400 p-1 rounded
     }
+
+    .translate-x-full {
+        transform: translateX(100%);
+    }
 }
 
 

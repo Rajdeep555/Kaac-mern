@@ -18,40 +18,40 @@ enum Sector {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  isActive  Boolean  @default(true)
-  role      UserRole @default(CASHIER)
+  id       Int      @id @default(autoincrement())
+  name     String
+  email    String   @unique
+  password String
+  isActive Boolean  @default(true)
+  role     UserRole @default(CASHIER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Division {
-  id            Int      @id @default(autoincrement())
-  divisionName  String
-  divisionCode  String
-  sector        Sector?
-  isActive      Boolean  @default(true)
+  id           Int     @id @default(autoincrement())
+  divisionName String
+  divisionCode String  @unique
+  sector       Sector?
+  isActive     Boolean @default(true)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  ddos      DDO[]
+  ddos     DDO[]
   cashiers Cashier[]
 }
 
 model DDO {
-  id           Int      @id @default(autoincrement())
-  ddoName      String
-  ddoCode      String?
-  ddoEmail     String?
-  ddoPhone     String?
-  ddoPassword  String?
-  isActive     Boolean  @default(true)
+  id          Int     @id @default(autoincrement())
+  ddoName     String
+  ddoCode     String  @unique
+  ddoEmail    String?
+  ddoPhone    String?
+  ddoPassword String?
+  isActive    Boolean @default(true)
 
   // Foreign Key
   divisionId Int
@@ -65,13 +65,13 @@ model DDO {
 }
 
 model Cashier {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String?
-  cashierCode String?
-  phone     String?
-  password  String?
-  isActive  Boolean  @default(true)
+  id          Int     @id @default(autoincrement())
+  name        String
+  email       String?
+  cashierCode String  @unique
+  phone       String?
+  password    String?
+  isActive    Boolean @default(true)
 
   // Foreign Keys
   divisionId Int
@@ -86,41 +86,41 @@ model Cashier {
 }
 
 model ExpenditureType {
-  id        Int      @id @default(autoincrement())
-  name      String
-  sector    Sector?
-  isActive  Boolean  @default(true)
+  id       Int     @id @default(autoincrement())
+  name     String
+  sector   Sector?
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model PlanNonPlan {
-  id        Int      @id @default(autoincrement())
-  name      String
-  sector    Sector?
-  isActive  Boolean  @default(true)
+  id       Int     @id @default(autoincrement())
+  name     String
+  sector   Sector?
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model ObjectHead {
-  id        Int      @id @default(autoincrement())
-  name      String
-  sector    Sector?
-  isActive  Boolean  @default(true)
+  id       Int     @id @default(autoincrement())
+  name     String
+  sector   Sector?
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Department {
-  id        Int      @id @default(autoincrement())
-  name      String
-  code      String
-  sector    Sector?
-  isActive  Boolean  @default(true)
+  id       Int     @id @default(autoincrement())
+  name     String
+  code     String
+  sector   Sector?
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

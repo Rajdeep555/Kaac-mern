@@ -1,25 +1,34 @@
-import { createDivisionSchema } from "./division.schema.js"
+import logger from "../../utils/logger.js";
+import { createDivisionSchema } from "./division.schema.js";
 import { createDivison } from "./division.service.js";
 
 export const create = async (req, res) => {
     try {
-        const data = createDivisionSchema.safeParse(req.body);
+        logger.info("Creating division == ", req.body);
 
-        const divison = await createDivison(data);
+        const result = createDivisionSchema.safeParse(req.body);
+        logger.info("After division", result);
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: result.error.flatten(),
+            });
+        }
+
+        const division = await createDivison(result.data); // ✅ pass parsed object
 
         return res.status(201).json({
             success: true,
             message: "Divison created sucessfully",
             divison: {
-                id: divison.id,
-                divisionName: divison.divisionName,
-                divisionCode: divison.divisionCode
-            }
+                id: division.id,
+                divisionName: division.divisionName,
+                divisionCode: division.divisionCode,
+            },
         });
     } catch (error) {
-        return res.status(400).json({
-            success: false,
-            message: error.message
-        })
+        return res.status(400).json({ success: false, message: error.message });
     }
-}
+};
