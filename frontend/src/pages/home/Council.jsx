@@ -1,9 +1,7 @@
-import React from 'react'
+import React from "react";
 
 const Council = () => {
-  return (
-    <div>Council</div>
-  )
-}
+  return <div>Council</div>;
+};
 
-export default Council
+export default Council;

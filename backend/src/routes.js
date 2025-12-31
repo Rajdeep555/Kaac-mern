@@ -19,6 +19,12 @@ router.use("/v1/expenditureType", expenditureTypeRoutes);
 router.use("/v1/planNonPlan", planNonPlanRoutes);
 router.use("/v1/department", departmentRoutes)
 
-router.use("*", (req, res) => res.status(404).json({ message: "Page not found" }))
+// router.all(/.*/, (req, res) => {
+//     res.status(404).json({
+//         success: false,
+//         message: "Route not found",
+//     });
+// });
+
 
 export default router;

@@ -8,7 +8,7 @@ const MainSection = () => {
       <Sidebar />
       <div className="h-screen w-[80%] bg-red-00 flex flex-col">
         <TopBar />
-        <div className="px-2 py-4">
+        <div className="px-2 py-4 overflow-y-auto ">
           <Outlet />
         </div>
       </div>

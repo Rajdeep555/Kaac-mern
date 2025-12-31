@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { FiLogOut } from "react-icons/fi";
 import { useState } from "react";
 import { RiArrowDropDownLine } from "react-icons/ri";
@@ -127,6 +127,8 @@ export const menuItems = [
 ];
 
 const Sidebar = () => {
+  const navigate = useNavigate()
+
   const [openDropdown, setOpenDropdown] = useState({
     head: false,
     reports: false,
@@ -138,10 +140,12 @@ const Sidebar = () => {
     <div className="max-h-full w-[20%] bg-gray-300  overflow-auto ">
       <div className="h-full w-full mx-auto flex flex-col flex-start ">
         <div className="h-[calc(100vh-1rem)] px-10 pb-7 overflow-auto">
-          <h1 className="text-3xl font-bold text-button-green mt-5 mb-10">
-            KAAC
-          </h1>
-          <h2 className="font-semibold text-gray-500 mb-4">MENU</h2>
+          <img
+            src="../src/assets/logo.png"
+            alt="KAAC"
+            className="h-20 w-20 my-3"
+          />
+          <h2 className="font-semibold text-green-500 mb-4">MENU</h2>
           <div className="flex flex-col gap-3 text-md font-semibold">
             {menuItems.map((item) => {
               // NORMAL LINK
@@ -152,8 +156,7 @@ const Sidebar = () => {
                     to={item.to}
                     className={({ isActive }) =>
                       isActive ? "active padding" : "hover"
-                    }
-                  >
+                    }>
                     <span className="flex items-center gap-1">
                       {item.icon} {item.label}
                     </span>
@@ -174,8 +177,7 @@ const Sidebar = () => {
                           [item.key]: !prev[item.key],
                         }))
                       }
-                      className="w-full flex items-center justify-between cursor-pointer hover"
-                    >
+                      className="w-full flex items-center justify-between cursor-pointer hover">
                       <span>{item.label}</span>
                       <RiArrowDropDownLine
                         className={`icon-md transition-transform duration-300 ${
@@ -192,8 +194,7 @@ const Sidebar = () => {
                             to={child.to}
                             className={({ isActive }) =>
                               isActive ? "active padding" : "hover"
-                            }
-                          >
+                            }>
                             <span className="flex items-center gap-1">
                               {child.icon} {child.label}
                             </span>
@@ -224,14 +225,13 @@ const Sidebar = () => {
             </div>
           </div>
           <div className="bg--600 w-full flex justify-between">
-            <span className="flex gap-1">
+            <span onClick={() => navigate(`/profile`)} className="flex gap-1 icon-cursor">
               <FiSettings className="icon-md" />
               <p>Settings</p>
             </span>
-            <span className="flex gap-1">
+            <span onClick={() => alert("Don't click otherwise You Logout!")} className="flex gap-1 icon-cursor">
               <FiLogOut
-                onClick={() => alert("don't click otherwise you logout")}
-                className="icon-md icon-cursor text-red-500"
+                className="icon-md text-red-500"
               />
               <p>Logout</p>
             </span>

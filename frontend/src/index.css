@@ -29,7 +29,8 @@
     .icon-lg {
         @apply w-8 h-8
     }
-    .icon-extra-lg{
+
+    .icon-extra-lg {
         @apply w-10 h-10
     }
 
@@ -65,4 +66,26 @@
 /* Handle on hover */
 ::-webkit-scrollbar-thumb:hover {
     background: #555;
+}
+
+@media print {
+
+    /* Hide everything */
+    body * {
+        visibility: hidden;
+    }
+
+    /* Show only print area */
+    #printArea,
+    #printArea * {
+        visibility: visible;
+    }
+
+    /* Put it at the top-left of the printed page */
+    #printArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
 }
