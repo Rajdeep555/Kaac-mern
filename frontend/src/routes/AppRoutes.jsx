@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import RequireAuth from "./RequireAuth";
 
 import MainSection from "../components/layout/MainSection";
@@ -18,6 +18,10 @@ import Plan_Non_Plan from "../pages/home/Plan_Non_Plan";
 import State_Recipt_Report from "../pages/home/State_Recipt_Report";
 import State from "../pages/home/State";
 import Support from "../pages/home/Support";
+import Profile from "../pages/auth/Profile";
+import Personalnfo from "../pages/auth/Personalnfo";
+import PasswordChanger from "../pages/auth/PasswordChanger";
+import Logout from "../pages/auth/Logout";
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -35,6 +39,17 @@ const AppRoutes = createBrowserRouter([
           {
             element: <RequireAuth allowedRoles={["ADMIN"]} />,
             children: [
+              {
+                path: "/profile", element: <Profile />, children: [
+
+                  //profile
+
+                  { index: true, element: <Navigate to="personalinfo" replace /> },
+                  { path: "personalinfo", element: <Personalnfo /> },
+                  { path: "passwordchanger", element: <PasswordChanger /> },
+                  { path: "logout", element: <Logout /> },
+                ]
+              },
               { path: "accountant", element: <Accountant /> },
               { path: "department", element: <Department /> },
               { path: "division", element: <Division /> },

@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { FiLogOut } from "react-icons/fi";
 import { useState } from "react";
 import { RiArrowDropDownLine } from "react-icons/ri";
@@ -128,6 +128,8 @@ export const menuItems = [
 ];
 
 const Sidebar = () => {
+  const navigate = useNavigate()
+
   const [openDropdown, setOpenDropdown] = useState({
     head: false,
     reports: false,
@@ -224,14 +226,13 @@ const Sidebar = () => {
             </div>
           </div>
           <div className="bg--600 w-full flex justify-between">
-            <span className="flex gap-1">
+            <span onClick={() => navigate(`/profile`)} className="flex gap-1 icon-cursor">
               <FiSettings className="icon-md" />
               <p>Settings</p>
             </span>
-            <span className="flex gap-1">
+            <span onClick={() => alert("Don't click otherwise You Logout!")} className="flex gap-1 icon-cursor">
               <FiLogOut
-                onClick={() => alert("don't click otherwise you logout")}
-                className="icon-md icon-cursor text-red-500"
+                className="icon-md text-red-500"
               />
               <p>Logout</p>
             </span>
