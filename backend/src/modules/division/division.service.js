@@ -25,3 +25,17 @@ export const createDivison = async (data) => {
         }
     })
 }
+
+export const getAllDivisions = async () => {
+    return prisma.division.findMany({
+        where: { isActive: true },
+        select: {
+            id: true,
+            divisionCode: true,
+            divisionName: true,
+        },
+        orderBy: {
+            divisionName: "asc"
+        }
+    })
+}

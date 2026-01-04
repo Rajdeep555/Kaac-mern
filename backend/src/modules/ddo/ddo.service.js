@@ -24,3 +24,20 @@ export const createDDO = async (data) => {
         }
     })
 }
+
+
+export const getAllDDOs = async () => {
+    return prisma.dDO.findMany({
+        where: { isActive: true },
+        select: {
+            id: true,
+            ddoName: true,
+            ddoCode: true,
+            ddoPhone: true,
+            ddoEmail: true,
+        },
+        orderBy: {
+            ddoName: "asc"
+        }
+    })
+}

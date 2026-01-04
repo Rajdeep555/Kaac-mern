@@ -7,6 +7,98 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  isActive  Boolean  @default(true)
+  role      UserRole @default(CASHIER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Division {
+  id           Int       @id @default(autoincrement())
+  divisionName String
+  divisionCode String    @unique
+  sector       Sector?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  cashiers     Cashier[]
+  ddos         DDO[]
+}
+
+model DDO {
+  id          Int       @id @default(autoincrement())
+  ddoName     String
+  ddoEmail    String?
+  ddoPhone    String?
+  ddoPassword String?
+  isActive    Boolean   @default(true)
+  divisionId  Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  ddoCode     String    @unique
+  cashiers    Cashier[]
+  division    Division  @relation(fields: [divisionId], references: [id])
+}
+
+model Cashier {
+  id          Int      @id @default(autoincrement())
+  name        String
+  email       String?
+  phone       String?
+  password    String?
+  isActive    Boolean  @default(true)
+  divisionId  Int
+  ddoId       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  cashierCode String   @unique
+  
+  ddo         DDO      @relation(fields: [ddoId], references: [id])
+  division    Division @relation(fields: [divisionId], references: [id])
+}
+
+model ExpenditureType {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PlanNonPlan {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ObjectHead {
+  id        Int      @id @default(autoincrement())
+  name      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String
+  sector    Sector?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum UserRole {
   ADMIN
   CASHIER
@@ -15,113 +107,4 @@ enum UserRole {
 enum Sector {
   COUNCIL
   STATE
-}
-
-model User {
-  id       Int      @id @default(autoincrement())
-  name     String
-  email    String   @unique
-  password String
-  isActive Boolean  @default(true)
-  role     UserRole @default(CASHIER)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Division {
-  id           Int     @id @default(autoincrement())
-  divisionName String
-  divisionCode String  @unique
-  sector       Sector?
-  isActive     Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  ddos     DDO[]
-  cashiers Cashier[]
-}
-
-model DDO {
-  id          Int     @id @default(autoincrement())
-  ddoName     String
-  ddoCode     String  @unique
-  ddoEmail    String?
-  ddoPhone    String?
-  ddoPassword String?
-  isActive    Boolean @default(true)
-
-  // Foreign Key
-  divisionId Int
-  division   Division @relation(fields: [divisionId], references: [id])
-
-  // Relations
-  cashiers Cashier[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Cashier {
-  id          Int     @id @default(autoincrement())
-  name        String
-  email       String?
-  cashierCode String  @unique
-  phone       String?
-  password    String?
-  isActive    Boolean @default(true)
-
-  // Foreign Keys
-  divisionId Int
-  ddoId      Int
-
-  // Relations
-  division Division @relation(fields: [divisionId], references: [id])
-  ddo      DDO      @relation(fields: [ddoId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ExpenditureType {
-  id       Int     @id @default(autoincrement())
-  name     String
-  sector   Sector?
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model PlanNonPlan {
-  id       Int     @id @default(autoincrement())
-  name     String
-  sector   Sector?
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ObjectHead {
-  id       Int     @id @default(autoincrement())
-  name     String
-  sector   Sector?
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Department {
-  id       Int     @id @default(autoincrement())
-  name     String
-  code     String
-  sector   Sector?
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

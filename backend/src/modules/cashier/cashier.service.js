@@ -39,3 +39,36 @@ export const getCashiers = async () => {
         }
     });
 }
+
+export const updateCashierById = async (id, data) => {
+    return prisma.cashier.update({
+        where: { id: Number(id) },
+        data: {
+            name: data.name,
+            email: data.email,
+            cashierCode: data.cashierCode,
+            phone: data.phone,
+            divisionId: data.divisionId !== undefined ? Number(data.divisionId) : undefined,
+            ddoId: data.ddoId !== undefined ? Number(data.ddoId) : undefined,
+            isActive: data.isActive,
+        },
+        include: {
+            division: { select: { id: true, divisionName: true } },
+            ddo: { select: { id: true, ddoName: true, ddoCode: true } }
+        }
+
+    })
+}
+
+export const deactivateCashierById = async (id) => {
+    return prisma.cashier.update({
+        where: { id: Number(id) },
+        data: {
+            isActive: false
+        },
+        include: {
+            division: { select: { id: true, divisionName: true } },
+            ddo: { select: { id: true, ddoName: true, ddoCode: true } },
+        }
+    })
+}

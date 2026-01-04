@@ -8,6 +8,7 @@ const FormOne = ({
   onSubmit,
   loading,
   error,
+  initialValues = {},
 }) => {
   if (!isOpen) return null;
 
@@ -67,7 +68,8 @@ const FormOne = ({
                   {field.type === "select" ? (
                     <select
                       name={field.name}
-                      defaultValue=""
+                      disabled={field.disabled}
+                      defaultValue={initialValues?.[field.name] ?? ""}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/20">
                       <option value="" disabled>
                         Select an option
@@ -81,8 +83,10 @@ const FormOne = ({
                   ) : (
                     <input
                       name={field.name}
+                      disabled={field.disabled}
                       type={field.type || "text"}
                       placeholder={field.placeholder}
+                      defaultValue={initialValues?.[field.name] ?? ""}
                       className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                     />
                   )}

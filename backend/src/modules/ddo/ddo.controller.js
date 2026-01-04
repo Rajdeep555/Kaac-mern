@@ -1,5 +1,5 @@
 import { createDDOSchema } from "./ddo.schema.js"
-import { createDDO } from "./ddo.service.js";
+import { createDDO, getAllDDOs } from "./ddo.service.js";
 
 export const create = async (req, res) => {
     try {
@@ -26,5 +26,22 @@ export const create = async (req, res) => {
             success: false,
             message: error.message
         })
+    }
+}
+
+export const getAll = async (req, res) => {
+    try {
+        const ddos = await getAllDDOs();
+        // console.log("ddos:", ddos); 
+
+        return res.status(200).json({
+            success: true,
+            ddos,
+        })
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch DDOs",
+        });
     }
 }

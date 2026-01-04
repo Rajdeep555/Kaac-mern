@@ -9,10 +9,12 @@ export const createCashier = (payload, token) =>
         headers: { Authorization: `Bearer ${token}` },
     });
 
+
 export const updateCashier = async (id, data) => {
-    return api.put(`/cashiers/${id}`, data);
+    return http.put(`/cashier/${id}`, data);
 };
 
 export const deleteCashier = async (id) => {
-    return api.delete(`/cashiers/${id}`);
+    return http.put(`/cashier/${id}/deactivate`, { isActive: false });
 };
+

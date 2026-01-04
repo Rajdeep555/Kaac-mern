@@ -190,7 +190,7 @@ const DataTable = ({
                       key={col.key}
                       className="px-4 py-2 border-b print:border-b print:border-black">
                       {col.render
-                        ? col.render(row?.[col.key], row) 
+                        ? col.render(row?.[col.key], row)
                         : row?.[col.key]}
                     </td>
                   ))}

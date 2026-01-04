@@ -1,5 +1,5 @@
 // src/pages/Cashier/Cashier.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import DataTable from "../../components/DataTable/DataTable.jsx";
 import TableButton from "../../components/ui/TableButton.jsx";
 import FormOne from "../../components/Forms/FormOne.jsx";
@@ -12,18 +12,32 @@ import {
 import { Loader } from "../../components/ui/Loader.jsx";
 import { showToast } from "../../utils/toast.js";
 import { AiFillEdit } from "react-icons/ai";
-import { MdDelete } from "react-icons/md";
+import { MdDelete, MdRestore } from "react-icons/md";
+import AlertModal from "../../components/ui/AlertModal.jsx";
+import { getDDOs } from "../../api/ddo.api.js";
+import { getDivisions } from "../../api/division.api.js";
 
 const Cashier = () => {
   const [cashiers, setCashiers] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState({}); // per-row loading
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [editingCashier, setEditingCashier] = useState(null); // For update
+  const [editingCashier, setEditingCashier] = useState(null);
+  const [alertModal, setAlertModal] = useState({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: null,
+    cashierId: null,
+  });
+  const [ddoOptions, setDdoOptions] = useState([]);
+  const [divisionOptions, setDivisionOptions] = useState([]);
 
   useEffect(() => {
     fetchCashiers();
+    fetchFormMasters();
   }, []);
 
   const fetchCashiers = async () => {
@@ -39,22 +53,74 @@ const Cashier = () => {
     }
   };
 
-  const handleDelete = async (cashierId) => {
-    if (!confirm("Are you sure you want to delete this cashier?")) return;
-
+  const fetchFormMasters = async () => {
     try {
-      await deleteCashier(cashierId);
-      setCashiers((prev) => prev.filter((c) => c.id !== cashierId));
-      showToast("Cashier deleted successfully!", "success");
+      const [ddoRes, divisionRes] = await Promise.all([
+        getDDOs(),
+        getDivisions(),
+      ]);
+
+      setDdoOptions(
+        ddoRes.data.ddos.map((d) => ({
+          label: `${d.ddoCode} - ${d.ddoName}`,
+          value: d.id,
+        }))
+      );
+
+      setDivisionOptions(
+        divisionRes.data.divisions.map((d) => ({
+          label: `${d.divisionCode} - ${d.divisionName} `,
+          value: d.id,
+        }))
+      );
     } catch (error) {
-      showToast("Failed to delete cashier", "error");
+      showToast("Failed to load form data", "error");
     }
   };
+
+  const handleDeleteOrReactivate = useCallback(async (cashierId, isActive) => {
+    setActionLoading((prev) => ({ ...prev, [cashierId]: true }));
+    try {
+      await deleteCashier(cashierId);
+
+      // Update state immediately
+      setCashiers((prev) =>
+        prev.map((cashier) =>
+          cashier.id === cashierId
+            ? { ...cashier, isActive: !isActive }
+            : cashier
+        )
+      );
+
+      showToast(
+        isActive ? "Cashier deactivated!" : "Cashier reactivated!",
+        "success"
+      );
+      setAlertModal((prev) => ({ ...prev, open: false, onConfirm: null }));
+    } catch (error) {
+      showToast("Operation failed", "error");
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [cashierId]: false }));
+    }
+  }, []);
 
   const handleEdit = (cashier) => {
     setEditingCashier(cashier);
     setIsModalOpen(true);
     setFormError("");
+  };
+
+  const openAlertModal = (cashierId, isActive) => {
+    setAlertModal({
+      open: true,
+      title: isActive ? "Deactivate Cashier?" : "Reactivate Cashier?",
+      message: isActive
+        ? "This cashier will be marked as inactive and hidden from active list."
+        : "This cashier will be marked as active again.",
+      onConfirm: () => handleDeleteOrReactivate(cashierId, isActive),
+      cashierId,
+      isActive,
+    });
   };
 
   const columns = [
@@ -82,22 +148,40 @@ const Cashier = () => {
     {
       key: "actions",
       label: "Actions",
-      render: (_, row) => (
-        <div className="flex gap-2">
-          <button
-            onClick={() => handleEdit(row)}
-            className="px-2.5 cursor-pointer py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-            title="Edit">
-            <AiFillEdit />
-          </button>
-          <button
-            onClick={() => handleDelete(row.id)}
-            className="px-2.5 cursor-pointer py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-            title="Delete">
-            <MdDelete />
-          </button>
-        </div>
-      ),
+      render: (_, row) => {
+        const isLoading = actionLoading[row.id];
+        const isActive = row.isActive;
+
+        return (
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleEdit(row)}
+              disabled={isLoading}
+              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+              title="Edit">
+              <AiFillEdit className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => openAlertModal(row.id, isActive)}
+              disabled={isLoading}
+              className={`p-1.5 rounded transition-colors disabled:opacity-50 ${
+                isActive
+                  ? "text-red-600 hover:bg-red-100"
+                  : "text-green-600 hover:bg-green-100"
+              }`}
+              title={isActive ? "Delete" : "Reactivate"}>
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : isActive ? (
+                <MdDelete className="w-4 h-4" />
+              ) : (
+                <MdRestore className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -114,35 +198,33 @@ const Cashier = () => {
       label: "Email",
       type: "email",
       placeholder: "Enter email",
-      required: true,
     },
     {
       name: "phone",
       label: "Phone",
       type: "text",
       placeholder: "Enter phone",
-      required: true,
     },
     {
       name: "cashierCode",
       label: "Code",
       type: "text",
       placeholder: "Enter code",
-      required: true,
+      disabled: !!editingCashier,
     },
     {
       name: "ddoId",
       label: "DDO ID",
-      type: "text",
-      placeholder: "Enter DDO ID",
-      required: true,
+      type: "select",
+      options: ddoOptions,
+      placeholder: "Select DDO",
     },
     {
       name: "divisionId",
       label: "Division ID",
-      type: "text",
-      placeholder: "Enter Division ID",
-      required: true,
+      type: "select",
+      options: divisionOptions,
+      placeholder: "Select Division",
     },
   ];
 
@@ -153,14 +235,12 @@ const Cashier = () => {
     try {
       let res;
       if (editingCashier) {
-        // UPDATE
         res = await updateCashier(editingCashier.id, formData);
         setCashiers((prev) =>
           prev.map((c) => (c.id === editingCashier.id ? res.data.cashier : c))
         );
         showToast("Cashier updated successfully!", "success");
       } else {
-        // CREATE
         res = await createCashier(formData);
         const formattedCashier = {
           ...res.data.cashier,
@@ -192,33 +272,37 @@ const Cashier = () => {
           Cashier Management
         </h1>
 
-        <DataTable
-          data={cashiers}
-          columns={columns}
-          searchableKeys={["name", "email", "phone", "cashierCode"]}
-          statusKey="isActive"
-          pageSize={10}
-          loading={loading}
-          downloadFileName="cashiers"
-          printTitle="Cashier Report"
-          actionSlot={
-            <TableButton
-              name="Add New Cashier"
-              onClick={() => {
-                setEditingCashier(null);
-                setFormError("");
-                setIsModalOpen(true);
-              }}
-            />
-          }
-        />
+        {loading ? (
+          <Loader />
+        ) : (
+          <DataTable
+            data={cashiers}
+            columns={columns}
+            searchableKeys={["name", "email", "phone", "cashierCode"]}
+            statusKey="isActive"
+            pageSize={10}
+            loading={loading}
+            downloadFileName="cashiers"
+            printTitle="Cashier Report"
+            actionSlot={
+              <TableButton
+                name="Add New Cashier"
+                onClick={() => {
+                  setEditingCashier(null);
+                  setFormError("");
+                  setIsModalOpen(true);
+                }}
+              />
+            }
+          />
+        )}
       </div>
 
       {isModalOpen && (
         <FormOne
           isOpen={isModalOpen}
           fields={cashierFormFields}
-          initialValues={editingCashier} // Pre-fill for edit
+          initialValues={editingCashier}
           onClose={() => {
             setFormError("");
             setIsModalOpen(false);
@@ -230,6 +314,16 @@ const Cashier = () => {
           onSubmit={handleSubmit}
         />
       )}
+
+      <AlertModal
+        isOpen={alertModal.open}
+        onClose={() => setAlertModal({ ...alertModal, open: false })}
+        onConfirm={alertModal.onConfirm}
+        title={alertModal.title}
+        message={alertModal.message}
+        confirmText={alertModal.isActive ? "Delete" : "Reactivate"}
+        loading={actionLoading[alertModal.cashierId]}
+      />
     </>
   );
 };

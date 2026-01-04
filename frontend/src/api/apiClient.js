@@ -16,3 +16,15 @@ http.interceptors.request.use((config) => {
     }
     return config;
 });
+
+
+// http.interceptors.response.use(
+//     res => res,
+//     err => {
+//         if (err.response?.status === 401) {
+//             localStorage.removeItem("app_auth");
+//             window.location.href = "/login";
+//         }
+//         return Promise.reject(err);
+//     }
+// );
