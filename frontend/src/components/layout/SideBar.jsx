@@ -128,7 +128,7 @@ export const menuItems = [
 ];
 
 const Sidebar = () => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const [openDropdown, setOpenDropdown] = useState({
     head: false,
@@ -226,14 +226,16 @@ const Sidebar = () => {
             </div>
           </div>
           <div className="bg--600 w-full flex justify-between">
-            <span onClick={() => navigate(`/profile`)} className="flex gap-1 icon-cursor">
+            <span
+              onClick={() => navigate(`/profile`)}
+              className="flex gap-1 icon-cursor">
               <FiSettings className="icon-md" />
               <p>Settings</p>
             </span>
-            <span onClick={() => alert("Don't click otherwise You Logout!")} className="flex gap-1 icon-cursor">
-              <FiLogOut
-                className="icon-md text-red-500"
-              />
+            <span
+              onClick={() => alert("Don't click otherwise You Logout!")}
+              className="flex gap-1 icon-cursor">
+              <FiLogOut className="icon-md text-red-500" />
               <p>Logout</p>
             </span>
           </div>

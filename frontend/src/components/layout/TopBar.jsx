@@ -40,7 +40,7 @@ const TopBar = () => {
   // console.log(searchItem);
 
   return (
-    <div className="h-[10%] w-full bg-gray-300  ">
+    <div className="h-20 w-full bg-gray-300">
       <div className="w-[90%] bg-amber-00 mx-auto h-full flex justify-between items-center">
         <div>
           <input
