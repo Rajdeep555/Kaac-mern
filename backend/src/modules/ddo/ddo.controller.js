@@ -5,21 +5,21 @@ export const create = async (req, res) => {
     try {
         const result = createDDOSchema.safeParse(req.body);
 
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: result.error.flatten(),
+            });
+        }
+
         const ddo = await createDDO(result.data);
 
+        console.log("DDO - ", ddo)
         return res.status(201).json({
             success: true,
             message: "DDO created successfully",
-            ddo: {
-                id: ddo.id,
-                ddoName: ddo.ddoName,
-                ddoCode: ddo.ddoCode,
-                ddoEmail: ddo.ddoEmail,
-                ddoPhone: ddo.ddoPhone,
-                ddoPassword: ddo.ddoPassword,
-                isActive: ddo.isActive,
-                divisionId: ddo.divisionId,
-            }
+            ddo,
         })
     } catch (error) {
         return res.status(400).json({

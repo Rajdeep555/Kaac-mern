@@ -7,6 +7,6 @@ export const createDDOSchema = z.object({
     ddoPhone: z.string().min(10).max(10).optional(),
     ddoPassword: z.string().optional(),
     isActive: z.boolean().optional(),
-    divisionId: z.int().optional(),
+    divisionId: z.coerce.number(),
     division: z.string().optional()
 })

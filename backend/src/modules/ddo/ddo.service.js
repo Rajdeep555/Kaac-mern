@@ -2,6 +2,8 @@ import prisma from "../../config/database.js"
 import logger from "../../utils/logger.js";
 
 export const createDDO = async (data) => {
+    logger.info("Creating DDO with data:", data);
+
     //checking ddo if already exists
     const existingDDO = await prisma.dDO.findUnique({
         where: {
@@ -35,6 +37,7 @@ export const getAllDDOs = async () => {
             ddoCode: true,
             ddoPhone: true,
             ddoEmail: true,
+            isActive: true,
         },
         orderBy: {
             ddoName: "asc"
