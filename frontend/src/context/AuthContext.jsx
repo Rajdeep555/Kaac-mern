@@ -13,6 +13,8 @@ const STORAGE_KEY = "app_auth";
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const isAuthed = !!token;
 
   useEffect(() => {
@@ -22,9 +24,11 @@ export function AuthProvider({ children }) {
       const parsed = JSON.parse(raw);
       setToken(parsed?.token ?? null);
       setUser(parsed?.user ?? null);
+      http.defaults.headers.common.Authorization = `Bearer ${parsed?.token}`;
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
+    setAuthLoading(false);
   }, []);
 
   useEffect(() => {
@@ -58,10 +62,11 @@ export function AuthProvider({ children }) {
       user,
       role: user?.role || null,
       isAuthed,
+      authLoading,
       login,
       logout,
     }),
-    [token, user, isAuthed]
+    [token, user, isAuthed, authLoading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
