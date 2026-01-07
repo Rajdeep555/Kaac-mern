@@ -75,7 +75,7 @@ const TopBar = () => {
             onClick={() => alert("No Notifications yet!")}
             className="icon-md icon-cursor "
           />
-          <CgProfile className="icon-md icon-cursor " />
+          <CgProfile onClick={() => navigate(`/profile`)} className="icon-md icon-cursor " />
         </div>
       </div>
       {search.length > 0 && (

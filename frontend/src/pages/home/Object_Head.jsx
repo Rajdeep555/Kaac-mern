@@ -111,8 +111,6 @@ const Object_Head = () => {
     { key: "name", label: "Name" },
     { key: "code", label: "Code" },
     { key: "sector", label: "Sector" },
-    { key: "created", label: "Created Time" },
-    { key: "updated", label: "Updated Time" },
     {
       key: "status",
       label: "Status",

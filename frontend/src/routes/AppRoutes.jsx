@@ -73,7 +73,7 @@ const AppRoutes = createBrowserRouter([
 
           // OTHERS
           {
-            element: <RequireAuth allowedRoles={["OTHER"]} />,
+            element: <RequireAuth allowedRoles={["OTHER", "ADMIN"]} />,
             children: [
               { path: "support", element: <Support /> },
             ],
