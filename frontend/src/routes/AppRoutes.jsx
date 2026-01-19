@@ -4,7 +4,6 @@ import RequireAuth from "./RequireAuth";
 import MainSection from "../components/layout/MainSection";
 
 import Login from "../pages/auth/Login";
-import DashBoard from "../pages/home/DashBoard";
 import Accountant from "../pages/home/Accountant";
 import Cashier from "../pages/home/Cashier";
 import Council from "../pages/home/Council";
@@ -22,6 +21,11 @@ import Profile from "../pages/auth/Profile";
 import Personalnfo from "../pages/auth/Personalnfo";
 import PasswordChanger from "../pages/auth/PasswordChanger";
 import Logout from "../pages/auth/Logout";
+import RoleBasedDashboard from "../pages/home/RoleBasedDashboard";
+import Challan from "../pages/cashier/Challan";
+import GeneratedChallans from "../pages/cashier/Generated-Challans";
+import StateChallan from "../pages/cashier/StateChallan";
+import GeneratedStateChallans from "../pages/cashier/GeneratedStateChallans";
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -33,23 +37,25 @@ const AppRoutes = createBrowserRouter([
         path: "/",
         element: <MainSection />,
         children: [
-          { index: true, element: <DashBoard /> },
+          { index: true, element: <RoleBasedDashboard /> },
 
-          // ADMIN
+          //Profile Admin and cashier
+          {
+            path: "/profile",
+            element: <Profile />,
+            children: [
+              { index: true, element: <Navigate to="personalinfo" replace /> },
+              { path: "personalinfo", element: <Personalnfo /> },
+              { path: "passwordchanger", element: <PasswordChanger /> },
+              { path: "logout", element: <Logout /> },
+            ],
+          },
+
+          // ADMIN Routes
+
           {
             element: <RequireAuth allowedRoles={["ADMIN"]} />,
             children: [
-              {
-                path: "/profile", element: <Profile />, children: [
-
-                  //profile
-
-                  { index: true, element: <Navigate to="personalinfo" replace /> },
-                  { path: "personalinfo", element: <Personalnfo /> },
-                  { path: "passwordchanger", element: <PasswordChanger /> },
-                  { path: "logout", element: <Logout /> },
-                ]
-              },
               { path: "accountant", element: <Accountant /> },
               { path: "department", element: <Department /> },
               { path: "division", element: <Division /> },
@@ -68,15 +74,21 @@ const AppRoutes = createBrowserRouter([
           // CASHIER
           {
             element: <RequireAuth allowedRoles={["CASHIER"]} />,
-            // children: [{ path: "cashier", element: <Cashier /> }],
+            children: [
+              { path: "challan", element: <Challan /> },
+              { path: "generated-challan", element: <GeneratedChallans /> },
+              { path: "state-challan", element: <StateChallan /> },
+              {
+                path: "generated-state-challan",
+                element: <GeneratedStateChallans />,
+              },
+            ],
           },
 
           // OTHERS
           {
-            element: <RequireAuth allowedRoles={["OTHER", "ADMIN"]} />,
-            children: [
-              { path: "support", element: <Support /> },
-            ],
+            element: <RequireAuth allowedRoles={["CASHIER", "ADMIN"]} />,
+            children: [{ path: "support", element: <Support /> }],
           },
         ],
       },

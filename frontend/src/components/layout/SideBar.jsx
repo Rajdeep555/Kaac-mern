@@ -19,6 +19,7 @@ export const menuItems = [
     label: "Dashboard",
     to: "/",
     icon: <RiDashboardFill className="icon-sm" />,
+    roles: ["ADMIN", "CASHIER"],
   },
   {
     id: nanoid(),
@@ -26,12 +27,14 @@ export const menuItems = [
     label: "Accountant",
     to: "/accountant",
     icon: <MdSupervisorAccount className="icon-sm" />,
+    roles: ["ADMIN"],
   },
   {
     type: "link",
     label: "Cashier",
     to: "/cashier",
     icon: <SiCashapp className="icon-sm" />,
+    roles: ["ADMIN"],
   },
   {
     id: nanoid(),
@@ -39,18 +42,21 @@ export const menuItems = [
     label: "DDO",
     to: "/ddo",
     icon: <GiPoliceOfficerHead className="icon-sm" />,
+    roles: ["ADMIN"],
   },
   {
     type: "link",
     label: "Department",
     to: "/department",
     icon: <RiFundsFill className="icon-sm" />,
+    roles: ["ADMIN"],
   },
   {
     type: "link",
     label: "Division",
     to: "/division",
     icon: <AiFillAlert className="icon-sm" />,
+    roles: ["ADMIN"],
   },
   {
     id: nanoid(),
@@ -58,6 +64,7 @@ export const menuItems = [
     label: "Expenditure Type",
     to: "/expenditure",
     icon: <RiFundsFill className="icon-sm" />,
+    roles: ["ADMIN"],
   },
 
   // HEAD DROPDOWN
@@ -66,6 +73,7 @@ export const menuItems = [
     type: "dropdown",
     label: "Head",
     key: "head",
+    roles: ["ADMIN"],
     children: [
       {
         id: nanoid(),
@@ -87,6 +95,7 @@ export const menuItems = [
     label: "Object Head",
     to: "/objecthead",
     icon: <GiPoliceOfficerHead className="icon-sm" />,
+    roles: ["ADMIN"],
   },
 
   // REPORTS DROPDOWN
@@ -95,6 +104,7 @@ export const menuItems = [
     type: "dropdown",
     label: "Reports",
     key: "reports",
+    roles: ["ADMIN"],
     children: [
       {
         id: nanoid(),
@@ -117,13 +127,51 @@ export const menuItems = [
     label: "Plan Non Plan",
     to: "/plan-non-plan",
     icon: <MdSupervisorAccount className="icon-sm" />,
+    roles: ["ADMIN"],
   },
+
+  //cashier
+  {
+    id: nanoid(),
+    type: "dropdown",
+    label: "Challans",
+    key: "challans",
+    roles: ["CASHIER"],
+    children: [
+      {
+        id: nanoid(),
+        label: "Challan",
+        to: "/challan",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+      {
+        id: nanoid(),
+        label: "Generated Challans",
+        to: "/generated-challan",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+      {
+        id: nanoid(),
+        label: "State-Challan",
+        to: "/state-challan",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+      {
+        id: nanoid(),
+        label: "Generated State Challans",
+        to: "/generated-state-challan",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+    ],
+  },
+
   {
     id: nanoid(),
     type: "link",
     label: "Support",
     to: "/support",
     icon: <MdSupervisorAccount className="icon-sm" />,
+    roles: ["ADMIN", "CASHIER"],
   },
 ];
 
@@ -149,66 +197,68 @@ const Sidebar = () => {
           />
           <h2 className="font-semibold text-green-500 mb-4">MENU</h2>
           <div className="flex flex-col gap-3 text-md font-semibold">
-            {menuItems.map((item) => {
-              // NORMAL LINK
-              if (item.type === "link") {
-                return (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      isActive ? "active padding" : "hover"
-                    }>
-                    <span className="flex items-center gap-1">
-                      {item.icon} {item.label}
-                    </span>
-                  </NavLink>
-                );
-              }
+            {menuItems
+              .filter((item) => item.roles.includes(user.role))
+              .map((item) => {
+                // NORMAL LINK
+                if (item.type === "link") {
+                  return (
+                    <NavLink
+                      key={item.label}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        isActive ? "active padding" : "hover"
+                      }>
+                      <span className="flex items-center gap-1">
+                        {item.icon} {item.label}
+                      </span>
+                    </NavLink>
+                  );
+                }
 
-              // DROPDOWN
-              if (item.type === "dropdown") {
-                const isOpen = openDropdown[item.key];
+                // DROPDOWN
+                if (item.type === "dropdown") {
+                  const isOpen = openDropdown[item.key];
 
-                return (
-                  <div key={item.label}>
-                    <button
-                      onClick={() =>
-                        setOpenDropdown((prev) => ({
-                          ...prev,
-                          [item.key]: !prev[item.key],
-                        }))
-                      }
-                      className="w-full flex items-center justify-between cursor-pointer hover">
-                      <span>{item.label}</span>
-                      <RiArrowDropDownLine
-                        className={`icon-md transition-transform duration-300 ${
-                          isOpen ? "rotate-180" : "rotate-0"
-                        }`}
-                      />
-                    </button>
+                  return (
+                    <div key={item.label}>
+                      <button
+                        onClick={() =>
+                          setOpenDropdown((prev) => ({
+                            ...prev,
+                            [item.key]: !prev[item.key],
+                          }))
+                        }
+                        className="w-full flex items-center justify-between cursor-pointer hover">
+                        <span>{item.label}</span>
+                        <RiArrowDropDownLine
+                          className={`icon-md transition-transform duration-300 ${
+                            isOpen ? "rotate-180" : "rotate-0"
+                          }`}
+                        />
+                      </button>
 
-                    {isOpen && (
-                      <div className="ml-4 mt-2 flex flex-col gap-2 text-sm">
-                        {item.children.map((child) => (
-                          <NavLink
-                            key={child.label}
-                            to={child.to}
-                            className={({ isActive }) =>
-                              isActive ? "active padding" : "hover"
-                            }>
-                            <span className="flex items-center gap-1">
-                              {child.icon} {child.label}
-                            </span>
-                          </NavLink>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              return null;
-            })}
+                      {isOpen && (
+                        <div className="ml-4 mt-2 flex flex-col gap-2 text-sm">
+                          {item.children.map((child) => (
+                            <NavLink
+                              key={child.label}
+                              to={child.to}
+                              className={({ isActive }) =>
+                                isActive ? "active padding" : "hover"
+                              }>
+                              <span className="flex items-center gap-1">
+                                {child.icon} {child.label}
+                              </span>
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })}
           </div>
         </div>
         <div className="bg-gray-300 w-full h-30 py-4 px-10 flex flex-col gap-5">
