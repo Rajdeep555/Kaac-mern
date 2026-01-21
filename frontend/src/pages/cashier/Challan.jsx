@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import FormWrapper from "../../components/Forms/FormWrapper";
 import InputField from "../../components/Forms/InputField";
 import SelectField from "../../components/Forms/SelectField";
-import RadioGroup from "../../components/Forms/RadioGroup";
 import TextAreaField from "../../components/Forms/TextAreaField";
 import DateField from "../../components/Forms/DateField";
+import { rupeesToWords } from "../../utils/rupeesToWords";
+import { formatIndianNumber } from "../../utils/formatIndianCurrency";
 
 const Challan = () => {
   const [form, setForm] = useState({
@@ -15,7 +16,19 @@ const Challan = () => {
   });
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === "totalAmount") {
+      const rawValue = value.replace(/,/g, "");
+
+      setForm((prev) => ({
+        ...prev,
+        totalAmount: formatIndianNumber(rawValue),
+        amountInWords: rupeesToWords(rawValue),
+      }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   return (

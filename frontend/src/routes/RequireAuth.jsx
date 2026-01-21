@@ -6,8 +6,8 @@ export default function RequireAuth({ allowedRoles }) {
   const location = useLocation();
   const { isAuthed, role, authLoading } = useAuth();
 
-  if(authLoading){
-    return <Loader />
+  if (authLoading) {
+    return <Loader />;
   }
 
   if (!isAuthed) {
@@ -15,7 +15,7 @@ export default function RequireAuth({ allowedRoles }) {
   }
 
   if (allowedRoles?.length && !allowedRoles.includes(role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <Outlet />;
