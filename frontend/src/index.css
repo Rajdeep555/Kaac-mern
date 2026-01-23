@@ -53,6 +53,16 @@
     }
 }
 
+.font{
+    @apply text-sm font-medium
+}
+.font-small{
+    @apply text-sm 
+}
+.form8-text{
+    @apply text-start pl-2
+}
+
 
 /* width */
 ::-webkit-scrollbar {
@@ -95,3 +105,5 @@
         width: 100%;
     }
 }
+
+
