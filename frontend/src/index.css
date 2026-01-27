@@ -9,11 +9,9 @@
 
     /* font families */
     --font-unbounded: "Unbounded", sans-serif;
-    --font-inter: "Inter Tight",
-        sans-serif;
-
-
+    --font-inter: "Inter Tight", sans-serif;
 }
+
 
 @layer utilities {
     .padding {
@@ -53,6 +51,7 @@
     }
 }
 
+
 .font{
     @apply text-sm font-medium
 }
@@ -61,6 +60,9 @@
 }
 .form8-text{
     @apply text-start pl-2
+}
+.semibold{
+    @apply font-semibold
 }
 
 

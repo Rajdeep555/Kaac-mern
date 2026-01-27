@@ -113,7 +113,8 @@ const Form8 = () => {
           })}
         </tbody>
         {/* Here, you need to total the value as the given in the hard copy , I don't know that is the total values but given the space if you want to fill, otherwise remove this section */}
-        <tr className="text-lg">Total
+        <tr className="text-lg">
+            <span>Total</span>
             <th className="font-normal text-blue-500">dynamic values</th>
             <th className="font-normal text-blue-500">dynamic values</th>
             <th className="font-normal text-blue-500">dynamic values</th>

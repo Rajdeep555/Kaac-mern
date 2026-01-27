@@ -7,7 +7,7 @@ const registerData = [
     receiptDate: "2024-03-01",
     receiptItemNo: "001",
     receiptParticulars: "Opening Balance",
-    receiptCashAmount: 50000.00,
+    receiptCashAmount: 50000.0,
     receiptPlaColumn: "PLA-99",
     receiptClassification: "General",
 
@@ -15,10 +15,10 @@ const registerData = [
     disbursementDate: "2024-03-02",
     voucherNo: "V-101",
     disbursementDetails: "Office Stationery Purchase",
-    disbursementCashAmount: 1200.00,
+    disbursementCashAmount: 1200.0,
     chequeNo: "CHQ-5521",
     plaColumnPayment: "PLA-99",
-    treasuryClassification: "Administrative"
+    treasuryClassification: "Administrative",
   },
   {
     id: 2,
@@ -26,7 +26,7 @@ const registerData = [
     receiptDate: "2024-03-05",
     receiptItemNo: "002",
     receiptParticulars: "Grant received from Treasury",
-    receiptCashAmount: 25000.00,
+    receiptCashAmount: 25000.0,
     receiptPlaColumn: "PLA-102",
     receiptClassification: "Grant-in-Aid",
 
@@ -34,10 +34,10 @@ const registerData = [
     disbursementDate: "2024-03-06",
     voucherNo: "V-102",
     disbursementDetails: "Electricity Bill Payment",
-    disbursementCashAmount: 4500.00,
+    disbursementCashAmount: 4500.0,
     chequeNo: "Online Transfer",
     plaColumnPayment: "PLA-102",
-    treasuryClassification: "Utility"
+    treasuryClassification: "Utility",
   },
   {
     id: 3,
@@ -45,7 +45,7 @@ const registerData = [
     receiptDate: "2024-03-05",
     receiptItemNo: "003",
     receiptParticulars: "Grant received from Treasury",
-    receiptCashAmount: 25000.00,
+    receiptCashAmount: 25000.0,
     receiptPlaColumn: "PLA-102",
     receiptClassification: "Grant-in-Aid",
 
@@ -53,17 +53,17 @@ const registerData = [
     disbursementDate: "2024-03-06",
     voucherNo: "V-102",
     disbursementDetails: "Electricity Bill Payment",
-    disbursementCashAmount: 4500.00,
+    disbursementCashAmount: 4500.0,
     chequeNo: "Online Transfer",
     plaColumnPayment: "PLA-102",
-    treasuryClassification: "Utility"
-  }
+    treasuryClassification: "Utility",
+  },
 ];
-const Form1 = () =>
-  { 
+const Form1 = () => {
   return (
     <div className="w-full overflow-x-auto p-4 bg-white">
-      <table className="min-w-330 border border-black text-[11px] text-center">
+      <h1 className="text-center py-4 text-xl font-bold">Form No. 1</h1>
+      <table className="min-w-360 border border-black text-[11px] text-center">
         <thead>
           {/* <!-- Top Heading --> */}
           <tr>
@@ -77,78 +77,113 @@ const Form1 = () =>
 
           {/* <!-- Main Header Row --> (Here,  we Created the lebels of the table) */}
           <tr>
-            <th className="border border-black px-10">Date</th>
-            <th className="border border-black px-1">No. of item</th>
-            <th className="border border-black px-1 w-60">
+            <th className="border px-10">Date</th>
+            <th className="border px-1">No. of item</th>
+            <th className="border px-1 w-60">
               Particulars (Full details with reference to receipts, challans,
               cheques etc.)
             </th>
-            <th className="border border-black px-1">
-              Receipts (Amount)
-              <br />
-              Cash Column
-            </th>
-            <th className="border border-black px-1">
-              Treasury
-              <br />
-              PLA Column
-            </th>
-            <th className="border border-black px-1">classNameification</th>
 
-            <th className="border border-black px-10">Date</th>
-            <th className="border border-black px-1">
+            <th colSpan={2} className="border border-black p-0 align-top">
+              <div className="border-b border-black py-2 font-bold text-center">
+                Receipts (Amount)
+              </div>
+              <div className="flex w-full font-bold">
+                <div className="w-1/2 border-r border-black py-2">
+                  Cash Column
+                </div>
+                <div className="w-1/2 py-2">
+                  Treasury <br /> PLA column
+                </div>
+              </div>
+            </th>
+
+            {/* <th colSpan={2} className="border">
+              <div className="border-b border-black py-2 font-bold text-center">
+                Receipts (Amount)
+              </div>
+              <div className="flex w-full font-bold">
+                <div className="w-1/2 border-r py-2  ">
+                  Cash <br /> Column
+                </div>
+                <div className="w-1/2 py-2 px-1 ">
+                  Treasury <br /> PLA Column
+                </div>
+              </div>
+            </th> */}
+
+            <th className="border px-1">classNameification</th>
+
+            <th className="border px-10">Date</th>
+            <th className="border px-1">
               No. of item
               <br />
               (Voucher No.)
             </th>
-            <th className="border border-black px-1 w-52">
+            <th className="border px-1 w-52">
               classNameification (Full details of claims)
             </th>
-            <th className="border border-black px-1">
-              Disbursement
-              <br />
-              Cash Column
+
+            <th colSpan={2} className="border p-0 align-top">
+              <div className="border-b py-2 font-bold text-center">
+                Disbursement
+              </div>
+              <div className="flex w-full font-bold">
+                <div className="w-1/2 border-r py-2">
+                  Cash Column
+                </div>
+                <div className="w-1/2 py-2">
+                  No of Cheque <br /> cheque book
+                </div>
+              </div>
             </th>
-            <th className="border border-black px-1">
-              No. of Cheque
-              <br />
-              Cheque Book
-            </th>
-            <th className="border border-black px-1">
-              PLA
-              <br />
-              Column
-            </th>
-            <th className="border border-black px-1">
-              Treasury
-              <br />
-              classNameification
+
+            <th colSpan={2} className="border align-top">
+              <div className="border-b py-2 font-bold text-center">
+                Treasury
+              </div>
+              <div className="flex w-full font-bold">
+                <div className="w-1/2 py-2 border-r">PLA <br /> column</div>
+                <div className="w-1/2 py-2">Classification</div>
+              </div>
             </th>
           </tr>
         </thead>
         <tbody>
-          
-            {registerData.map((data) => {
-                const {receiptDate , receiptItemNo , receiptParticulars , receiptCashAmount , receiptPlaColumn , receiptClassification , disbursementDate , voucherNo , disbursementDetails , disbursementCashAmount , chequeNo , plaColumnPayment , treasuryClassification } = data
-              return (
-                
-                <tr key={data.id} className="border">
-                  <td className="border">{receiptDate}</td>
-                  <td className="border">{receiptItemNo}</td>
-                  <td className="border">{receiptParticulars}</td>
-                  <td className="border">{receiptCashAmount}</td>
-                  <td className="border">{receiptPlaColumn}</td>
-                  <td className="border">{receiptClassification}</td>
-                  <td className="border">{disbursementDate}</td>
-                  <td className="border">{voucherNo}</td>
-                  <td className="border">{disbursementDetails}</td>
-                  <td className="border">{disbursementCashAmount}</td>
-                  <td className="border">{chequeNo}</td>
-                  <td className="border">{plaColumnPayment}</td>
-                  <td className="border">{treasuryClassification}</td>
-                </tr>
-              )
-            })}
+          {registerData.map((data) => {
+            const {
+              receiptDate,
+              receiptItemNo,
+              receiptParticulars,
+              receiptCashAmount,
+              receiptPlaColumn,
+              receiptClassification,
+              disbursementDate,
+              voucherNo,
+              disbursementDetails,
+              disbursementCashAmount,
+              chequeNo,
+              plaColumnPayment,
+              treasuryClassification,
+            } = data;
+            return (
+              <tr key={data.id} className="border">
+                <td className="border py-2">{receiptDate}</td>
+                <td className="border">{receiptItemNo}</td>
+                <td className="border">{receiptParticulars}</td>
+                <td className="border w-1/15">{receiptCashAmount}</td>
+                <td className="border w-1/15">{receiptPlaColumn}</td>
+                <td className="border">{receiptClassification}</td>
+                <td className="border">{disbursementDate}</td>
+                <td className="border">{voucherNo}</td>
+                <td className="border">{disbursementDetails}</td>
+                <td className="border w-1/15">{disbursementCashAmount}</td>
+                <td className="border w-1/15">{chequeNo}</td>
+                <td className="border w-1/15">{plaColumnPayment}</td>
+                <td className="border w-1/15">{treasuryClassification}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
