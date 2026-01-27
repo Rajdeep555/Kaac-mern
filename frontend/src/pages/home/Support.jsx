@@ -1,4 +1,6 @@
 import React from "react";
+import { TbDownload } from "react-icons/tb";
+
 
 const Support = () => {
   const SupportHistory = [
@@ -32,7 +34,6 @@ const Support = () => {
     },
   ];
 
-
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       {/* Header */}
@@ -45,9 +46,7 @@ const Support = () => {
 
       {/* Card */}
       <div className="bg-white rounded-xl shadow-sm hover:shadow-md border border-gray-200 p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">
-          Raise An Issue
-        </h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-1">Raise An Issue</h2>
         <p className="text-sm text-gray-500 mb-6">
           Fill up all the information here, then click submit button
         </p>
@@ -85,9 +84,7 @@ const Support = () => {
 
           {/* Passenger Name */}
           <div>
-            <label className="text-sm font-medium text-gray-600">
-              Name
-            </label>
+            <label className="text-sm font-medium text-gray-600">Name</label>
             <input
               type="text"
               value="Mark Andarson"
@@ -151,45 +148,58 @@ const Support = () => {
 
       {/* Second Section */}
       <div className="w-full flex mt-5 gap-5">
-      <div className="bg-white rounded-xl max-w-[70%] shadow-sm hover:shadow-md border border-gray-200 p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-1">
-          Latest Support History
-        </h2>
-        <p className="text-sm text-gray-500 mb-6">
-          Fill up all the information here, then click submit button
-        </p>
+        <div className="bg-white rounded-xl w-full shadow-sm hover:shadow-md border border-gray-200 p-6">
+          <div className="w-full flex items-start justify-between">
+           <div>
+             <h2 className="text-xl font-bold text-gray-900 mb-1">
+            Latest Support History
+          </h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Here is your most recent history.
+          </p>
+           </div>
+           <div onClick={() => alert("downloading...")} className="flex items-center gap-2 cursor-pointer ">
+            <TbDownload className="icon-md active:scale-95" />
+            <span className="text-md font-semibold">Download</span>
+           </div>
+          </div>
 
-        {/* Form */}
-        <div className="flex flex-col w-full gap-6">
-          {SupportHistory.map((data, index) => {
-            return (
-              <div key={index} className="grid grid-cols-4 gap-20">
-                <div className="w-full">
-                  <h1 className="font-bold text-lg">{data.id}</h1>
-                  <p className="text-sm">Support Req No</p>
+          {/* Form */}
+          <div className="flex flex-col w-full gap-6">
+            {SupportHistory.map((data, index) => {
+              return (
+                <div>
+                  <div key={index} className="grid grid-cols-4 gap-25">
+                    <div className="w-full flex flex-col gap-1">
+                      <h1 className="font-bold text-lg">{data.id}</h1>
+                      <p className="text-sm">Support Req No</p>
+                    </div>
+                    <div className="w-full flex flex-col gap-1">
+                      <h1 className="font-bold">{data.type}</h1>
+                      <p className="text-sm">Support Type</p>
+                    </div>
+                    <div className="w-full flex flex-col gap-1">
+                      <h1 className="font-bold">{data.date}</h1>
+                      <p className="text-sm">Date</p>
+                    </div>
+                    <div className="w-full flex flex-col gap-1">
+                      <h1 className={`font-bold text-lg ${data.statusColor}`}>
+                        {data.status}
+                      </h1>
+                      <p className="text-sm">Status</p>
+                    </div>
+                  </div>
+                  <div className="w-full h-px py-2 border-black border-b "></div>
                 </div>
-                <div className="w-full">
-                  <h1 className="font-bold">{data.type}</h1>
-                  <p className="text-sm">Support Type</p>
-                </div>
-                <div className="w-full">
-                  <h1 className="font-bold">{data.date}</h1>
-                  <p className="text-sm">Date</p>
-                </div>
-                <div className="w-full">
-                  <h1 className={`font-bold text-lg ${data.statusColor}`}>{data.status}</h1>
-                  <p className="text-sm">Status</p>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
-      <div className="bg-white min-w-[30%] shadow-sm hover:shadow-md rounded-xl flex p-5">
-        <div>
-          <h1 className="font-semibold text-lg">About KAAC</h1>
-        </div>
-      </div>
+        {/* <div className="bg-white min-w-[30%] shadow-sm hover:shadow-md rounded-xl flex p-5">
+          <div>
+            <h1 className="font-semibold text-lg">About KAAC</h1>
+          </div>
+        </div> */}
       </div>
     </div>
   );
