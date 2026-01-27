@@ -28,6 +28,7 @@ model Division {
   updatedAt    DateTime  @updatedAt
   cashiers     Cashier[]
   ddos         DDO[]
+  challans     Challan[]
 }
 
 model DDO {
@@ -42,6 +43,7 @@ model DDO {
   updatedAt   DateTime  @updatedAt
   ddoCode     String    @unique
   cashiers    Cashier[]
+  challans    Challan[]
   division    Division  @relation(fields: [divisionId], references: [id])
 }
 
@@ -57,9 +59,10 @@ model Cashier {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   cashierCode String   @unique
-  
-  ddo         DDO      @relation(fields: [ddoId], references: [id])
-  division    Division @relation(fields: [divisionId], references: [id])
+
+  ddo      DDO       @relation(fields: [ddoId], references: [id])
+  division Division  @relation(fields: [divisionId], references: [id])
+  challans Challan[]
 }
 
 model ExpenditureType {
@@ -97,6 +100,40 @@ model Department {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  challans Challan[]
+}
+
+model Challan {
+  id                  Int         @id @default(autoincrement())
+  cashierId           Int
+  counterfoilNo       String?
+  counterfoilDate     DateTime?
+  challanNo           String?
+  challanDate         DateTime?
+  challanType         ChallanType
+  departmentId        Int
+  divisionId          Int
+  ddoId               Int
+  majorHead           String
+  subMajorHead        String
+  subSubMajorHead     String
+  minorHead           String
+  detailHead          String
+  treasuryCode        String?
+  treasuryChallanNo   String?
+  treasuryChallanDate DateTime?
+  amount              String
+  remarks             String
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cashier    Cashier    @relation(fields: [cashierId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+  division   Division   @relation(fields: [divisionId], references: [id])
+  ddo        DDO        @relation(fields: [ddoId], references: [id])
 }
 
 enum UserRole {
@@ -107,4 +144,10 @@ enum UserRole {
 enum Sector {
   COUNCIL
   STATE
+}
+
+enum ChallanType {
+  STATE
+  COUNCIL
+  CSS
 }

@@ -6,6 +6,7 @@ import TextAreaField from "../../components/Forms/TextAreaField";
 import DateField from "../../components/Forms/DateField";
 import { rupeesToWords } from "../../utils/rupeesToWords";
 import { formatIndianNumber } from "../../utils/formatIndianCurrency";
+import Breadcrumbs from "../../components/ui/Breadcrumbs";
 
 const Challan = () => {
   const [form, setForm] = useState({
@@ -34,6 +35,14 @@ const Challan = () => {
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">
       <div className="border-b border-zinc-400 leading-9">
+        <Breadcrumbs
+          items={[
+            { label: "Dashboard", path: "/" },
+            { label: "Challan", path: "/challan" },
+            { label: "Create Challan", path: "/challan" },
+          ]}
+        />
+
         <h1 className="font-unbounded">Fill Challan Details :</h1>
       </div>
 
