@@ -50,7 +50,7 @@ const receiptData = [
 
 const Form8 = () => {
   return (
-    <div className="w-full overflow-x-auto p-4 bg-white">
+    <div className="w-full overflow-x-auto  bg-white border-2">
       <div className="flex flex-col items-center">
         <h1 className="font-bold text-lg">FORM NO. 8</h1>
         <div className="w-full flex justify-around">
@@ -61,70 +61,84 @@ const Form8 = () => {
           (Copy to be appended to the Monthly account)
         </h2>
       </div>
-      <table className="min-w-290 border border-black text-[11px] text-center px-1">
-        <thead>
-          {/* <!-- Table Headers Row */}
-          {/* "font" is a common use of css in index (using @apply) */}
-          <tr>
-            <th className="border border-black font">Cash Book Item No</th>
-            <th className="border border-black font  ">
-              Name of the Deptt
-              <br />
-              Nomenclature of the
-              <br />
-              Receipt Head
-            </th>
-            <th className="border border-black font ">
-              Revenue receipts of
-              <br />
-              the Council
-            </th>
-            <th className="border border-black font ">
-              Grants-in-aid
-              <br />
-              received from the
-              <br />
-              Govt
-            </th>
-            <th className="border border-black font">Other Misc receipts</th>
-            <th className="border border-black font">Total receipts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {receiptData.map((data) => {
-            const {
-              cbItemNo,
-              deptName,
-              councilRev,
-              govGrant,
-              miscRcpt,
-              total,
-            } = data;
-            return (
-              <tr key={data.id} className="border font-small">
-                <td className="border py-1">{cbItemNo}</td>
-                <td className="border py-1">{deptName}</td>
-                <td className="border py-1">{councilRev}</td>
-                <td className="border py-1">{govGrant}</td>
-                <td className="border py-1">{miscRcpt}</td>
-                <td className="border py-1">{total}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-        {/* Here, you need to total the value as the given in the hard copy , I don't know that is the total values but given the space if you want to fill, otherwise remove this section */}
-        <tr className="text-lg">
+      <hr className=" w-full mb-4 h-0.5 bg-black" />
+
+      <div className="w-full overflow-x-auto">
+        <table className="min-w-290 border  border-black text-[11px] text-center mx-4 my-4">
+          <thead>
+            {/* <!-- Table Headers Row */}
+            {/* "font" is a common use of css in index (using @apply) */}
+            <tr>
+              <th className="border border-black font">Cash Book Item No</th>
+              <th className="border border-black font  ">
+                Name of the Deptt
+                <br />
+                Nomenclature of the
+                <br />
+                Receipt Head
+              </th>
+              <th className="border border-black font ">
+                Revenue receipts of
+                <br />
+                the Council
+              </th>
+              <th className="border border-black font ">
+                Grants-in-aid
+                <br />
+                received from the
+                <br />
+                Govt
+              </th>
+              <th className="border border-black font">Other Misc receipts</th>
+              <th className="border border-black font">Total receipts</th>
+            </tr>
+          </thead>
+          <tbody>
+            {receiptData.map((data) => {
+              const {
+                cbItemNo,
+                deptName,
+                councilRev,
+                govGrant,
+                miscRcpt,
+                total,
+              } = data;
+              return (
+                <tr key={data.id} className="border font-small">
+                  <td className="border py-1">{cbItemNo}</td>
+                  <td className="border py-1">{deptName}</td>
+                  <td className="border py-1">{councilRev}</td>
+                  <td className="border py-1">{govGrant}</td>
+                  <td className="border py-1">{miscRcpt}</td>
+                  <td className="border py-1">{total}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {/* Here, you need to total the value as the given in the hard copy , I don't know that is the total values but given the space if you want to fill, otherwise remove this section */}
+          <tr className="text-lg">
             <span>Total</span>
             <th className="font-normal text-blue-500">dynamic values</th>
             <th className="font-normal text-blue-500">dynamic values</th>
             <th className="font-normal text-blue-500">dynamic values</th>
             <th className="font-normal text-blue-500">dynamic values</th>
             <th className="font-normal text-blue-500">dynamic values</th>
-        </tr>
-      </table>
+          </tr>
+        </table>
+      </div>
+      <hr className=" w-full my-4 h-0.5 bg-black" />
       {/* when you working in this , remove this two line, I just write because of it is given in the hardcopy. */}
-      <p className="my-4">NB:- Posting should be made from Cash Book</p>
-      <p>Cetified that the receipts as per Cash Book have been included in this schedule.</p>
+      <div className="px-4 mb-2 tracking-wider">
+        <p className="my-4">NB:- Posting should be made from Cash Book</p>
+        <p>
+          Cetified that the receipts as per Cash Book have been included in this
+          schedule.
+        </p>
+      </div>
+      <hr className=" w-full my-4 h-0.5 bg-black" />
+      <div>
+        <p className="text-start text-sm mb-4 px-2">Secretary</p>
+      </div>
     </div>
   );
 };

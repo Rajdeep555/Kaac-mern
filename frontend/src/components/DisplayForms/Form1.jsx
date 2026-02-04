@@ -61,9 +61,14 @@ const registerData = [
 ];
 const Form1 = () => {
   return (
-    <div className="w-full overflow-x-auto p-4 bg-white">
+    <div className="w-full overflow-x-auto  bg-white border-2">
       <h1 className="text-center py-4 text-xl font-bold">Form No. 1</h1>
-      <table className="min-w-360 border border-black text-[11px] text-center">
+      <div className="py-4 text-center font-semibold">
+        <p>Cash Book of <span>..........</span> for the month of <span>.........</span></p>
+      </div>
+      <hr className=" w-full mb-4 h-0.5 bg-black" />
+        <div className="w-full overflow-x-auto my-8">
+        <table className="min-w-360 border border-black text-[11px] text-center mx-4">
         <thead>
           {/* <!-- Top Heading --> */}
           <tr>
@@ -186,6 +191,12 @@ const Form1 = () => {
           })}
         </tbody>
       </table>
+      </div>
+      <hr className=" w-full mb-4 h-0.5 bg-black" />
+      <div className="px-4 py-4 tracking-wide flex justify-between font-semibold">
+        <p>Cashier</p>
+        <p>Officer i/c of the Cash Book</p>
+      </div>
     </div>
   );
 };

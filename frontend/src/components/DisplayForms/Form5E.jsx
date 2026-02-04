@@ -23,7 +23,7 @@ const registerData = [
 
 const Form5E = () => {
   return (
-    <div className="w-full overflow-x-auto p-4 bg-white">
+    <div className="w-full overflow-x-auto border-2">
       <h1 className="text-center py-4 text-xl font-bold">Form No. 5E</h1>
 
       <div className="flex flex-col items-center gap-1 mb-10">
@@ -39,8 +39,9 @@ const Form5E = () => {
           (Copy to be appended to the Monthly account)
         </p>
       </div>
-
-      <table className="min-w-500 border border-black text-[11px] text-center">
+      <hr className=" w-full mb-4 h-0.5 bg-black" />
+      <div className="w-full overflow-x-auto my-8">
+      <table className="min-w-500 border border-black text-[11px] text-center mx-4">
         <thead>
           {/* Level 1: Receipt vs Payment */}
           <tr>
@@ -121,6 +122,11 @@ const Form5E = () => {
           })}
         </tbody>
       </table>
+      </div>
+            <hr className=" w-full mb-4 h-0.5 bg-black" />
+      <div className="px-4 tracking-wide font-semibold py-2">
+        <p>Secretary</p>
+      </div>
     </div>
   );
 };
