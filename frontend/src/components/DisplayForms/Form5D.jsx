@@ -61,7 +61,7 @@ const registerData = [
 ];
 const Form5D = () => {
   return (
-    <div className="w-full overflow-x-auto p-4 bg-white">
+    <div className="w-full overflow-x-auto border-2">
       <h1 className="text-center py-4 text-xl font-bold">Form No. 5D</h1>
 
       <div className="flex flex-col items-center gap-1 mb-10">
@@ -76,8 +76,9 @@ const Form5D = () => {
           (Copy to be appended to the Monthly account)
         </p>
       </div>
-
-      <table className="min-w-350 border-collapse border border-black text-[10px] text-center">
+      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <div className="w-full overflow-x-auto my-8">
+      <table className="min-w-350 border-collapse border border-black text-[10px] text-center mx-4">
         <thead>
           <tr>
             {/* Single columns stretch down two rows */}
@@ -144,6 +145,11 @@ const Form5D = () => {
           })}
         </tbody>
       </table>
+      </div>
+            <hr className="w-full mb-4 h-0.5 bg-black" />
+            <div className="px-4 py-2 font-semibold">
+              <p>Secretary</p>
+            </div>
     </div>
   );
 };

@@ -28,7 +28,7 @@ const totalRows = [
 
 const Form5C = () => {
   return (
-    <div className="w-full overflow-x-auto p-4 bg-white">
+    <div className="w-full overflow-x-auto border-2">
       <div className="flex flex-col items-center">
         <div className="flex flex-col items-center">
           <h1 className="font-bold text-lg py-2">FORM NO. 5C</h1>
@@ -43,78 +43,86 @@ const Form5C = () => {
           </p>
         </div>
       </div>
-      <table className="min-w-350 border border-black text-[11px] text-center">
-        <thead>
-          {/* <!-- Table Headers Row */}
-          <tr>
-            <th className="border text-base py-2 px-10">
-              MAJOR HEAD <br /> MINOR HEAD{" "}
-            </th>
-            <th className="border text-base ">PAY OF OFFICERS</th>
-            <th className="border text-base ">PAY OF ESTABLISHMENT</th>
-            <th className="border text-base ">ALLOWANCES AND HONIARA</th>
-            <th className="border text-base ">CONTINGENCIES</th>
-            <th className="border text-base ">GRANTS-IN-AID</th>
-            <th className="border text-base px-2">WORKS</th>
-            <th className="border text-base ">TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          {totalRows.map((row) => {
-            const { id, label, val1, val2, val3, amount } = row;
-            return (
-              <tr key={id} className="text-base border">
-                {/* Changed span to td for valid table structure */}
-                <td className="border px-4 py-2">{label}</td>
-                <td className="font-normal border px-4 py-2">
-                  <div className="flex justify-center items-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {val1}
-                  </div>
-                </td>
-                <td className="font-normal border px-4 py-2">
-                  <div className="flex justify-center items-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {val2}
-                  </div>
-                </td>
-                <td className="font-normal border px-4 py-2">
-                  <div className="flex justify-center items-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {val3}
-                  </div>
-                </td>
-                <td className="font-normal border px-4 py-2">
-                  <div className="flex justify-center items-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {val3}
-                  </div>
-                </td>
-                <td className="font-normal border px-4 py-2">
-                  <div className="flex justify-center items-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {val3}
-                  </div>
-                </td>
-                <td className="font-normal border px-4 py-2">
-                  <div className="flex justify-center items-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {val3}
-                  </div>
-                </td>
-                <td className="font-normal px-4 py-2 tracking-wider">
-                  <div className="flex items-center justify-center gap-2">
-                    <LiaRupeeSignSolid />
-                    {amount}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <p className="my-4">Secretary</p>
-      <p>Date: {new Date().toLocaleDateString()}</p>
+      <hr className=" w-full mb-4 h-0.5 bg-black" />
+      <div className="w-full overflow-x-auto my-8">
+        <table className="min-w-350 border border-black text-[11px] text-center mx-4">
+          <thead>
+            {/* <!-- Table Headers Row */}
+            <tr>
+              <th className="border text-base py-2 px-10">
+                MAJOR HEAD <br /> MINOR HEAD{" "}
+              </th>
+              <th className="border text-base ">PAY OF OFFICERS</th>
+              <th className="border text-base ">PAY OF ESTABLISHMENT</th>
+              <th className="border text-base ">ALLOWANCES AND HONIARA</th>
+              <th className="border text-base ">CONTINGENCIES</th>
+              <th className="border text-base ">GRANTS-IN-AID</th>
+              <th className="border text-base px-2">WORKS</th>
+              <th className="border text-base ">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {totalRows.map((row) => {
+              const { id, label, val1, val2, val3, amount } = row;
+              return (
+                <tr key={id} className="text-base border">
+                  {/* Changed span to td for valid table structure */}
+                  <td className="border px-4 py-2">{label}</td>
+                  <td className="font-normal border px-4 py-2">
+                    <div className="flex justify-center items-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {val1}
+                    </div>
+                  </td>
+                  <td className="font-normal border px-4 py-2">
+                    <div className="flex justify-center items-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {val2}
+                    </div>
+                  </td>
+                  <td className="font-normal border px-4 py-2">
+                    <div className="flex justify-center items-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {val3}
+                    </div>
+                  </td>
+                  <td className="font-normal border px-4 py-2">
+                    <div className="flex justify-center items-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {val3}
+                    </div>
+                  </td>
+                  <td className="font-normal border px-4 py-2">
+                    <div className="flex justify-center items-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {val3}
+                    </div>
+                  </td>
+                  <td className="font-normal border px-4 py-2">
+                    <div className="flex justify-center items-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {val3}
+                    </div>
+                  </td>
+                  <td className="font-normal px-4 py-2 tracking-wider">
+                    <div className="flex items-center justify-center gap-2">
+                      <LiaRupeeSignSolid />
+                      {amount}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <hr className=" w-full mb-4 h-0.5 bg-black" />
+      <div>
+        <div className="px-4 leading-7 font-semibold py-2 tracking-wide">
+          <p>Secretary</p>
+          <p>Date: {new Date().toLocaleDateString()}</p>
+        </div>
+      </div>
     </div>
   );
 };
