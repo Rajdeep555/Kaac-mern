@@ -28,8 +28,8 @@ import Statement1 from '../../components/Statements/Statement1'
 const Accountant = () => {
   return (
     <div className='flex flex-col gap-5 p-4'>
-      {/* <Statement1 /> */}
-      <Form1/>
+      <Statement1 />
+      {/* <Form1/> */}
     </div>
   )
 }
