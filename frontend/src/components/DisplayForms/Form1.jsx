@@ -72,36 +72,24 @@ const Form1 = () => {
         <thead>
           {/* <!-- Top Heading --> */}
           <tr>
-            <th colSpan={6} className="border border-black py-1 ">
+            <th colSpan={6} className="border uppercase border-black py-2 ">
               Dr (Receipt)
             </th>
-            <th colSpan={7} className="border border-black py-1 ">
+            <th colSpan={7} className="border uppercase border-black py-2 ">
               Cr (Disbursement)
             </th>
           </tr>
 
           {/* <!-- Main Header Row --> (Here,  we Created the lebels of the table) */}
           <tr>
-            <th className="border px-10">Date</th>
-            <th className="border px-1">No. of item</th>
-            <th className="border px-1 w-60">
+            <th rowSpan={2} className="border px-10">Date</th>
+            <th rowSpan={2} className="border px-1">No. of item</th>
+            <th rowSpan={2} className="border px-1 w-60">
               Particulars (Full details with reference to receipts, challans,
               cheques etc.)
             </th>
 
-            <th colSpan={2} className="border border-black p-0 align-top">
-              <div className="border-b border-black py-2 font-bold text-center">
-                Receipts (Amount)
-              </div>
-              <div className="flex w-full font-bold">
-                <div className="w-1/2 border-r border-black py-2">
-                  Cash Column
-                </div>
-                <div className="w-1/2 py-2">
-                  Treasury <br /> PLA column
-                </div>
-              </div>
-            </th>
+            <th colSpan={2} className="border border-black">Receipts (Amount)</th>
 
             {/* <th colSpan={2} className="border">
               <div className="border-b border-black py-2 font-bold text-center">
@@ -117,41 +105,35 @@ const Form1 = () => {
               </div>
             </th> */}
 
-            <th className="border px-1">classNameification</th>
+            <th rowSpan={2} className="border px-1">Classification</th>
 
-            <th className="border px-10">Date</th>
-            <th className="border px-1">
+            <th rowSpan={2} className="border px-10">Date</th>
+            <th rowSpan={2} className="border px-1">
               No. of item
               <br />
               (Voucher No.)
             </th>
-            <th className="border px-1 w-52">
-              classNameification (Full details of claims)
+            <th rowSpan={2} className="border px-1 w-52">
+              Classification (Full details of claims)
             </th>
 
-            <th colSpan={2} className="border p-0 align-top">
-              <div className="border-b py-2 font-bold text-center">
-                Disbursement
-              </div>
-              <div className="flex w-full font-bold">
-                <div className="w-1/2 border-r py-2">
-                  Cash Column
-                </div>
-                <div className="w-1/2 py-2">
-                  No of Cheque <br /> cheque book
-                </div>
-              </div>
-            </th>
+            <th colSpan={2} className="border py-1">Disbursement</th>
 
-            <th colSpan={2} className="border align-top">
-              <div className="border-b py-2 font-bold text-center">
-                Treasury
-              </div>
-              <div className="flex w-full font-bold">
-                <div className="w-1/2 py-2 border-r">PLA <br /> column</div>
-                <div className="w-1/2 py-2">Classification</div>
-              </div>
-            </th>
+            <th colSpan={2} className="border align-top">Treasury</th>
+          </tr>
+          <tr>
+
+            {/* Receipt's column */}
+            <th className="border px-2">Cash Column</th>
+            <th className="px-2">Treasury <br />PLA Column</th>
+              
+            {/* Disbursement's column */}
+            <th className="border px-2">Cash Column</th>
+            <th className="border px-2">No of Cheque <br /> cheque book</th>
+
+            {/* Treasury's Column */}
+            <th className="border px-2">PLA <br /> column</th>
+            <th className="px-2">Classification</th>
           </tr>
         </thead>
         <tbody>
@@ -176,16 +158,16 @@ const Form1 = () => {
                 <td className="border py-2">{receiptDate}</td>
                 <td className="border">{receiptItemNo}</td>
                 <td className="border">{receiptParticulars}</td>
-                <td className="border w-1/15">{receiptCashAmount}</td>
-                <td className="border w-1/15">{receiptPlaColumn}</td>
+                <td className="border">{receiptCashAmount}</td>
+                <td className="border">{receiptPlaColumn}</td>
                 <td className="border">{receiptClassification}</td>
                 <td className="border">{disbursementDate}</td>
                 <td className="border">{voucherNo}</td>
                 <td className="border">{disbursementDetails}</td>
-                <td className="border w-1/15">{disbursementCashAmount}</td>
-                <td className="border w-1/15">{chequeNo}</td>
-                <td className="border w-1/15">{plaColumnPayment}</td>
-                <td className="border w-1/15">{treasuryClassification}</td>
+                <td className="border">{disbursementCashAmount}</td>
+                <td className="border">{chequeNo}</td>
+                <td className="border">{plaColumnPayment}</td>
+                <td className="border">{treasuryClassification}</td>
               </tr>
             );
           })}
