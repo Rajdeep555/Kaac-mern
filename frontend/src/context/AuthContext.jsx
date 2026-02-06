@@ -24,7 +24,9 @@ export function AuthProvider({ children }) {
       const parsed = JSON.parse(raw);
       setToken(parsed?.token ?? null);
       setUser(parsed?.user ?? null);
-      http.defaults.headers.common.Authorization = `Bearer ${parsed?.token}`;
+      if (parsed?.token) {
+        http.defaults.headers.common.Authorization = `Bearer ${parsed?.token}`;
+      }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -66,7 +68,7 @@ export function AuthProvider({ children }) {
       login,
       logout,
     }),
-    [token, user, isAuthed, authLoading]
+    [token, user, isAuthed, authLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

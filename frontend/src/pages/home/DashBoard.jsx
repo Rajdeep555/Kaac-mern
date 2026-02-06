@@ -2,22 +2,11 @@ import React, { useEffect, useState } from "react";
 import DashboardBox from "../../components/ui/DashboardBox";
 import { useAuth } from "../../context/AuthContext";
 import { capitalizeFullName } from "../../utils/string.js";
+import { useGreeting } from "../../hooks/useGreeting.js";
 
 const DashBoard = () => {
-  const [greetings, setGreetings] = useState("");
+  const greetings = useGreeting();
   const { user } = useAuth();
-  useEffect(() => {
-    const date = new Date();
-    const hour = date.getHours();
-
-    if (hour >= 0 && hour < 12) {
-      setGreetings("Good Morning");
-    } else if (hour >= 12 && hour < 18) {
-      setGreetings("Good Afternoon");
-    } else {
-      setGreetings("Good Evening");
-    }
-  }, []);
 
   const dashboardData = [
     {
@@ -46,7 +35,6 @@ const DashBoard = () => {
     },
   ];
 
-
   return (
     <div className="h-screen w-full px-7 flex flex-col gap-7">
       <div className="h-fit w-full mx-auto">
@@ -59,7 +47,7 @@ const DashBoard = () => {
       </div>
       <div className="h-fit w-full flex gap-5">
         <DashboardBox />
-        <DashboardBox items={dashboardData}/>
+        <DashboardBox items={dashboardData} />
         <DashboardBox />
       </div>
     </div>
