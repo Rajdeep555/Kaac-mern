@@ -24,11 +24,13 @@ import Statement4 from '../../components/Statements/Statement4'
 import Statement2 from '../../components/Statements/Statement2'
 import Statement3 from '../../components/Statements/Statement3'
 import Statement1 from '../../components/Statements/Statement1'
+import SearchFunction from '../../features/SearchFunction'
 
 const Accountant = () => {
   return (
     <div className='flex flex-col gap-5 p-4'>
-      <Statement1 />
+      <SearchFunction />
+      <Statement2 />
       {/* <Form1/> */}
     </div>
   )

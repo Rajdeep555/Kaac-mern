@@ -26,6 +26,8 @@ import Challan from "../pages/cashier/Challan";
 import GeneratedChallans from "../pages/cashier/Generated-Challans";
 import StateChallan from "../pages/cashier/StateChallan";
 import GeneratedStateChallans from "../pages/cashier/GeneratedStateChallans";
+import TrackForms from "../features/TrackReports/TrackForms";
+import TrackStatements from "../features/TrackReports/TrackStatements";
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -68,6 +70,8 @@ const AppRoutes = createBrowserRouter([
               { path: "ddo", element: <DDO /> },
               { path: "generate-reports", element: <GenerateReports /> },
               { path: "state-recipt-report", element: <State_Recipt_Report /> },
+              { path: "track-forms", element: <TrackForms /> },
+              { path: "track-statements", element: <TrackStatements /> }
             ],
           },
 
