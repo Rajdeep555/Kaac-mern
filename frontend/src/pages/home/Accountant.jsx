@@ -17,11 +17,21 @@ import Form10 from '../../components/DisplayForms/Form10'
 import Form11 from '../../components/DisplayForms/Form11'
 import Form12 from '../../components/DisplayForms/Form12'
 import Form7B from '../../components/DisplayForms/Form7B'
+import Statement7 from '../../components/Statements/Statement7'
+import Statement6 from '../../components/Statements/Statement6'
+import Statement5 from '../../components/Statements/Statement5'
+import Statement4 from '../../components/Statements/Statement4'
+import Statement2 from '../../components/Statements/Statement2'
+import Statement3 from '../../components/Statements/Statement3'
+import Statement1 from '../../components/Statements/Statement1'
+import SearchFunction from '../../features/SearchFunction'
 
 const Accountant = () => {
   return (
-    <div className='flex flex-col gap-5'>
-      <Form5E />
+    <div className='flex flex-col gap-5 p-4'>
+      <SearchFunction />
+      <Statement2 />
+      {/* <Form1/> */}
     </div>
   )
 }
