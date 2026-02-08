@@ -4,7 +4,7 @@ import TopBar from "./TopBar";
 
 const MainSection = () => {
   return (
-    <div className="h-screen max-w-full bg-white flex overflow-hidden">
+    <div className="h-screen max-w-full bg-background flex overflow-hidden">
       <Sidebar />
       <div className="h-screen w-[80%] bg-red-00 flex flex-col">
         <TopBar />

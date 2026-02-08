@@ -7,6 +7,6 @@ import { ROLES } from "../../constrants/roles.js";
 const router = Router();
 
 router.post("/create", authMiddleware, authorize(ROLES.ADMIN), create)
-router.get("/", authMiddleware, authorize(ROLES.ADMIN), getAll)
+router.get("/", authMiddleware, authorize(ROLES.ADMIN, ROLES.CASHIER), getAll)
 
 export default router;

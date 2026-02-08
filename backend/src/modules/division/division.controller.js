@@ -17,7 +17,7 @@ export const create = async (req, res) => {
             });
         }
 
-        const division = await createDivison(result.data); // ✅ pass parsed object
+        const division = await createDivison(result.data); //  pass parsed object
 
         return res.status(201).json({
             success: true,

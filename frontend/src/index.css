@@ -4,8 +4,13 @@
 @theme {
     --color-button-green: #3bb199;
     --color-navlink-red: #ff0000;
-    --color-active: #99a1af;
-    --color-hover: #99a1af;
+    --color-active: #128591;
+    /* --color-active: #99a1af; */
+    --color-hover: #89c9cf;
+    /* --color-hover: #99a1af; */
+
+    --color-background: #d0e4e5;
+    --color-card: #daeaea;
 
     /* font families */
     --font-unbounded: "Unbounded", sans-serif;
@@ -39,11 +44,11 @@
     }
 
     .active {
-        @apply bg-gray-400 rounded
+        @apply bg-active text-white rounded-md py-2.5 px-2
     }
 
     .hover {
-        @apply hover:bg-gray-400 p-1 rounded
+        @apply hover:bg-hover py-2.5 px-2 rounded-md
     }
 
     .translate-x-full {
@@ -52,16 +57,19 @@
 }
 
 
-.font{
+.font {
     @apply text-sm font-medium
 }
-.font-small{
-    @apply text-sm 
+
+.font-small {
+    @apply text-sm
 }
-.form8-text{
+
+.form8-text {
     @apply text-start pl-2
 }
-.semibold{
+
+.semibold {
     @apply font-semibold
 }
 
@@ -107,5 +115,3 @@
         width: 100%;
     }
 }
-
-
