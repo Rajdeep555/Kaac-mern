@@ -29,8 +29,8 @@ import SearchFunction from '../../features/SearchFunction'
 const Accountant = () => {
   return (
     <div className='flex flex-col gap-5 p-4'>
-      <SearchFunction />
-      <Statement2 />
+      {/* <SearchFunction /> */}
+      {/* <Statement2 /> */}
       {/* <Form1/> */}
     </div>
   )

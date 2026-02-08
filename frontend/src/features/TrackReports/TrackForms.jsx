@@ -23,7 +23,7 @@ import Button from "../../components/ui/Button";
 
 const TrackForms = () => {
   const navigate = useNavigation();
-  const [activeStep, setActiveStep] = useState(1);
+  const [activeStep, setActiveStep] = useState("1");
 
   const array = [
     "1",

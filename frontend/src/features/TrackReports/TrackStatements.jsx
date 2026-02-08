@@ -11,7 +11,7 @@ import Button from '../../components/ui/Button'
 
 const TrackStatements = () => {
 
-    const [activeStep, setActiveStep] = useState(1)
+    const [activeStep, setActiveStep] = useState("1")
 
     const array = ["1","2","3","4","5","6","7"]
 
