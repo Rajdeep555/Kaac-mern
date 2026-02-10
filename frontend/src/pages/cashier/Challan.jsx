@@ -14,6 +14,7 @@ import { useDepartments } from "../../hooks/useDepartments.js";
 import { useDivisions } from "../../hooks/useDivisions.js";
 import { useDdo } from "../../hooks/useDDO.js";
 
+
 const Challan = () => {
   const [isChallanLoading, setIsChallanLoading] = useState(true);
   const { departments, loading: isDepartmentLoading } = useDepartments({
