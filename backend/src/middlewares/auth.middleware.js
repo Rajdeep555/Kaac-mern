@@ -20,6 +20,7 @@ export const authMiddleware = (req, res, next) => {
         req.user = {
             ...decoded,
             role: decoded.role?.toUpperCase(),
+            id: decoded.userId
         };
 
         next();

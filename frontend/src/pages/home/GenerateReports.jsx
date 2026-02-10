@@ -4,8 +4,7 @@ import { VscArrowRight } from "react-icons/vsc";
 import { Outlet, useNavigate } from "react-router-dom";
 
 const GenerateReports = () => {
-
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   return (
     <div className="p-5 w-full h-screen">
@@ -14,14 +13,35 @@ const GenerateReports = () => {
           Generate Reports
         </h1>
         <div className="flex gap-5">
-          <div onClick={() => navigate("/track-forms")} className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
+          <div
+            onClick={() => navigate("/track-forms/council")}
+            className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
             <VscFile />
-            Forms Report
+            Council Report
             <VscArrowRight className="ml-13" />
           </div>
-          <div onClick={() => navigate("/track-statements")} className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
+
+          <div
+            onClick={() => navigate("/track-statements")}
+            className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
             <VscFile />
-            Statements Report
+            Council Statements
+            <VscArrowRight className="ml-5 " />
+          </div>
+
+          <div
+            onClick={() => navigate("/reports/state")}
+            className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
+            <VscFile />
+            State Report
+            <VscArrowRight className="ml-13" />
+          </div>
+
+          <div
+            onClick={() => navigate("/track-statements")}
+            className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
+            <VscFile />
+            State Statements
             <VscArrowRight className="ml-5 " />
           </div>
         </div>

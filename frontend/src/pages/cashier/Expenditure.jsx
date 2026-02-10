@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-hot-toast";
 
 import Breadcrumbs from "../../components/ui/Breadcrumbs";
 import FormWrapper from "../../components/Forms/FormWrapper";
@@ -14,18 +15,54 @@ import { formatIndianNumber } from "../../utils/formatIndianCurrency";
 import { useDepartments } from "../../hooks/useDepartments.js";
 import { useDdo } from "../../hooks/useDDO.js";
 import { useHeadHierarchy } from "../../hooks/useHeadHierarchy.js";
+import { usePlanNonPlan } from "../../hooks/usePlanNonPlan.js";
+import { getFinancialYears } from "../../hooks/useFinancialYear.js";
+import { useObjectHead } from "../../hooks/useObjectHead.js";
+
+import { getGeneratedVoucherNo } from "../../api/autoChallan.api.js";
+import {
+  createExpenditure,
+  updateExpenditure,
+  getExpenditureById,
+} from "../../api/expenditure.api.js";
+import { useForm } from "react-hook-form";
+import BasicDetailsSection from "../../components/Expenditure/BasicDetailsSection.jsx";
+import HeadHierarchySection from "../../components/Expenditure/HeadHierarchySection.jsx";
+import AmountBreakupSection from "../../components/Expenditure/AmountBreakupSection.jsx";
+import DeductionsSection from "../../components/Expenditure/DeductionsSection.jsx";
+import { useGrants } from "../../hooks/useGrants.js";
+import TableButton from "../../components/ui/TableButton.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const Expenditure = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isEditMode = Boolean(id);
+
+  // const { role } = useAuth(); // Import useAuth
+  // console.log("Current user role:", role);
+
+  const [isExpenditureLoading, setIsExpenditureLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   /* ================= BASIC DATA ================= */
   const { departments } = useDepartments({ type: "COUNCIL" });
   const { ddos } = useDdo();
+  const { planNonPlan } = usePlanNonPlan();
+  const financialYearOptions = getFinancialYears(2023).map((fy) => ({
+    label: fy,
+    value: fy,
+  }));
+  const { objectHead } = useObjectHead();
+  const { grantOptions } = useGrants();
 
   /* ================= FORM ================= */
-  const { register, handleSubmit, watch, setValue } = useForm({
+  const { register, handleSubmit, watch, setValue, reset } = useForm({
     defaultValues: {
       sector: "",
       department: "",
       ddo: "",
+      division: "",
 
       majorHead: "",
       subMajorHead: "",
@@ -43,9 +80,66 @@ const Expenditure = () => {
       workName: "",
       expenditureType: "",
 
-      totalAmount: "",
+      salaryType: "SALARY",
+      planType: "",
+      financialYear: "",
+      objectHead: "",
+
+      payOfficers: "",
+      payEstablishment: "",
+      allowanceHonorary: "",
+      contingencies: "",
+      grantsInAid: "",
+      works: "",
+      loansAdvances: "",
+      loanType: "",
+      loanRepayGovt: "",
+      loanRepayOther: "",
+      securityDeposit: "",
+      earnestMoney: "",
+      transferPayment: "",
+
+      grossAmount: "",
+
+      cgst: "",
+      sgst: "",
+      igst: "",
+      earnestMoneyDeduction: "",
+      ptax: "",
+      itax: "",
+      carLoanRecovery: "",
+      houseLoanRecovery: "",
+      cpfCouncil: "",
+      cpfContribution: "",
+      cpfRecovery: "",
+      houseRent: "",
+      securityDepositsDeduction: "",
+      forestRoyalty: "",
+      monopoly: "",
+      mcForestRoyalty: "",
+      mdrrf: "",
+      dmft: "",
+      labourCess: "",
+      itForestRoyalty: "",
+      vat: "",
+      advanceRecovery: "",
+      otherDeductions: "",
+
+      grossDeduction: "",
+      cpfPayable: "",
+      netDeduction: "",
+      netAmount: "",
+      amountPayable: "",
       amountInWords: "",
+
       remarks: "",
+
+      chequeBookNo: "",
+      chequeNo: "",
+      chequeIssueDate: "",
+      treasuryName: "",
+      treasuryVoucherNo: "",
+      treasuryDate: "",
     },
   });
 
@@ -57,7 +151,7 @@ const Expenditure = () => {
   const subHead = watch("subHead");
   const subSubHead = watch("subSubHead");
   const detailHead = watch("detailHead");
-  const totalAmount = watch("totalAmount");
+  const loansAdvances = watch("loansAdvances");
 
   /* ================= HEAD HIERARCHY ================= */
   const {
@@ -76,6 +170,27 @@ const Expenditure = () => {
     fetchDetailHeads,
     fetchSubDetailHeads,
   } = useHeadHierarchy(sector);
+
+  /* ================= LOAD DATA FOR EDIT MODE ================= */
+  useEffect(() => {
+    if (isEditMode && id) {
+      const loadExpenditure = async () => {
+        setIsExpenditureLoading(true);
+        try {
+          const response = await getExpenditureById(id);
+          reset(response.data);
+        } catch (error) {
+          console.error("Failed to load expenditure", error);
+          toast.error("Failed to load expenditure data");
+          navigate("/expenditure");
+        } finally {
+          setIsExpenditureLoading(false);
+        }
+      };
+
+      loadExpenditure();
+    }
+  }, [id, isEditMode, navigate, reset]);
 
   /* ================= RESET ALL ON SECTOR CHANGE ================= */
   useEffect(() => {
@@ -102,7 +217,7 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [majorHead, fetchSubMajors, setValue]);
+  }, [majorHead]); // REMOVED setValue and fetchSubMajors from dependencies
 
   /* ================= SUB MAJOR → MINOR ================= */
   useEffect(() => {
@@ -118,7 +233,7 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [subMajorHead, majorHead, fetchMinors, setValue]);
+  }, [subMajorHead, majorHead]); // REMOVED setValue and fetchMinors
 
   /* ================= MINOR → SUB HEAD ================= */
   useEffect(() => {
@@ -134,7 +249,7 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [minorHead, majorHead, subMajorHead, fetchSubHeads, setValue]);
+  }, [minorHead, majorHead, subMajorHead]); // REMOVED setValue and fetchSubHeads
 
   /* ================= SUB HEAD → SUB SUB HEAD ================= */
   useEffect(() => {
@@ -150,7 +265,7 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [subHead, majorHead, subMajorHead, minorHead, fetchSubSubHeads, setValue]);
+  }, [subHead, majorHead, subMajorHead, minorHead]); // REMOVED setValue and fetchSubSubHeads
 
   /* ================= SUB SUB HEAD → DETAIL ================= */
   useEffect(() => {
@@ -166,15 +281,7 @@ const Expenditure = () => {
 
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [
-    subSubHead,
-    majorHead,
-    subMajorHead,
-    minorHead,
-    subHead,
-    fetchDetailHeads,
-    setValue,
-  ]);
+  }, [subSubHead, majorHead, subMajorHead, minorHead, subHead]); // REMOVED setValue and fetchDetailHeads
 
   /* ================= DETAIL → SUB DETAIL ================= */
   useEffect(() => {
@@ -190,111 +297,407 @@ const Expenditure = () => {
     });
 
     setValue("subDetailHead", "");
+  }, [detailHead, majorHead, subMajorHead, minorHead, subHead, subSubHead]); // REMOVED setValue and fetchSubDetailHeads
+
+  /* ================= CALCULATE GROSS AMOUNT ================= */
+  useEffect(() => {
+    const gross =
+      Number(watch("payOfficers") || 0) +
+      Number(watch("payEstablishment") || 0) +
+      Number(watch("allowanceHonorary") || 0) +
+      Number(watch("contingencies") || 0) +
+      Number(watch("grantsInAid") || 0) +
+      Number(watch("works") || 0) +
+      Number(watch("loansAdvances") || 0) +
+      Number(watch("loanRepayGovt") || 0) +
+      Number(watch("loanRepayOther") || 0) +
+      Number(watch("securityDeposit") || 0) +
+      Number(watch("earnestMoney") || 0) +
+      Number(watch("transferPayment") || 0);
+
+    setValue("grossAmount", gross, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
   }, [
-    detailHead,
-    majorHead,
-    subMajorHead,
-    minorHead,
-    subHead,
-    subSubHead,
-    fetchSubDetailHeads,
-    setValue,
-  ]);
+    watch("payOfficers"),
+    watch("payEstablishment"),
+    watch("allowanceHonorary"),
+    watch("contingencies"),
+    watch("grantsInAid"),
+    watch("works"),
+    watch("loansAdvances"),
+    watch("loanRepayGovt"),
+    watch("loanRepayOther"),
+    watch("securityDeposit"),
+    watch("earnestMoney"),
+    watch("transferPayment"),
+  ]); // REMOVED setValue and watch from dependencies
+
+  /* ================= CALCULATE GROSS DEDUCTION ================= */
+  useEffect(() => {
+    const grossDeduction =
+      Number(watch("cgst") || 0) +
+      Number(watch("sgst") || 0) +
+      Number(watch("igst") || 0) +
+      Number(watch("earnestMoneyDeduction") || 0) +
+      Number(watch("ptax") || 0) +
+      Number(watch("itax") || 0) +
+      Number(watch("carLoanRecovery") || 0) +
+      Number(watch("houseLoanRecovery") || 0) +
+      Number(watch("cpfCouncil") || 0) +
+      Number(watch("cpfContribution") || 0) +
+      Number(watch("cpfRecovery") || 0) +
+      Number(watch("houseRent") || 0) +
+      Number(watch("securityDepositsDeduction") || 0) +
+      Number(watch("forestRoyalty") || 0) +
+      Number(watch("monopoly") || 0) +
+      Number(watch("mcForestRoyalty") || 0) +
+      Number(watch("mdrrf") || 0) +
+      Number(watch("dmft") || 0) +
+      Number(watch("labourCess") || 0) +
+      Number(watch("itForestRoyalty") || 0) +
+      Number(watch("vat") || 0) +
+      Number(watch("advanceRecovery") || 0) +
+      Number(watch("otherDeductions") || 0);
+
+    setValue("grossDeduction", grossDeduction, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [
+    watch("cgst"),
+    watch("sgst"),
+    watch("igst"),
+    watch("earnestMoneyDeduction"),
+    watch("ptax"),
+    watch("itax"),
+    watch("carLoanRecovery"),
+    watch("houseLoanRecovery"),
+    watch("cpfCouncil"),
+    watch("cpfContribution"),
+    watch("cpfRecovery"),
+    watch("houseRent"),
+    watch("securityDepositsDeduction"),
+    watch("forestRoyalty"),
+    watch("monopoly"),
+    watch("mcForestRoyalty"),
+    watch("mdrrf"),
+    watch("dmft"),
+    watch("labourCess"),
+    watch("itForestRoyalty"),
+    watch("vat"),
+    watch("advanceRecovery"),
+    watch("otherDeductions"),
+  ]); // REMOVED setValue
+
+  /* ================= CALCULATE CPF PAYABLE ================= */
+  useEffect(() => {
+    const cpfPayable =
+      Number(watch("cpfCouncil") || 0) +
+      Number(watch("cpfContribution") || 0) +
+      Number(watch("cpfRecovery") || 0);
+
+    setValue("cpfPayable", cpfPayable, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [watch("cpfCouncil"), watch("cpfContribution"), watch("cpfRecovery")]); // REMOVED setValue
+
+  /* ================= CALCULATE NET DEDUCTION ================= */
+  useEffect(() => {
+    const netDeduction =
+      Number(watch("grossDeduction") || 0) - Number(watch("cpfPayable") || 0);
+
+    setValue("netDeduction", netDeduction, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [watch("grossDeduction"), watch("cpfPayable")]); // REMOVED setValue
+
+  /* ================= CALCULATE NET AMOUNT ================= */
+  useEffect(() => {
+    const netAmount =
+      Number(watch("grossAmount") || 0) - Number(watch("netDeduction") || 0);
+
+    setValue("netAmount", netAmount, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+    setValue("amountPayable", netAmount, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [watch("grossAmount"), watch("netDeduction")]); // REMOVED setValue
 
   /* ================= AMOUNT TO WORDS ================= */
   useEffect(() => {
-    if (!totalAmount) {
-      setValue("amountInWords", "");
+    const payable = watch("amountPayable");
+
+    if (!payable || payable === 0) {
+      setValue("amountInWords", "", {
+        shouldDirty: false,
+        shouldValidate: false,
+      });
       return;
     }
 
-    const raw = totalAmount.replace(/,/g, "");
-    if (!isNaN(raw)) {
-      setValue("totalAmount", formatIndianNumber(raw));
-      setValue("amountInWords", rupeesToWords(raw));
-    }
-  }, [totalAmount, setValue]);
+    const words = rupeesToWords(payable);
+    setValue("amountInWords", words, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [watch("amountPayable")]); // REMOVED setValue
 
+  /* ================= GET VOUCHER NO (CREATE MODE ONLY) ================= */
+  useEffect(() => {
+    if (isEditMode || !sector) {
+      return;
+    }
+
+    const fetchNextVoucherNo = async () => {
+      setIsExpenditureLoading(true);
+      try {
+        const res = await getGeneratedVoucherNo(sector);
+        setValue("voucherNo", res.data.voucherNo, {
+          shouldDirty: false,
+          shouldValidate: false,
+        });
+      } catch (error) {
+        console.error("Failed to fetch voucher number", error);
+        setValue("voucherNo", "ERROR");
+        toast.error("Failed to generate voucher number");
+      } finally {
+        setIsExpenditureLoading(false);
+      }
+    };
+
+    fetchNextVoucherNo();
+  }, [sector, isEditMode]); // REMOVED setValue
+
+  /* ================= AUTO SELECT FINANCIAL YEAR ================= */
+  useEffect(() => {
+    if (isEditMode) return;
+
+    const currentFY = getFinancialYears(2023)[0];
+    setValue("financialYear", currentFY, {
+      shouldDirty: false,
+      shouldValidate: false,
+    });
+  }, [isEditMode]); // REMOVED setValue - runs once on mount
+
+  /* ================= RESET LOAN TYPE ================= */
+  useEffect(() => {
+    const amount = Number(loansAdvances);
+    if (!amount || amount <= 0) {
+      setValue("loanType", "", {
+        shouldDirty: false,
+        shouldValidate: false,
+      });
+    }
+  }, [loansAdvances]); // REMOVED setValue
+
+  /* ================= TRANSFORM DATA FOR BACKEND ================= */
+  const transformDataForBackend = (data) => {
+    const toNumber = (val) => {
+      if (val === "" || val === null || val === undefined) return null;
+      return Number(val);
+    };
+
+    // Convert date string to ISO format for backend
+    const toISODate = (dateStr) => {
+      if (!dateStr) return null;
+      try {
+        return new Date(dateStr).toISOString();
+      } catch (e) {
+        return null;
+      }
+    };
+
+    return {
+      sector: data.sector,
+      voucherNo: data.voucherNo,
+      voucherDate: toISODate(data.voucherDate),
+      requisitionNo: data.requisitionNo || null,
+      requisitionDate: toISODate(data.requisitionDate),
+      grantNo: data.grantNo || null,
+
+      // IMPORTANT: Make sure these are valid numbers
+      departmentId: data.department ? Number(data.department) : null,
+      ddoId: data.ddo ? Number(data.ddo) : null,
+
+      workName: data.workName || null,
+      expenditureType: data.expenditureType,
+
+      majorHead: data.majorHead,
+      subMajorHead: data.subMajorHead || null,
+      minorHead: data.minorHead || null,
+      subHead: data.subHead || null,
+      subSubHead: data.subSubHead || null,
+      detailHead: data.detailHead || null,
+      subDetailHead: data.subDetailHead || null,
+
+      salaryType: data.salaryType,
+      planType: data.planType,
+      financialYear: data.financialYear,
+      objectHead: data.objectHead || null,
+
+      payOfficers: toNumber(data.payOfficers),
+      payEstablishment: toNumber(data.payEstablishment),
+      allowanceHonorary: toNumber(data.allowanceHonorary),
+      contingencies: toNumber(data.contingencies),
+      grantsInAid: toNumber(data.grantsInAid),
+      works: toNumber(data.works),
+      loansAdvances: toNumber(data.loansAdvances),
+      loanType: data.loanType || null,
+      loanRepayGovt: toNumber(data.loanRepayGovt),
+      loanRepayOther: toNumber(data.loanRepayOther),
+      securityDeposit: toNumber(data.securityDeposit),
+      earnestMoney: toNumber(data.earnestMoney),
+      transferPayment: toNumber(data.transferPayment),
+
+      grossAmount: toNumber(data.grossAmount) || 0,
+
+      cgst: toNumber(data.cgst),
+      sgst: toNumber(data.sgst),
+      igst: toNumber(data.igst),
+      earnestMoneyDeduction: toNumber(data.earnestMoneyDeduction),
+      ptax: toNumber(data.ptax),
+      itax: toNumber(data.itax),
+      carLoanRecovery: toNumber(data.carLoanRecovery),
+      houseLoanRecovery: toNumber(data.houseLoanRecovery),
+      cpfCouncil: toNumber(data.cpfCouncil),
+      cpfContribution: toNumber(data.cpfContribution),
+      cpfRecovery: toNumber(data.cpfRecovery),
+      houseRent: toNumber(data.houseRent),
+      securityDepositsDeduction: toNumber(data.securityDepositsDeduction),
+      forestRoyalty: toNumber(data.forestRoyalty),
+      monopoly: toNumber(data.monopoly),
+      mcForestRoyalty: toNumber(data.mcForestRoyalty),
+      mdrrf: toNumber(data.mdrrf),
+      dmft: toNumber(data.dmft),
+      labourCess: toNumber(data.labourCess),
+      itForestRoyalty: toNumber(data.itForestRoyalty),
+      vat: toNumber(data.vat),
+      advanceRecovery: toNumber(data.advanceRecovery),
+      otherDeductions: toNumber(data.otherDeductions),
+
+      grossDeduction: toNumber(data.grossDeduction) || 0,
+      cpfPayable: toNumber(data.cpfPayable) || 0,
+      netDeduction: toNumber(data.netDeduction) || 0,
+      netAmount: toNumber(data.netAmount) || 0,
+      amountPayable: toNumber(data.amountPayable) || 0,
+      amountInWords: data.amountInWords || "",
+
+      remarks:
+        typeof data.remarks === "string" && data.remarks.trim() !== ""
+          ? data.remarks.trim()
+          : null,
+
+      chequeBookNo: data.chequeBookNo || null,
+      chequeNo: data.chequeNo || null,
+      chequeIssueDate: toISODate(data.chequeIssueDate),
+      treasuryName: data.treasuryName || null,
+      treasuryVoucherNo: data.treasuryVoucherNo || null,
+      treasuryDate: toISODate(data.treasuryDate),
+    };
+  };
   /* ================= SUBMIT ================= */
-  const onSubmit = (data) => {
-    console.log("FINAL PAYLOAD 👉", data);
-    alert("Form submitted (check console)");
+  const onSubmit = async (data) => {
+    setIsSubmitting(true);
+
+    try {
+      const payload = transformDataForBackend(data);
+
+      // Log the payload for debugging
+      console.log(" SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
+
+      let response;
+      if (isEditMode) {
+        response = await updateExpenditure(id, payload);
+        toast.success("Expenditure updated successfully!");
+      } else {
+        response = await createExpenditure(payload);
+        toast.success("Expenditure created successfully!");
+      }
+
+      console.log("Response:", response.data);
+      navigate("/expenditure");
+    } catch (error) {
+      console.error("Failed to submit expenditure", error);
+
+      // Log detailed error information
+      if (error.response) {
+        console.error("Error Details:", {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers,
+        });
+      }
+
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.response?.data?.issues?.[0]?.message || // Zod validation errors
+        `Failed to ${isEditMode ? "update" : "create"} expenditure`;
+
+      toast.error(errorMessage);
+
+      // Log Zod validation errors in detail
+      if (error.response?.data?.issues) {
+        console.error("🔍 Validation Errors:", error.response.data.issues);
+        error.response.data.issues.forEach((issue) => {
+          console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">
       <div className="border-b border-zinc-400 leading-9">
-        <Breadcrumbs
-          items={[
-            { label: "Dashboard", path: "/" },
-            { label: "Expenditure", path: "/expenditure" },
-            { label: "Create Expenditure", path: "/expenditure" },
-          ]}
-        />
+        <div className="flex items-center justify-between">
+          <Breadcrumbs
+            items={[
+              { label: "Dashboard", path: "/" },
+              { label: "Expenditure", path: "/expenditures" },
+              {
+                label: isEditMode ? "Edit Expenditure" : "Create Expenditure",
+                path: "/expenditure",
+              },
+            ]}
+          />
 
-        <h1 className="font-unbounded">Fill Expenditure Details :</h1>
+          <div>
+            <TableButton
+              onClick={() => navigate("/generated-expenditure")}
+              icon
+              name="Expenditures"></TableButton>
+          </div>
+        </div>
+
+        <h1 className="font-unbounded">
+          {isEditMode
+            ? "Edit Expenditure Details :"
+            : "Fill Expenditure Details :"}
+        </h1>
       </div>
 
-      <FormWrapper onSubmit={handleSubmit(onSubmit)}>
-        {/* ================= BASIC DETAILS ================= */}
-
-        <SelectField
-          label="Select Sector"
-          name="sector"
+      <FormWrapper
+        onSubmit={handleSubmit(onSubmit)}
+        submitText={isEditMode ? "Update" : "Submit"}
+        isSubmitting={isSubmitting}>
+        <BasicDetailsSection
           register={register}
-          required
-          options={[
-            { label: "Select Sector", value: "" },
-            { label: "01-COUNCIL", value: "COUNCIL" },
-            { label: "02-STATE", value: "STATE" },
-          ]}
+          departments={departments}
+          ddos={ddos}
+          grants={grantOptions}
+          isExpenditureLoading={isExpenditureLoading}
         />
 
-        <InputField
-          label="Voucher No"
-          name="voucherNo"
-          register={register}
-          readonly
-          helperText="( Auto generated by system )"
-        />
-
-        <DateField label="Date" name="voucherDate" register={register} />
-
-        <InputField
-          label="Requisition No"
-          name="requisitionNo"
-          register={register}
-        />
-
-        <DateField
-          label="Requisition Date"
-          name="requisitionDate"
-          register={register}
-        />
-
-        <SelectField
-          label="Grant Name & No"
-          name="grantNo"
-          register={register}
-          options={[{ label: "Select Grant", value: "" }]}
-        />
-
-        <SelectField
-          label="Department Name & Code"
-          name="department"
-          register={register}
-          options={[{ label: "Select Department", value: "" }, ...departments]}
-        />
-
-        <SelectField
-          label="Select DDO"
-          name="ddo"
-          register={register}
-          options={[{ label: "Select DDO", value: "" }, ...ddos]}
-        />
-
-        {/* ================= WORK / SCHEME ================= */}
-
+        {/* Work/Scheme Section */}
         <InputField
           label="Name Of The Work / Scheme"
           name="workName"
@@ -312,75 +715,27 @@ const Expenditure = () => {
           ]}
         />
 
-        {/* ================= HEAD OF ACCOUNT ================= */}
-
-        <SelectField
-          label="Major Head"
-          name="majorHead"
+        {/* Head Hierarchy */}
+        <HeadHierarchySection
           register={register}
-          disabled={!sector || loading}
-          options={[{ label: "Select Major Head", value: "" }, ...majorHeads]}
+          sector={sector}
+          majorHead={majorHead}
+          subMajorHead={subMajorHead}
+          minorHead={minorHead}
+          subHead={subHead}
+          subSubHead={subSubHead}
+          detailHead={detailHead}
+          loading={loading}
+          majorHeads={majorHeads}
+          subMajors={subMajors}
+          minors={minors}
+          subHeads={subHeads}
+          subSubHeads={subSubHeads}
+          detailHeads={detailHeads}
+          subDetailHeads={subDetailHeads}
         />
 
-        <SelectField
-          label="Sub Major Head"
-          name="subMajorHead"
-          register={register}
-          disabled={!majorHead || loading}
-          options={[
-            { label: "Select Sub Major Head", value: "" },
-            ...subMajors,
-          ]}
-        />
-
-        <SelectField
-          label="Minor Head"
-          name="minorHead"
-          register={register}
-          disabled={!subMajorHead || loading}
-          options={[{ label: "Select Minor Head", value: "" }, ...minors]}
-        />
-
-        <SelectField
-          label="Sub Head"
-          name="subHead"
-          register={register}
-          disabled={!minorHead || loading}
-          options={[{ label: "Select Sub Head", value: "" }, ...subHeads]}
-        />
-
-        <SelectField
-          label="Sub Sub Head"
-          name="subSubHead"
-          register={register}
-          disabled={subHead === "" || loading}
-          options={[
-            { label: "Select Sub Sub Head", value: "" },
-            ...subSubHeads,
-          ]}
-        />
-
-        <SelectField
-          label="Detail Head"
-          name="detailHead"
-          register={register}
-          disabled={subSubHead === "" || loading}
-          options={[{ label: "Select Detail Head", value: "" }, ...detailHeads]}
-        />
-
-        <SelectField
-          label="Sub Detail Head"
-          name="subDetailHead"
-          register={register}
-          disabled={!detailHead || loading}
-          options={[
-            { label: "Select Sub Detail Head", value: "" },
-            ...subDetailHeads,
-          ]}
-        />
-
-        {/* ================= CLASSIFICATION ================= */}
-
+        {/* Classification */}
         <SelectField
           label="Salary / Non Salary"
           name="salaryType"
@@ -395,234 +750,43 @@ const Expenditure = () => {
           label="Plan / Non-Plan"
           name="planType"
           register={register}
-          options={[
-            { label: "Plan", value: "PLAN" },
-            { label: "Non-Plan", value: "NON_PLAN" },
-          ]}
+          options={[{ label: "Select PlanNonPlan", value: "" }, ...planNonPlan]}
         />
 
         <SelectField
           label="Financial Year"
           name="financialYear"
           register={register}
-          options={[]}
+          options={[
+            { label: "Select Financial Year", value: "" },
+            ...financialYearOptions,
+          ]}
         />
 
         <SelectField
           label="Object Head"
           name="objectHead"
           register={register}
-          options={[]}
+          options={[...objectHead]}
         />
 
-        {/* ================= AMOUNT BREAKUP ================= */}
-
-        <InputField
-          label="Pay Of Officers"
-          name="payOfficers"
+        {/* Amount Breakup */}
+        <AmountBreakupSection
           register={register}
-        />
-        <InputField
-          label="Pay Of Establishment"
-          name="payEstablishment"
-          register={register}
-        />
-        <InputField
-          label="Allowance And Honorary"
-          name="allowanceHonorary"
-          register={register}
+          loansAdvances={loansAdvances}
         />
 
-        <InputField
-          label="Contingencies"
-          name="contingencies"
-          register={register}
-        />
-        <InputField
-          label="Grants-In-Aid"
-          name="grantsInAid"
-          register={register}
-        />
-        <InputField label="Works" name="works" register={register} />
+        {/* Deductions */}
+        <DeductionsSection register={register} />
 
-        <InputField
-          label="Loans & Advances"
-          name="loansAdvances"
-          register={register}
-        />
-        <SelectField
-          label="Loan Type"
-          name="loanType"
-          register={register}
-          options={[]}
-        />
-        <InputField
-          label="Repayment Of Loans From Govt."
-          name="loanRepayGovt"
-          register={register}
-        />
-
-        <InputField
-          label="Repayment Of Loans From Other Sources"
-          name="loanRepayOther"
-          register={register}
-        />
-        <InputField
-          label="Security Deposit"
-          name="securityDeposit"
-          register={register}
-        />
-        <InputField
-          label="Earnest Money"
-          name="earnestMoney"
-          register={register}
-        />
-        <InputField
-          label="Payment For Transferred Items"
-          name="transferPayment"
-          register={register}
-        />
-
-        {/* ================= TOTAL ================= */}
-
-        <InputField
-          label="Gross Amount"
-          name="grossAmount"
-          register={register}
-          readonly
-        />
-
-        {/* ================= DEDUCTIONS ================= */}
-
-        <InputField label="CGST" name="cgst" register={register} />
-        <InputField label="SGST" name="sgst" register={register} />
-        <InputField label="IGST" name="igst" register={register} />
-        <InputField
-          label="Earnest Money (Deduction)"
-          name="earnestMoneyDeduction"
-          register={register}
-        />
-
-        <InputField label="PTAX" name="ptax" register={register} />
-        <InputField label="ITAX" name="itax" register={register} />
-        <InputField
-          label="Car Loan Recovery"
-          name="carLoanRecovery"
-          register={register}
-        />
-        <InputField
-          label="House Building Loan Recovery"
-          name="houseLoanRecovery"
-          register={register}
-        />
-
-        <InputField
-          label="CPF Council Share"
-          name="cpfCouncil"
-          register={register}
-        />
-        <InputField
-          label="CPF Contribution"
-          name="cpfContribution"
-          register={register}
-        />
-        <InputField
-          label="CPF Recovery"
-          name="cpfRecovery"
-          register={register}
-        />
-        <InputField label="House Rent" name="houseRent" register={register} />
-
-        <InputField
-          label="Security Deposits"
-          name="securityDepositsDeduction"
-          register={register}
-        />
-        <InputField
-          label="Forest Royalty"
-          name="forestRoyalty"
-          register={register}
-        />
-        <InputField label="Monopoly" name="monopoly" register={register} />
-        <InputField
-          label="M/C On Forest Royalty"
-          name="mcForestRoyalty"
-          register={register}
-        />
-
-        <InputField label="MDRRF" name="mdrrf" register={register} />
-        <InputField label="DMFT" name="dmft" register={register} />
-        <InputField label="Labour Cess" name="labourCess" register={register} />
-        <InputField
-          label="IT On Forest Royalty"
-          name="itForestRoyalty"
-          register={register}
-        />
-
-        <InputField label="VAT" name="vat" register={register} />
-        <InputField
-          label="Advance Payment Recovery"
-          name="advanceRecovery"
-          register={register}
-        />
-        <InputField
-          label="Other Deductions"
-          name="otherDeductions"
-          register={register}
-        />
-
-        <InputField
-          label="Gross Total Deduction"
-          name="grossDeduction"
-          register={register}
-          readonly
-        />
-
-        <InputField
-          label="CPF Payable"
-          name="cpfPayable"
-          register={register}
-          readonly
-        />
-
-        <InputField
-          label="Net Deduction"
-          name="netDeduction"
-          register={register}
-          readonly
-        />
-
-        <InputField
-          label="Net Amount"
-          name="netAmount"
-          register={register}
-          readonly
-        />
-
-        <InputField
-          label="Amount Payable"
-          name="amountPayable"
-          register={register}
-          readonly
-        />
-
-        <InputField
-          label="Amount In Words"
-          name="amountInWords"
-          register={register}
-          readonly
-        />
-
-        {/* ================= REMARKS ================= */}
-
+        {/* Remarks */}
         <TextAreaField
           label="Narration / Remarks"
           name="remarks"
           register={register}
         />
 
-        {/* ================= CHEQUE & TREASURY DETAILS ================= */}
-
+        {/* Cheque & Treasury Details */}
         <InputField
           label="Cheque Book No"
           name="chequeBookNo"
@@ -656,6 +820,29 @@ const Expenditure = () => {
           name="treasuryDate"
           register={register}
         />
+
+        {/* Submit Button
+        <div className="col-span-full flex justify-end gap-4 mt-6">
+          <button
+            type="button"
+            onClick={() => navigate("/expenditure")}
+            className="px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+            disabled={isSubmitting}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            disabled={isSubmitting || isExpenditureLoading}>
+            {isSubmitting
+              ? isEditMode
+                ? "Updating..."
+                : "Creating..."
+              : isEditMode
+                ? "Update Expenditure"
+                : "Create Expenditure"}
+          </button> */}
+        {/* </div> */}
       </FormWrapper>
     </div>
   );

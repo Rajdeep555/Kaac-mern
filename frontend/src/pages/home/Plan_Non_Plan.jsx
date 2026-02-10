@@ -1,124 +1,94 @@
-// src/pages/Cashier/Cashier.jsx
+// src/pages/PlanNonPlan/Plan_Non_Plan.jsx
 import { useEffect, useState, useCallback } from "react";
 import DataTable from "../../components/DataTable/DataTable.jsx";
 import TableButton from "../../components/ui/TableButton.jsx";
 import FormOne from "../../components/Forms/FormOne.jsx";
 import {
-  createCashier,
-  getCashiers,
-  updateCashier,
-  deleteCashier,
-} from "../../api/cashier.api.js";
+  createPlanNonPlan,
+  getAllPlanNonPlan,
+  updatePlanNonPlan,
+  deletePlanNonPlan,
+} from "../../api/planNonPlan.api.js";
 import { Loader } from "../../components/ui/Loader.jsx";
 import { showToast } from "../../utils/toast.js";
 import { AiFillEdit } from "react-icons/ai";
 import { MdDelete, MdRestore } from "react-icons/md";
 import AlertModal from "../../components/ui/AlertModal.jsx";
-import { getDDOs } from "../../api/ddo.api.js";
-import { getDivisions } from "../../api/division.api.js";
 
 const Plan_Non_Plan = () => {
-  const [cashiers, setCashiers] = useState([]);
+  const [planNonPlan, setPlanNonPlan] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState({}); // per-row loading
+  const [actionLoading, setActionLoading] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [editingCashier, setEditingCashier] = useState(null);
+  const [editingPlanNonPlan, setEditingPlanNonPlan] = useState(null);
   const [alertModal, setAlertModal] = useState({
     open: false,
     title: "",
     message: "",
     onConfirm: null,
-    cashierId: null,
+    id: null,
+    isActive: false,
   });
-  const [ddoOptions, setDdoOptions] = useState([]);
-  const [divisionOptions, setDivisionOptions] = useState([]);
 
   useEffect(() => {
-    fetchCashiers();
-    fetchFormMasters();
+    fetchPlanNonPlan();
   }, []);
 
-  const fetchCashiers = async () => {
+  const fetchPlanNonPlan = async () => {
     try {
       setLoading(true);
-      const res = await getCashiers();
-      setCashiers(res.data.cashiers);
+      const res = await getAllPlanNonPlan();
+      setPlanNonPlan(res.data.planNonPlans);
     } catch (error) {
-      console.error("Error fetching cashiers:", error);
-      showToast("Failed to load cashiers", "error");
+      console.error("Error fetching Plan/Non-Plan:", error);
+      showToast("Failed to load Plan / Non-Plan", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchFormMasters = async () => {
+  const handleDeleteOrReactivate = useCallback(async (id, isActive) => {
+    setActionLoading((prev) => ({ ...prev, [id]: true }));
+
     try {
-      const [ddoRes, divisionRes] = await Promise.all([
-        getDDOs(),
-        getDivisions(),
-      ]);
+      await deletePlanNonPlan(id);
 
-      setDdoOptions(
-        ddoRes.data.ddos.map((d) => ({
-          label: `${d.ddoCode} - ${d.ddoName}`,
-          value: d.id,
-        }))
-      );
-
-      setDivisionOptions(
-        divisionRes.data.divisions.map((d) => ({
-          label: `${d.divisionCode} - ${d.divisionName} `,
-          value: d.id,
-        }))
-      );
-    } catch (error) {
-      showToast("Failed to load form data", "error");
-    }
-  };
-
-  const handleDeleteOrReactivate = useCallback(async (cashierId, isActive) => {
-    setActionLoading((prev) => ({ ...prev, [cashierId]: true }));
-    try {
-      await deleteCashier(cashierId);
-
-      // Update state immediately
-      setCashiers((prev) =>
-        prev.map((cashier) =>
-          cashier.id === cashierId
-            ? { ...cashier, isActive: !isActive }
-            : cashier
-        )
+      setPlanNonPlan((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, isActive: !isActive } : item,
+        ),
       );
 
       showToast(
-        isActive ? "Cashier deactivated!" : "Cashier reactivated!",
-        "success"
+        isActive ? "Deactivated successfully!" : "Reactivated successfully!",
+        "success",
       );
-      setAlertModal((prev) => ({ ...prev, open: false, onConfirm: null }));
+
+      setAlertModal((prev) => ({ ...prev, open: false }));
     } catch (error) {
       showToast("Operation failed", "error");
     } finally {
-      setActionLoading((prev) => ({ ...prev, [cashierId]: false }));
+      setActionLoading((prev) => ({ ...prev, [id]: false }));
     }
   }, []);
 
-  const handleEdit = (cashier) => {
-    setEditingCashier(cashier);
+  const handleEdit = (row) => {
+    setEditingPlanNonPlan(row);
     setIsModalOpen(true);
     setFormError("");
   };
 
-  const openAlertModal = (cashierId, isActive) => {
+  const openAlertModal = (id, isActive) => {
     setAlertModal({
       open: true,
-      title: isActive ? "Deactivate Cashier?" : "Reactivate Cashier?",
+      title: isActive ? "Deactivate Plan?" : "Reactivate Plan?",
       message: isActive
-        ? "This cashier will be marked as inactive and hidden from active list."
-        : "This cashier will be marked as active again.",
-      onConfirm: () => handleDeleteOrReactivate(cashierId, isActive),
-      cashierId,
+        ? "This plan will be marked inactive."
+        : "This plan will be reactivated.",
+      onConfirm: () => handleDeleteOrReactivate(id, isActive),
+      id,
       isActive,
     });
   };
@@ -150,20 +120,18 @@ const Plan_Non_Plan = () => {
             <button
               onClick={() => handleEdit(row)}
               disabled={isLoading}
-              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
-              title="Edit">
+              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded">
               <AiFillEdit className="w-4 h-4" />
             </button>
 
             <button
               onClick={() => openAlertModal(row.id, isActive)}
               disabled={isLoading}
-              className={`p-1.5 rounded transition-colors disabled:opacity-50 ${
+              className={`p-1.5 rounded ${
                 isActive
                   ? "text-red-600 hover:bg-red-100"
                   : "text-green-600 hover:bg-green-100"
-              }`}
-              title={isActive ? "Delete" : "Reactivate"}>
+              }`}>
               {isLoading ? (
                 <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
               ) : isActive ? (
@@ -178,10 +146,10 @@ const Plan_Non_Plan = () => {
     },
   ];
 
-  const cashierFormFields = [
+  const formFields = [
     {
       name: "name",
-      label: "Name",
+      label: "Plan / Non-Plan Name",
       type: "text",
       placeholder: "Enter name",
       required: true,
@@ -189,23 +157,12 @@ const Plan_Non_Plan = () => {
     {
       name: "sector",
       label: "Sector",
-      type: "text",
-      placeholder: "Enter Sector",
-      disabled: !!editingCashier,
-    },
-    {
-      name: "ddoId",
-      label: "DDO ID",
       type: "select",
-      options: ddoOptions,
-      placeholder: "Select DDO",
-    },
-    {
-      name: "divisionId",
-      label: "Division ID",
-      type: "select",
-      options: divisionOptions,
-      placeholder: "Select Division",
+      options: [
+        { label: "COUNCIL", value: "COUNCIL" },
+        { label: "STATE", value: "STATE" },
+      ],
+      readonly: !!editingPlanNonPlan,
     },
   ];
 
@@ -214,33 +171,36 @@ const Plan_Non_Plan = () => {
     setFormError("");
 
     try {
+      const payload = {
+        ...formData,
+        sector: editingPlanNonPlan
+          ? editingPlanNonPlan.sector
+          : formData.sector,
+        isActive: true,
+      };
+
       let res;
-      if (editingCashier) {
-        res = await updateCashier(editingCashier.id, formData);
-        setCashiers((prev) =>
-          prev.map((c) => (c.id === editingCashier.id ? res.data.cashier : c))
+
+      if (editingPlanNonPlan) {
+        res = await updatePlanNonPlan(editingPlanNonPlan.id, payload);
+        setPlanNonPlan((prev) =>
+          prev.map((p) =>
+            p.id === editingPlanNonPlan.id ? res.data.planNonPlan : p,
+          ),
         );
-        showToast("Cashier updated successfully!", "success");
+        showToast("Updated successfully!", "success");
       } else {
-        res = await createCashier(formData);
-        const formattedCashier = {
-          ...res.data.cashier,
-          ddo: res.data.cashier.ddo || {
-            ddoName: `DDO-${formData.ddoId}`,
-            id: parseInt(formData.ddoId),
-          },
-        };
-        setCashiers((prev) => [...prev, formattedCashier]);
-        showToast("Plan-Non-Plan added successfully!", "success");
+        res = await createPlanNonPlan(payload);
+        setPlanNonPlan((prev) => [...prev, res.data.planNonPlan]);
+        showToast("Added successfully!", "success");
       }
 
       setIsModalOpen(false);
-      setEditingCashier(null);
+      setEditingPlanNonPlan(null);
     } catch (error) {
-      const errorMsg =
-        error?.response?.data?.message || error.message || "Operation failed";
-      setFormError(errorMsg);
-      showToast(errorMsg, "error");
+      const msg = error?.response?.data?.message || "Operation failed";
+      setFormError(msg);
+      showToast(msg, "error");
     } finally {
       setSaving(false);
     }
@@ -249,27 +209,24 @@ const Plan_Non_Plan = () => {
   return (
     <>
       <div className={`${isModalOpen ? "hidden" : "block"} p-6 space-y-6`}>
-        <h1 className="font-unbounded text-3xl font-normal">
-          Plan Non Plan Management
-        </h1>
+        <h1 className="font-unbounded text-3xl">Plan / Non-Plan Management</h1>
 
         {loading ? (
           <Loader />
         ) : (
           <DataTable
-            data={cashiers}
+            data={planNonPlan}
             columns={columns}
-            searchableKeys={["name", "email", "phone", "cashierCode"]}
+            searchableKeys={["name", "sector"]}
             statusKey="isActive"
             pageSize={10}
-            loading={loading}
-            downloadFileName="cashiers"
-            printTitle="Cashier Report"
+            downloadFileName="plan-non-plan"
+            printTitle="Plan / Non-Plan Report"
             actionSlot={
               <TableButton
                 name="Add New Plan"
                 onClick={() => {
-                  setEditingCashier(null);
+                  setEditingPlanNonPlan(null);
                   setFormError("");
                   setIsModalOpen(true);
                 }}
@@ -282,14 +239,14 @@ const Plan_Non_Plan = () => {
       {isModalOpen && (
         <FormOne
           isOpen={isModalOpen}
-          fields={cashierFormFields}
-          initialValues={editingCashier}
+          fields={formFields}
+          initialValues={editingPlanNonPlan}
           onClose={() => {
             setFormError("");
             setIsModalOpen(false);
-            setEditingCashier(null);
+            setEditingPlanNonPlan(null);
           }}
-          title={editingCashier ? "Edit Cashier" : "Add New Plan"}
+          title={editingPlanNonPlan ? "Edit Plan / Non-Plan" : "Add New Plan"}
           loading={saving}
           error={formError}
           onSubmit={handleSubmit}
@@ -302,8 +259,8 @@ const Plan_Non_Plan = () => {
         onConfirm={alertModal.onConfirm}
         title={alertModal.title}
         message={alertModal.message}
-        confirmText={alertModal.isActive ? "Delete" : "Reactivate"}
-        loading={actionLoading[alertModal.cashierId]}
+        confirmText={alertModal.isActive ? "Deactivate" : "Reactivate"}
+        loading={actionLoading[alertModal.id]}
       />
     </>
   );

@@ -6,6 +6,7 @@ const SelectField = ({
   options = [],
   removable,
   register,
+  disabled,
 }) => {
   const isRHF = !!register;
 
@@ -15,6 +16,7 @@ const SelectField = ({
 
       <div className="flex gap-2">
         <select
+          disabled={disabled}
           name={name}
           {...(isRHF ? register(name) : { value, onChange })}
           className="border border-zinc-400 rounded outline-none focus:ring-1 focus:ring-blue-500 px-3 py-2 w-full">

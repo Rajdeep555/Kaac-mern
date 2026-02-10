@@ -34,6 +34,7 @@ export const getAllDepartment = async ({ type, isAdmin }) => {
 
     return prisma.department.findMany({
         where: whereClause,
-        orderBy: { id: "desc" }
+        orderBy: { id: "asc" }
     });
 }
+

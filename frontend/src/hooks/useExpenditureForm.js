@@ -1,0 +1,88 @@
+import { useForm } from "react-hook-form";
+
+export const useExpenditureForm = () => {
+    return useForm({
+        defaultValues: {
+            sector: "",
+            department: "",
+            ddo: "",
+
+            majorHead: "",
+            subMajorHead: "",
+            minorHead: "",
+            subHead: "",
+            subSubHead: "",
+            detailHead: "",
+            subDetailHead: "",
+
+            voucherNo: "",
+            voucherDate: "",
+            requisitionNo: "",
+            requisitionDate: "",
+            grantNo: "",
+            workName: "",
+            expenditureType: "",
+
+            salaryType: "SALARY",
+            planType: "",
+            financialYear: "",
+            objectHead: "",
+
+            payOfficers: "",
+            payEstablishment: "",
+            allowanceHonorary: "",
+            contingencies: "",
+            grantsInAid: "",
+            works: "",
+            loansAdvances: "",
+            loanType: "",
+            loanRepayGovt: "",
+            loanRepayOther: "",
+            securityDeposit: "",
+            earnestMoney: "",
+            transferPayment: "",
+
+            grossAmount: "",
+
+            cgst: "",
+            sgst: "",
+            igst: "",
+            earnestMoneyDeduction: "",
+            ptax: "",
+            itax: "",
+            carLoanRecovery: "",
+            houseLoanRecovery: "",
+            cpfCouncil: "",
+            cpfContribution: "",
+            cpfRecovery: "",
+            houseRent: "",
+            securityDepositsDeduction: "",
+            forestRoyalty: "",
+            monopoly: "",
+            mcForestRoyalty: "",
+            mdrrf: "",
+            dmft: "",
+            labourCess: "",
+            itForestRoyalty: "",
+            vat: "",
+            advanceRecovery: "",
+            otherDeductions: "",
+
+            grossDeduction: "",
+            cpfPayable: "",
+            netDeduction: "",
+            netAmount: "",
+            amountPayable: "",
+            amountInWords: "",
+
+            remarks: "",
+
+            chequeBookNo: "",
+            chequeNo: "",
+            chequeIssueDate: "",
+            treasuryName: "",
+            treasuryVoucherNo: "",
+            treasuryDate: "",
+        },
+    });
+};

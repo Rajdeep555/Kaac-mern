@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { getDivisions } from "../api/division.api";
+import { getDivisions } from "../api/division.api.js";
 
 export const useDivisions = () => {
     const [divisions, setDivisions] = useState([]);
+    const [divisionOptions, setDivisionOptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -13,16 +14,25 @@ export const useDivisions = () => {
 
             try {
                 const res = await getDivisions();
+                const list = Array.isArray(res?.data?.divisions)
+                    ? res.data.divisions
+                    : [];
 
-                const options = res.data.divisions.map((div) => ({
-                    label: `${div.divisionCode} - ${div.divisionName}`,
-                    value: div.id,
-                }));
+                // ✅ RAW DATA (for table)
+                setDivisions(list);
 
-                setDivisions(options);
+                // ✅ OPTIONS (for select)
+                setDivisionOptions(
+                    list.map((division) => ({
+                        label: `${division.divisionCode} - ${division.divisionName}`,
+                        value: division.id,
+                    }))
+                );
             } catch (err) {
                 console.error("Failed to fetch divisions", err);
                 setError(err);
+                setDivisions([]);
+                setDivisionOptions([]);
             } finally {
                 setLoading(false);
             }
@@ -33,6 +43,7 @@ export const useDivisions = () => {
 
     return {
         divisions,
+        divisionOptions,
         loading,
         error,
     };

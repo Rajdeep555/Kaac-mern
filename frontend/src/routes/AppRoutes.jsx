@@ -26,9 +26,24 @@ import Challan from "../pages/cashier/Challan";
 import GeneratedChallans from "../pages/cashier/Generated-Challans";
 import StateChallan from "../pages/cashier/StateChallan";
 import GeneratedStateChallans from "../pages/cashier/GeneratedStateChallans";
+import TrackForms from "../features/TrackReports/TrackForms";
+import TrackStatements from "../features/TrackReports/TrackStatements";
+import Expenditure from "../pages/cashier/Expenditure";
+import GeneratedExpenditure from "../pages/cashier/GeneratedExpenditure";
+import CreateExpenditure from "../pages/cashier/expenditure/CreateExpenditure";
+import EditExpenditure from "../pages/cashier/expenditure/EditExpenditure";
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
+  {
+    path: "/unauthorized",
+    element: (
+      <div className="p-6 text-center">
+        <h1 className="text-2xl font-bold">Unauthorized Access</h1>
+        <p>You don't have permission to access this page.</p>
+      </div>
+    ),
+  },
 
   {
     element: <RequireAuth />,
@@ -85,10 +100,13 @@ const AppRoutes = createBrowserRouter([
                 element: <GeneratedStateChallans />,
               },
               { path: "expenditures", element: <Expenditure /> },
+              { path: "expenditures/:id", element: <Expenditure /> },
               {
                 path: "generated-expenditure",
                 element: <GeneratedExpenditure />,
               },
+              { path: "expenditures/new", element: <CreateExpenditure /> },
+              { path: "expenditures/:id/edit", element: <EditExpenditure /> },
             ],
           },
 

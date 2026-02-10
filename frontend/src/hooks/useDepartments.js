@@ -16,7 +16,7 @@ export const useDepartments = ({ type }) => {
                 const res = await getAllChallanDepartments({ type });
 
                 const options = res.data.map((dept) => ({
-                    label: dept.name,
+                    label: dept.id + " - " + dept.name,
                     value: dept.id,
                 }));
 
