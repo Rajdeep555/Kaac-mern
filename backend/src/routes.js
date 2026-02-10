@@ -7,6 +7,10 @@ import cashierRoutes from "./modules/cashier/cashier.routes.js"
 import expenditureTypeRoutes from "./modules/expenditureType/expenditureType.routes.js"
 import planNonPlanRoutes from "./modules/planNonPlan/planNonPlan.routes.js"
 import departmentRoutes from "./modules/department/department.routes.js"
+import headRoutes from "./modules/heads/head.route.js"
+import generateChallanNoRoutes from "./modules/generateChallanNo/generate.route.js"
+import expenditreRoutes from "./modules/expenditure/expenditure.route.js"
+
 
 const router = express.Router();
 
@@ -18,6 +22,9 @@ router.use("/v1/cashier", cashierRoutes);
 router.use("/v1/expenditureType", expenditureTypeRoutes);
 router.use("/v1/planNonPlan", planNonPlanRoutes);
 router.use("/v1/department", departmentRoutes)
+router.use("/v1/heads", headRoutes);
+router.use("/v1/challan", generateChallanNoRoutes);
+router.use("/v1/expenditure", expenditreRoutes);
 
 // router.all(/.*/, (req, res) => {
 //     res.status(404).json({

@@ -27,8 +27,9 @@ model Division {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   cashiers     Cashier[]
-  ddos         DDO[]
   challans     Challan[]
+  ddos         DDO[]
+  expenditues  Expenditure[]
 }
 
 model DDO {
@@ -44,25 +45,25 @@ model DDO {
   ddoCode     String    @unique
   cashiers    Cashier[]
   challans    Challan[]
+  expenditures Expenditure[]
   division    Division  @relation(fields: [divisionId], references: [id])
 }
 
 model Cashier {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   name        String
   email       String?
   phone       String?
   password    String?
-  isActive    Boolean  @default(true)
+  isActive    Boolean   @default(true)
   divisionId  Int
   ddoId       Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  cashierCode String   @unique
-
-  ddo      DDO       @relation(fields: [ddoId], references: [id])
-  division Division  @relation(fields: [divisionId], references: [id])
-  challans Challan[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  cashierCode String    @unique
+  ddo         DDO       @relation(fields: [ddoId], references: [id])
+  division    Division  @relation(fields: [divisionId], references: [id])
+  challans    Challan[]
 }
 
 model ExpenditureType {
@@ -93,15 +94,39 @@ model ObjectHead {
 }
 
 model Department {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   name      String
   code      String
   sector    Sector?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  challans  Challan[]
+  expenditures Expenditure[]
+}
 
-  challans Challan[]
+model Heads {
+  id                Int      @id @default(autoincrement())
+  sector            Sector
+  grantName         String
+  grantNo           String
+  majorHead         String
+  majorHeadCode     String
+  subMajor          String?
+  subMajorCode      String?
+  minorHead         String?
+  minorHeadCode     String?
+  subHead           String?
+  subHeadCode       String?
+  subSubHead        String?
+  subSubHeadCode    String?
+  detailHead        String?
+  detailHeadCode    String?
+  subDetailHead     String?
+  subDetailHeadCode String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Challan {
@@ -125,16 +150,141 @@ model Challan {
   treasuryChallanDate DateTime?
   amount              String
   remarks             String
-
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cashier    Cashier    @relation(fields: [cashierId], references: [id])
-  department Department @relation(fields: [departmentId], references: [id])
-  division   Division   @relation(fields: [divisionId], references: [id])
-  ddo        DDO        @relation(fields: [ddoId], references: [id])
+  isActive            Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  cashier             Cashier     @relation(fields: [cashierId], references: [id])
+  ddo                 DDO         @relation(fields: [ddoId], references: [id])
+  department          Department  @relation(fields: [departmentId], references: [id])
+  division            Division    @relation(fields: [divisionId], references: [id])
 }
+
+model Expenditure {
+  id               Int      @id @default(autoincrement())
+
+  /* ================= BASIC DETAILS ================= */
+  sector            Sector
+  voucherNo         String
+  voucherDate       DateTime?
+
+  requisitionNo     String?
+  requisitionDate   DateTime?
+
+  grantNo           String?
+
+  departmentId      Int
+  ddoId             Int
+  divisionId        Int
+
+  workName          String?
+  expenditureType   String 
+
+  /* ================= HEAD OF ACCOUNT ================= */
+  majorHead         String
+  subMajorHead      String?
+  minorHead         String?
+  subHead           String?
+  subSubHead        String?
+  detailHead        String?
+  subDetailHead     String?
+
+  /* ================= CLASSIFICATION ================= */
+  salaryType        SalaryType
+  planType          PlanType
+  financialYear     String
+  objectHead        String?
+
+  /* ================= AMOUNT BREAKUP ================= */
+  payOfficers       Decimal? @db.Decimal(14,2)
+  payEstablishment  Decimal? @db.Decimal(14,2)
+  allowanceHonorary Decimal? @db.Decimal(14,2)
+  contingencies     Decimal? @db.Decimal(14,2)
+  grantsInAid       Decimal? @db.Decimal(14,2)
+  works             Decimal? @db.Decimal(14,2)
+  loansAdvances     Decimal? @db.Decimal(14,2)
+
+  loanType          LoanType?
+  loanRepayGovt     Decimal? @db.Decimal(14,2)
+  loanRepayOther    Decimal? @db.Decimal(14,2)
+
+  securityDeposit   Decimal? @db.Decimal(14,2)
+  earnestMoney      Decimal? @db.Decimal(14,2)
+  transferPayment   Decimal? @db.Decimal(14,2)
+
+  /* ================= TOTAL ================= */
+  grossAmount       Decimal  @db.Decimal(14,2)
+
+  /* ================= DEDUCTIONS ================= */
+  cgst                    Decimal? @db.Decimal(14,2)
+  sgst                    Decimal? @db.Decimal(14,2)
+  igst                    Decimal? @db.Decimal(14,2)
+  earnestMoneyDeduction   Decimal? @db.Decimal(14,2)
+  ptax                    Decimal? @db.Decimal(14,2)
+  itax                    Decimal? @db.Decimal(14,2)
+  carLoanRecovery         Decimal? @db.Decimal(14,2)
+  houseLoanRecovery       Decimal? @db.Decimal(14,2)
+  cpfCouncil              Decimal? @db.Decimal(14,2)
+  cpfContribution         Decimal? @db.Decimal(14,2)
+  cpfRecovery             Decimal? @db.Decimal(14,2)
+  houseRent               Decimal? @db.Decimal(14,2)
+  securityDepositsDeduction Decimal? @db.Decimal(14,2)
+  forestRoyalty           Decimal? @db.Decimal(14,2)
+  monopoly                Decimal? @db.Decimal(14,2)
+  mcForestRoyalty         Decimal? @db.Decimal(14,2)
+  mdrrf                   Decimal? @db.Decimal(14,2)
+  dmft                    Decimal? @db.Decimal(14,2)
+  labourCess              Decimal? @db.Decimal(14,2)
+  itForestRoyalty         Decimal? @db.Decimal(14,2)
+  vat                     Decimal? @db.Decimal(14,2)
+  advanceRecovery         Decimal? @db.Decimal(14,2)
+  otherDeductions         Decimal? @db.Decimal(14,2)
+
+  grossDeduction    Decimal @db.Decimal(14,2)
+  cpfPayable        Decimal @db.Decimal(14,2)
+  netDeduction      Decimal @db.Decimal(14,2)
+  netAmount         Decimal @db.Decimal(14,2)
+  amountPayable     Decimal @db.Decimal(14,2)
+
+  amountInWords     String
+
+  /* ================= REMARKS ================= */
+  remarks           String?
+
+  /* ================= CHEQUE & TREASURY ================= */
+  chequeBookNo      String?
+  chequeNo           String?
+  chequeIssueDate   DateTime?
+
+  treasuryName      String?
+  treasuryVoucherNo String?
+  treasuryDate      DateTime?
+
+  /* ================= STATUS ================= */
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  /* ================= RELATIONS ================= */
+  department Department @relation(fields: [departmentId], references: [id])
+  ddo        DDO        @relation(fields: [ddoId], references: [id])
+  division   Division   @relation(fields: [divisionId], references: [id])
+}
+
+enum SalaryType {
+  SALARY
+  NON_SALARY
+}
+
+enum PlanType {
+  PLAN
+  NON_PLAN
+}
+
+enum LoanType {
+  GOVT
+  OTHER
+}
+
 
 enum UserRole {
   ADMIN

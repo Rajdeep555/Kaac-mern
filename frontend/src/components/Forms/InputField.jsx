@@ -7,6 +7,7 @@ const InputField = ({
   onChange,
   placeholder,
   readonly = false,
+  register,
 }) => {
   return (
     <div className="flex flex-col gap-1">
@@ -22,17 +23,15 @@ const InputField = ({
       <input
         type={type}
         name={name}
-        value={value}
-        onChange={onChange}
         placeholder={placeholder}
         readOnly={readonly}
+        {...(register ? register(name) : { value, onChange })}
         className={`border border-zinc-400 rounded px-3 py-2 outline-none focus:ring-1 focus:ring-blue-500
            ${
-            readonly
-              ? "bg-gray-300 cursor-not-allowed"
-              : "focus:ring-1 focus:ring-blue-500"
-          }`
-        }
+             readonly
+               ? "bg-gray-300 cursor-not-allowed"
+               : "focus:ring-1 focus:ring-blue-500"
+           }`}
       />
     </div>
   );

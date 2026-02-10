@@ -1,23 +1,22 @@
 import logger from "../utils/logger.js";
 
-export default function authorize(requiredRole) {
+export default function authorize(...allowedRoles) {
     return (req, res, next) => {
         const userRole = req.user?.role;
 
-        // Logging every authorization attempt
         logger.info("Authorization check", {
             userId: req.user?.userId,
             userRole,
-            requiredRole,
+            allowedRoles,
             path: req.originalUrl,
             method: req.method,
         });
 
-        if (userRole !== requiredRole) {
+        if (!userRole || !allowedRoles.includes(userRole)) {
             logger.warn("Authorization failed", {
                 userId: req.user?.userId,
                 userRole,
-                requiredRole,
+                allowedRoles,
             });
 
             return res.status(403).json({
@@ -26,7 +25,6 @@ export default function authorize(requiredRole) {
             });
         }
 
-        // Optional success log (can be noisy in prod) // remove it ltr
         logger.info("Authorization successful", {
             userId: req.user?.userId,
             role: userRole,

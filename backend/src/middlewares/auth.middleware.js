@@ -9,20 +9,24 @@ export const authMiddleware = (req, res, next) => {
     if (!header || !header.startsWith("Bearer ")) {
         return res.status(401).json({
             success: false,
-            message: "Unauthorized"
-        })
+            message: "Unauthorized",
+        });
     }
 
     try {
         const token = header.split(" ")[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
 
-        // all ok 
+        req.user = {
+            ...decoded,
+            role: decoded.role?.toUpperCase(),
+        };
+
         next();
     } catch (error) {
         return res.status(401).json({
-            message: "Unauthorized"
-        })
+            success: false,
+            message: "Unauthorized",
+        });
     }
-}
+};

@@ -19,3 +19,21 @@ export const createDepartment = async (data) => {
         }
     })
 }
+
+export const getAllDepartment = async ({ type, isAdmin }) => {
+    const whereClause = {};
+
+    //ADMIN can access all dept
+    if (!isAdmin) {
+        whereClause.isActive = true;
+
+        if (type && ["COUNCIL", "STATE"].includes(type)) {
+            whereClause.sector = type;
+        }
+    }
+
+    return prisma.department.findMany({
+        where: whereClause,
+        orderBy: { id: "desc" }
+    });
+}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
 import FormWrapper from "../../components/Forms/FormWrapper";
 import InputField from "../../components/Forms/InputField";
 import SelectField from "../../components/Forms/SelectField";
@@ -7,29 +8,113 @@ import DateField from "../../components/Forms/DateField";
 import { rupeesToWords } from "../../utils/rupeesToWords";
 import { formatIndianNumber } from "../../utils/formatIndianCurrency";
 import Breadcrumbs from "../../components/ui/Breadcrumbs";
+import { useEffect } from "react";
+import { getGeneratedChallanNo } from "../../api/autoChallan.api.js";
+import { useDepartments } from "../../hooks/useDepartments.js";
+import { useDivisions } from "../../hooks/useDivisions.js";
+import { useDdo } from "../../hooks/useDDO.js";
 
 const Challan = () => {
-  const [form, setForm] = useState({
-    challanNo: "",
-    department: "",
-    paymentMode: "",
-    remarks: "",
+  const [isChallanLoading, setIsChallanLoading] = useState(true);
+  const { departments, loading: isDepartmentLoading } = useDepartments({
+    type: "COUNCIL",
   });
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  const { divisions, loading: isDivisionLoading } = useDivisions();
+  const { ddos, loading: isDdoLoading } = useDdo();
 
-    if (name === "totalAmount") {
-      const rawValue = value.replace(/,/g, "");
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: {
+      challanType: "",
+      department: "",
+      divisionCode: "",
+      ddo: "",
+      majorHead: "",
+      subMajorHead: "",
+      subSubMajorHead: "",
+      minorHead: "",
+      detailHead: "",
+      treasuryName: "",
+      treasuryChallanNo: "",
+      treasuryChallanDate: "",
+      totalAmount: "",
+      amountInWords: "",
+      remarks: "",
+    },
+  });
 
-      setForm((prev) => ({
-        ...prev,
-        totalAmount: formatIndianNumber(rawValue),
-        amountInWords: rupeesToWords(rawValue),
-      }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
+  // Auto convert amount to words
+  const totalAmount = watch("totalAmount");
+
+  useEffect(() => {
+    if (!totalAmount) return;
+
+    const raw = totalAmount.replace(/,/g, "");
+    setValue("totalAmount", formatIndianNumber(raw), { shouldValidate: true });
+    setValue("amountInWords", rupeesToWords(raw), { shouldValidate: true });
+  }, [totalAmount, setValue]);
+
+  // fetching challan no
+  useEffect(() => {
+    const fetchNextChallanNo = async () => {
+      setIsChallanLoading(true);
+
+      try {
+        const res = await getGeneratedChallanNo("COUNCIL");
+
+        setValue("challanNo", res.data.challanNo, {
+          shouldDirty: false,
+          shouldValidate: false,
+        });
+      } catch (error) {
+        console.error("Failed to fetch challan number", error);
+        setValue("challanNo", "ERROR");
+      } finally {
+        setIsChallanLoading(false);
+      }
+    };
+
+    fetchNextChallanNo();
+  }, [setValue]);
+
+  //submit
+  const onSubmit = async (data) => {
+    const payload = {
+      challanType: data.challanType,
+      departmentId: Number(data.department),
+      divisionId: Number(data.divisionCode),
+      ddoId: Number(data.ddo),
+      majorHead: data.majorHead,
+      subMajorHead: data.subMajorHead,
+      subSubMajorHead: data.subSubMajorHead,
+      minorHead: data.minorHead,
+      detailHead: data.detailHead,
+      treasuryCode: data.treasuryName,
+      treasuryChallanNo: data.treasuryChallanNo,
+      treasuryChallanDate: data.treasuryChallanDate,
+      amount: data.totalAmount.replace(/,/g, ""),
+      remarks: data.remarks,
+    };
+
+    const res = await fetch("/api/challan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      alert("Failed to create challan");
+      return;
     }
+
+    const result = await res.json();
+    alert(`Challan created successfully\nChallan No: ${result.challanNo}`);
   };
 
   return (
@@ -46,90 +131,76 @@ const Challan = () => {
         <h1 className="font-unbounded">Fill Challan Details :</h1>
       </div>
 
-      <FormWrapper onSubmit={(e) => e.preventDefault()}>
+      <FormWrapper onSubmit={handleSubmit(onSubmit)}>
         <InputField
           label="Counterfoil No."
           helperText="(in case of receipt in cash by the Cashier)"
           name="counterfoilNo"
-          value={form.counterfoilNo}
-          onChange={handleChange}
+          register={register}
         />
 
         <DateField
           label="Counterfoil Date"
           name="counterfoilDate"
-          value={form.counterfoilDate}
-          onChange={handleChange}
+          register={register}
           readonly={true}
         />
 
         <InputField
           label="Challan No."
+          readonly={true}
+          helperText="( Auto-generated by system )"
           name="challanNo"
-          value={form.challanNo}
-          onChange={handleChange}
+          register={register}
+          placeholder={isChallanLoading ? "fetching..." : ""}
         />
 
         <DateField
           label="Challan Date"
           name="challanDate"
-          value={form.challanDate}
-          onChange={handleChange}
+          register={register}
         />
 
         <SelectField
           label="Type"
           name="challanType"
-          value={form.challanType}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
-            { label: "02-CSS", value: "css" },
+            // { label: "02-CSS", value: "css" },
           ]}
         />
 
         <SelectField
           label="Department"
           name="department"
-          value={form.department}
-          onChange={handleChange}
-          removable
-          options={[
-            { label: "01-Council", value: "council" },
-            { label: "02-CSS", value: "css" },
-          ]}
+          register={register}
+          options={departments}
+          disabled={isDepartmentLoading}
         />
 
         <SelectField
           label="Division Code"
           name="divisionCode"
-          value={form.divisionCode}
-          onChange={handleChange}
-          removable
-          options={[
-            { label: "01-Council", value: "council" },
-            { label: "02-CSS", value: "css" },
-          ]}
+          register={register}
+          options={divisions}
+          disabled={isDivisionLoading}
         />
 
         <SelectField
           label="DDO"
           name="ddo"
-          value={form.ddo}
-          onChange={handleChange}
+          register={register}
           removable
-          options={[
-            { label: "01-Council", value: "council" },
-            { label: "02-CSS", value: "css" },
-          ]}
+          options={ddos}
+          disabled={isDdoLoading}
         />
 
         <SelectField
           label="Major Head"
           name="majorHead"
-          value={form.majorHead}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
@@ -140,8 +211,7 @@ const Challan = () => {
         <SelectField
           label="Sub Major Head"
           name="subMajorHead"
-          value={form.subMajorHead}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
@@ -152,8 +222,7 @@ const Challan = () => {
         <SelectField
           label="Sub Sub Major Head"
           name="subSubMajorHead"
-          value={form.subSubMajorHead}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
@@ -164,8 +233,7 @@ const Challan = () => {
         <SelectField
           label="Minor Head"
           name="minorHead"
-          value={form.minorHead}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
@@ -176,8 +244,7 @@ const Challan = () => {
         <SelectField
           label="Detail Head"
           name="detailHead"
-          value={form.detailHead}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
@@ -188,8 +255,7 @@ const Challan = () => {
         <SelectField
           label="Treasury Name"
           name="treasuryName"
-          value={form.treasuryName}
-          onChange={handleChange}
+          register={register}
           removable
           options={[
             { label: "01-Council", value: "council" },
@@ -200,38 +266,29 @@ const Challan = () => {
         <InputField
           label="Treasury Challan No"
           name="treasuryChallanNo"
-          value={form.treasuryChallanNo}
-          onChange={handleChange}
+          register={register}
         />
 
         <DateField
           label="Treasury Challan Date"
           name="treasuryChallanDate"
-          value={form.treasuryChallanDate}
-          onChange={handleChange}
+          register={register}
         />
 
         <InputField
           label="Total Amount"
           name="totalAmount"
-          value={form.totalAmount}
-          onChange={handleChange}
+          register={register}
         />
 
         <InputField
           label="Amount In Words"
           name="amountInWords"
-          value={form.amountInWords}
-          onChange={handleChange}
+          register={register}
           readonly={true}
         />
 
-        <TextAreaField
-          label="Remarks"
-          name="remarks"
-          value={form.remarks}
-          onChange={handleChange}
-        />
+        <TextAreaField label="Remarks" name="remarks" register={register} />
       </FormWrapper>
     </div>
   );

@@ -23,11 +23,11 @@ const FormOne = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm"
+      className="fixed min-h-screen inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm "
       role="dialog"
       aria-modal="true"
       aria-label={title || "Modal"}>
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
+      <div className="w-full min-h-fit max-w-xl overflow-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
           <div className="min-w-0">
@@ -118,7 +118,6 @@ const FormOne = ({
             </button>
           </div>
         </form>
-        
       </div>
     </div>
   );

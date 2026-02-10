@@ -134,7 +134,7 @@ export const menuItems = [
   {
     id: nanoid(),
     type: "dropdown",
-    label: "Challans",
+    label: "Receipt-Reports",
     key: "challans",
     roles: ["CASHIER"],
     children: [
@@ -162,6 +162,46 @@ export const menuItems = [
         to: "/generated-state-challan",
         icon: <MdSupervisorAccount className="icon-sm" />,
       },
+      {
+        id: nanoid(),
+        label: "Cash Receipt",
+        to: "/cash-receipt",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+      {
+        id: nanoid(),
+        label: "Generated Cash Receipt",
+        to: "/generated-cash-receipt",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+      {
+        id: nanoid(),
+        label: "Receipt Report",
+        to: "/receipt-report",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+    ],
+  },
+
+  {
+    id: nanoid(),
+    type: "dropdown",
+    label: "Expenditures",
+    key: "expenditures",
+    roles: ["CASHIER"],
+    children: [
+      {
+        id: nanoid(),
+        label: "Expenditure",
+        to: "/expenditures",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
+      {
+        id: nanoid(),
+        label: "Generated Expenditure",
+        to: "/generated-expenditure",
+        icon: <MdSupervisorAccount className="icon-sm" />,
+      },
     ],
   },
 
@@ -187,7 +227,7 @@ const Sidebar = () => {
   const [openHead, setOpenHead] = useState(false);
 
   return (
-    <div className="max-h-full w-[20%] bg-gray-300  overflow-auto ">
+    <div className="max-h-full w-[20%] bg-background shadow-lg overflow-auto ">
       <div className="h-full w-full mx-auto flex flex-col flex-start ">
         <div className="h-[calc(100vh-1rem)] px-10 pb-7 overflow-auto">
           <img
@@ -196,7 +236,7 @@ const Sidebar = () => {
             className="h-20 w-20 my-3"
           />
           <h2 className="font-semibold text-green-500 mb-4">MENU</h2>
-          <div className="flex flex-col gap-3 text-md font-semibold">
+          <div className="flex flex-col gap-1 text-md font-semibold">
             {menuItems
               .filter((item) => item.roles.includes(user.role))
               .map((item) => {
@@ -261,7 +301,7 @@ const Sidebar = () => {
               })}
           </div>
         </div>
-        <div className="bg-gray-300 w-full h-30 py-4 px-10 flex flex-col gap-5">
+        <div className="bg-background w-full h-30 py-4 px-10 flex flex-col gap-5">
           <div className="flex items-center gap-3">
             <div>
               <img

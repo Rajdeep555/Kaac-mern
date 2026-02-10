@@ -64,14 +64,14 @@ const Expenditure_Type = () => {
         ddoRes.data.ddos.map((d) => ({
           label: `${d.ddoCode} - ${d.ddoName}`,
           value: d.id,
-        }))
+        })),
       );
 
       setDivisionOptions(
         divisionRes.data.divisions.map((d) => ({
           label: `${d.divisionCode} - ${d.divisionName} `,
           value: d.id,
-        }))
+        })),
       );
     } catch (error) {
       showToast("Failed to load form data", "error");
@@ -88,13 +88,13 @@ const Expenditure_Type = () => {
         prev.map((cashier) =>
           cashier.id === cashierId
             ? { ...cashier, isActive: !isActive }
-            : cashier
-        )
+            : cashier,
+        ),
       );
 
       showToast(
         isActive ? "Cashier deactivated!" : "Cashier reactivated!",
-        "success"
+        "success",
       );
       setAlertModal((prev) => ({ ...prev, open: false, onConfirm: null }));
     } catch (error) {
@@ -218,7 +218,7 @@ const Expenditure_Type = () => {
       if (editingCashier) {
         res = await updateCashier(editingCashier.id, formData);
         setCashiers((prev) =>
-          prev.map((c) => (c.id === editingCashier.id ? res.data.cashier : c))
+          prev.map((c) => (c.id === editingCashier.id ? res.data.cashier : c)),
         );
         showToast("Expenditure updated successfully!", "success");
       } else {

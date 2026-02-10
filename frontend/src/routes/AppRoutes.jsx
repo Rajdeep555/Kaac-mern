@@ -26,8 +26,13 @@ import Challan from "../pages/cashier/Challan";
 import GeneratedChallans from "../pages/cashier/Generated-Challans";
 import StateChallan from "../pages/cashier/StateChallan";
 import GeneratedStateChallans from "../pages/cashier/GeneratedStateChallans";
+<<<<<<< HEAD
 import TrackForms from "../features/TrackReports/TrackForms";
 import TrackStatements from "../features/TrackReports/TrackStatements";
+=======
+import Expenditure from "../pages/cashier/Expenditure";
+import GeneratedExpenditure from "../pages/cashier/GeneratedExpenditure";
+>>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -85,6 +90,11 @@ const AppRoutes = createBrowserRouter([
               {
                 path: "generated-state-challan",
                 element: <GeneratedStateChallans />,
+              },
+              { path: "expenditures", element: <Expenditure /> },
+              {
+                path: "generated-expenditure",
+                element: <GeneratedExpenditure />,
               },
             ],
           },

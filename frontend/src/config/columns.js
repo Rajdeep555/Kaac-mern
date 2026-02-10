@@ -1,0 +1,1 @@
+// can keep all columns from all the pages here same goes with the fields column

@@ -65,7 +65,7 @@ const TopBar = () => {
   // console.log(searchItem);
 
   return (
-    <div className="h-20 w-full bg-gray-300">
+    <div className="h-20 w-full bg-background ml-1 shadow">
       <div className="w-[90%] bg-amber-00 mx-auto h-full flex justify-between items-center">
         <div>
           <input
@@ -76,13 +76,13 @@ const TopBar = () => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
                 setIndex((prev) =>
-                  prev < searchItem.length - 1 ? prev + 1 : 0
+                  prev < searchItem.length - 1 ? prev + 1 : 0,
                 );
               }
               if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setIndex((prev) =>
-                  prev > 0 ? prev - 1 : searchItem.length - 1
+                  prev > 0 ? prev - 1 : searchItem.length - 1,
                 );
               }
               if (e.key === "Enter" && index >= 0) {
