@@ -123,20 +123,22 @@ export const getExpendituresForAdmin = async ({
     sector,
     month,
     year,
-    paymentMode,
 }) => {
+    const whereClause = {};
+
+    if (sector) {
+        whereClause.sector = sector;
+    }
+
+    if (month && year) {
+        whereClause.chequeIssueDate = {
+            gte: new Date(year, month - 1, 1),
+            lt: new Date(year, month, 1),
+        };
+    }
+
     return prisma.expenditure.findMany({
-        where: {
-            ...(sector && { sector }),
-            ...(paymentMode === "CHEQUE" && { chequeNo: { not: null } }),
-            ...(paymentMode === "CASH" && { chequeNo: null }),
-            ...(month && year && {
-                chequeIssueDate: {
-                    gte: new Date(year, month - 1, 1),
-                    lt: new Date(year, month, 1),
-                },
-            }),
-        },
+        where: whereClause,
         orderBy: {
             chequeIssueDate: "asc",
         },

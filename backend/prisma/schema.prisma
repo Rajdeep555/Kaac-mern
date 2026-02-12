@@ -17,6 +17,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  challans    Challan[]
+  cashReceipt CashReceipt[]
   expenditures Expenditure[]
 
 }
@@ -65,7 +67,6 @@ model Cashier {
   cashierCode String    @unique
   ddo         DDO       @relation(fields: [ddoId], references: [id])
   division    Division  @relation(fields: [divisionId], references: [id])
-  challans    Challan[]
 }
 
 model ExpenditureType {
@@ -141,6 +142,19 @@ model Heads {
   updatedAt         DateTime @updatedAt
 }
 
+model ChallanHeads {
+  id  Int        @id @default(autoincrement())
+  majorHead   String
+  subMajor    String?
+  subSubMajor String?
+  minorHead   String?
+  detailHead  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
 model Challan {
   id                  Int         @id @default(autoincrement())
   cashierId           Int
@@ -165,10 +179,27 @@ model Challan {
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
-  cashier             Cashier     @relation(fields: [cashierId], references: [id])
+  user                User     @relation(fields: [cashierId], references: [id])
   ddo                 DDO         @relation(fields: [ddoId], references: [id])
   department          Department  @relation(fields: [departmentId], references: [id])
   division            Division    @relation(fields: [divisionId], references: [id])
+}
+
+model CashReceipt {
+  id        Int      @id @default(autoincrement())
+  cashierId Int
+  counterfoilNo String?
+  date      DateTime?
+  receivedFrom String?
+  letterNo String?
+  letterDate DateTime?
+  rupeesInCash String?
+  byChequeBank String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [cashierId], references: [id])
 }
 
 model Expenditure {

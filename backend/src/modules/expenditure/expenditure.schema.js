@@ -10,7 +10,7 @@ const decimalField = z
 
 export const createExpenditureSchema = z.object({
     /* ================= BASIC ================= */
-    
+
     sector: z.enum(["COUNCIL", "STATE"]),
     voucherNo: z.string().min(1),
     voucherDate: z.string().optional(),

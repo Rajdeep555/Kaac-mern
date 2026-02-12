@@ -1,5 +1,12 @@
 import { createExpenditureSchema } from "./expenditure.schema.js"
-import { createExpenditure, getExpenditureById, getExpenditureForCashier, getVoucherNo } from "./expenditure.service.js";
+import {
+    createExpenditure,
+    getExpenditureById,
+    getExpenditureForCashier,
+    getVoucherNo,
+    updateExpenditure,  // Add this import
+    getExpendituresForAdmin  // Add this import
+} from "./expenditure.service.js";
 import logger from "../../utils/logger.js";
 
 
@@ -10,14 +17,11 @@ const handleError = (res, error, message = "An error occurred") => {
         error: process.env.NODE_ENV === 'development' ? error : {}
     });
 };
+
 export const create = async (req, res) => {
     try {
-
-
         const cashierId = req.user.id;
-
         const payload = createExpenditureSchema.parse(req.body);
-
         const expenditure = await createExpenditure({ ...payload, cashierId });
 
         return res.status(201).json({
@@ -83,7 +87,6 @@ export const getById = async (req, res) => {
     }
 };
 
-/* ================= UPDATE ================= */
 export const update = async (req, res) => {
     try {
         const { id } = req.params;
@@ -122,11 +125,8 @@ export const update = async (req, res) => {
 export const fetchNextVoucherNo = async (req, res) => {
     try {
         const { type } = req.query;
-
         const voucherNo = await getVoucherNo(type);
-
         res.json({ voucherNo })
-
     } catch (error) {
         logger.error("Failed to fetch next challan no", error);
         console.error(error);
@@ -151,31 +151,37 @@ export const getCashierExpenditures = async (req, res) => {
         })
     } catch (error) {
         logger.error("Failed to fetch expenditure", error);
-        res.json(500).json({
+        res.status(500).json({  // Fixed: was res.json(500)
             success: false,
             message: error.message
         })
     }
 }
 
-import { getExpendituresForAdmin } from "./expenditure.service.js";
-
 export const getAdminExpenditures = async (req, res) => {
     try {
-        const { sector, month, year, paymentMode } = req.query;
+        console.log('Query params:', req.query);
+
+        const { sector, month, year } = req.query;
 
         const data = await getExpendituresForAdmin({
-            sector,
+            sector: sector || undefined,
             month: month ? Number(month) : undefined,
             year: year ? Number(year) : undefined,
-            paymentMode,
         });
+
+        console.log('Fetched data count:', data.length);
 
         res.status(200).json({
             success: true,
             data,
         });
     } catch (error) {
-        handleError(res, error);
+        console.error('Error in getAdminExpenditures:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Internal server error',
+            error: process.env.NODE_ENV === 'development' ? error : undefined
+        });
     }
 };
