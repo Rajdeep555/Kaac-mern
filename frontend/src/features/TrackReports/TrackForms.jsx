@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Form1 from "../../components/DisplayForms/Form1";
 import Form2 from "../../components/DisplayForms/Form2";
 import Form3 from "../../components/DisplayForms/Form3";
@@ -29,9 +29,12 @@ const SECTOR_LABELS = {
 
 const TrackForms = () => {
   const { sector } = useParams();
-  const [activeStep, setActiveStep] = useState(1);
+  const navigate = useNavigate();
+  const [activeStep, setActiveStep] = useState("1");
 
-  const sectorType = sector ? SECTOR_LABELS[sector.toLowerCase()] || null : null;
+  const sectorType = sector
+    ? SECTOR_LABELS[sector.toLowerCase()] || null
+    : null;
 
   const array = [
     "1",
@@ -74,7 +77,7 @@ const TrackForms = () => {
       11: <Form11 sector={sectorType} />,
       12: <Form12 sector={sectorType} />,
     }),
-    [sectorType]
+    [sectorType],
   );
 
   return (
@@ -84,7 +87,8 @@ const TrackForms = () => {
         The Forms are..
         {sectorType && (
           <span className="ml-2 text-purple-600 font-semibold">
-            ({sectorType} {sectorType === "CONSOLIDATED" ? "— Council & State" : "data"})
+            ({sectorType}{" "}
+            {sectorType === "CONSOLIDATED" ? "— Council & State" : "data"})
           </span>
         )}
       </h1>

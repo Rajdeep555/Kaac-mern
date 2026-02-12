@@ -63,40 +63,45 @@ const Form1 = ({ sector }) => {
   return (
     <div className="w-full overflow-x-auto  bg-white border-2">
       <h1 className="text-center py-4 text-xl font-bold">Form No. 1</h1>
-      {sector && (
-        <p className="text-center text-sm font-medium text-gray-600">
-          Sector: {sector}
-        </p>
-      )}
       <div className="py-4 text-center font-semibold">
-        <p>Cash Book of <span>..........</span> for the month of <span>.........</span></p>
+        <p>
+          Cash Book of <span>..........</span> for the month of
+          <span>.........</span>
+        </p>
+ 
       </div>
       <hr className=" w-full mb-4 h-0.5 bg-black" />
-        <div className="w-full overflow-x-auto my-8">
+      <div className="w-full overflow-x-auto my-8">
         <table className="min-w-360 border border-black text-[11px] text-center mx-4">
-        <thead>
-          {/* <!-- Top Heading --> */}
-          <tr>
-            <th colSpan={6} className="border uppercase border-black py-2 ">
-              Dr (Receipt)
-            </th>
-            <th colSpan={7} className="border uppercase border-black py-2 ">
-              Cr (Disbursement)
-            </th>
-          </tr>
+          <thead>
+            {/* <!-- Top Heading --> */}
+            <tr>
+              <th colSpan={6} className="border uppercase border-black py-2 ">
+                Dr (Receipt)
+              </th>
+              <th colSpan={7} className="border uppercase border-black py-2 ">
+                Cr (Disbursement)
+              </th>
+            </tr>
 
-          {/* <!-- Main Header Row --> (Here,  we Created the lebels of the table) */}
-          <tr>
-            <th rowSpan={2} className="border px-10">Date</th>
-            <th rowSpan={2} className="border px-1">No. of item</th>
-            <th rowSpan={2} className="border px-1 w-60">
-              Particulars (Full details with reference to receipts, challans,
-              cheques etc.)
-            </th>
+            {/* <!-- Main Header Row --> (Here,  we Created the lebels of the table) */}
+            <tr>
+              <th rowSpan={2} className="border px-10">
+                Date
+              </th>
+              <th rowSpan={2} className="border px-1">
+                No. of item
+              </th>
+              <th rowSpan={2} className="border px-1 w-60">
+                Particulars (Full details with reference to receipts, challans,
+                cheques etc.)
+              </th>
 
-            <th colSpan={2} className="border border-black">Receipts (Amount)</th>
+              <th colSpan={2} className="border border-black">
+                Receipts (Amount)
+              </th>
 
-            {/* <th colSpan={2} className="border">
+              {/* <th colSpan={2} className="border">
               <div className="border-b border-black py-2 font-bold text-center">
                 Receipts (Amount)
               </div>
@@ -110,74 +115,88 @@ const Form1 = ({ sector }) => {
               </div>
             </th> */}
 
-            <th rowSpan={2} className="border px-1">Classification</th>
+              <th rowSpan={2} className="border px-1">
+                Classification
+              </th>
 
-            <th rowSpan={2} className="border px-10">Date</th>
-            <th rowSpan={2} className="border px-1">
-              No. of item
-              <br />
-              (Voucher No.)
-            </th>
-            <th rowSpan={2} className="border px-1 w-52">
-              Classification (Full details of claims)
-            </th>
+              <th rowSpan={2} className="border px-10">
+                Date
+              </th>
+              <th rowSpan={2} className="border px-1">
+                No. of item
+                <br />
+                (Voucher No.)
+              </th>
+              <th rowSpan={2} className="border px-1 w-52">
+                Classification (Full details of claims)
+              </th>
 
-            <th colSpan={2} className="border py-1">Disbursement</th>
+              <th colSpan={2} className="border py-1">
+                Disbursement
+              </th>
 
-            <th colSpan={2} className="border align-top">Treasury</th>
-          </tr>
-          <tr>
+              <th colSpan={2} className="border align-top">
+                Treasury
+              </th>
+            </tr>
+            <tr>
+              {/* Receipt's column */}
+              <th className="border px-2">Cash Column</th>
+              <th className="px-2">
+                Treasury <br />
+                PLA Column
+              </th>
 
-            {/* Receipt's column */}
-            <th className="border px-2">Cash Column</th>
-            <th className="px-2">Treasury <br />PLA Column</th>
-              
-            {/* Disbursement's column */}
-            <th className="border px-2">Cash Column</th>
-            <th className="border px-2">No of Cheque <br /> cheque book</th>
+              {/* Disbursement's column */}
+              <th className="border px-2">Cash Column</th>
+              <th className="border px-2">
+                No of Cheque <br /> cheque book
+              </th>
 
-            {/* Treasury's Column */}
-            <th className="border px-2">PLA <br /> column</th>
-            <th className="px-2">Classification</th>
-          </tr>
-        </thead>
-        <tbody>
-          {registerData.map((data) => {
-            const {
-              receiptDate,
-              receiptItemNo,
-              receiptParticulars,
-              receiptCashAmount,
-              receiptPlaColumn,
-              receiptClassification,
-              disbursementDate,
-              voucherNo,
-              disbursementDetails,
-              disbursementCashAmount,
-              chequeNo,
-              plaColumnPayment,
-              treasuryClassification,
-            } = data;
-            return (
-              <tr key={data.id} className="border">
-                <td className="border py-2">{receiptDate}</td>
-                <td className="border">{receiptItemNo}</td>
-                <td className="border">{receiptParticulars}</td>
-                <td className="border">{receiptCashAmount}</td>
-                <td className="border">{receiptPlaColumn}</td>
-                <td className="border">{receiptClassification}</td>
-                <td className="border">{disbursementDate}</td>
-                <td className="border">{voucherNo}</td>
-                <td className="border">{disbursementDetails}</td>
-                <td className="border">{disbursementCashAmount}</td>
-                <td className="border">{chequeNo}</td>
-                <td className="border">{plaColumnPayment}</td>
-                <td className="border">{treasuryClassification}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              {/* Treasury's Column */}
+              <th className="border px-2">
+                PLA <br /> column
+              </th>
+              <th className="px-2">Classification</th>
+            </tr>
+          </thead>
+          <tbody>
+            {registerData.map((data) => {
+              const {
+                receiptDate,
+                receiptItemNo,
+                receiptParticulars,
+                receiptCashAmount,
+                receiptPlaColumn,
+                receiptClassification,
+                disbursementDate,
+                voucherNo,
+                disbursementDetails,
+                disbursementCashAmount,
+                chequeNo,
+                plaColumnPayment,
+                treasuryClassification,
+              } = data;
+              return (
+                <tr key={data.id} className="border">
+                  <td className="border py-2">{receiptDate}</td>
+                  <td className="border">{receiptItemNo}</td>
+                  <td className="border">{receiptParticulars}</td>
+                  <td className="border">{receiptCashAmount}</td>
+                  <td className="border">{receiptPlaColumn}</td>
+                  <td className="border">{receiptClassification}</td>
+                  <td className="border">{disbursementDate}</td>
+                  <td className="border">{voucherNo}</td>
+                  <td className="border">{disbursementDetails}</td>
+                  <td className="border">{disbursementCashAmount}</td>
+                  <td className="border">{chequeNo}</td>
+                  <td className="border">{plaColumnPayment}</td>
+                  <td className="border">{treasuryClassification}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
       <hr className=" w-full mb-4 h-0.5 bg-black" />
       <div className="px-4 py-4 tracking-wide flex justify-between font-semibold">

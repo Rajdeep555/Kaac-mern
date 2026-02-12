@@ -26,12 +26,16 @@ import Challan from "../pages/cashier/Challan";
 import GeneratedChallans from "../pages/cashier/Generated-Challans";
 import StateChallan from "../pages/cashier/StateChallan";
 import GeneratedStateChallans from "../pages/cashier/GeneratedStateChallans";
+
 import TrackForms from "../features/TrackReports/TrackForms";
 import TrackStatements from "../features/TrackReports/TrackStatements";
 import Expenditure from "../pages/cashier/Expenditure";
 import GeneratedExpenditure from "../pages/cashier/GeneratedExpenditure";
 import CreateExpenditure from "../pages/cashier/expenditure/CreateExpenditure";
 import EditExpenditure from "../pages/cashier/expenditure/EditExpenditure";
+import CashReceipt from "../pages/cashier/expenditure/CashReceipt";
+import GeneratedCashReceipt from "../pages/cashier/expenditure/GeneratedCashReceipt";
+// >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
@@ -108,6 +112,8 @@ const AppRoutes = createBrowserRouter([
               },
               { path: "expenditures/new", element: <CreateExpenditure /> },
               { path: "expenditures/:id/edit", element: <EditExpenditure /> },
+              { path: "cash-receipt", element:<CashReceipt /> },
+              { path: "generated-cash-receipt", element:<GeneratedCashReceipt /> }
             ],
           },
 

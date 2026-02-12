@@ -1,7 +1,8 @@
-import React from "react";
-import DataTable from "../../components/DataTable/DataTable";
+import React from 'react'
+import DataTable from '../../../components/DataTable/DataTable';
 
-const GeneratedStateChallans = () => {
+const GeneratedCashReceipt = () => {
+
   const challans = [
     {
       id: 1,
@@ -26,7 +27,7 @@ const GeneratedStateChallans = () => {
     <>
       <div className={`p-6 space-y-6`}>
         {/* Page Heading */}
-        <h1 className="font-unbounded text-3xl font-normal">State Challan</h1>
+        <h1 className="font-unbounded text-3xl font-normal">Cash Receipt</h1>
 
         {/*  Table */}
         <DataTable
@@ -53,4 +54,4 @@ const GeneratedStateChallans = () => {
 };
 
 
-export default GeneratedStateChallans;
+export default GeneratedCashReceipt

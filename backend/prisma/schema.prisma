@@ -156,10 +156,10 @@ model ChallanHeads {
 
 
 model Challan {
-  id                  Int         @id @default(autoincrement())
-  cashierId           Int
-  counterfoilNo       String?
-  counterfoilDate     DateTime?
+  id                  Int         @id @default(autoincrement()) no
+  cashierId           Int   no
+  counterfoilNo       String?   yes
+  counterfoilDate     DateTime?     yes
   challanNo           String?
   challanDate         DateTime?
   challanType         ChallanType
@@ -175,7 +175,7 @@ model Challan {
   treasuryChallanNo   String?
   treasuryChallanDate DateTime?
   amount              String
-  remarks             String
+  remarks             String        yes
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
