@@ -10,6 +10,7 @@ const decimalField = z
 
 export const createExpenditureSchema = z.object({
     /* ================= BASIC ================= */
+    
     sector: z.enum(["COUNCIL", "STATE"]),
     voucherNo: z.string().min(1),
     voucherDate: z.string().optional(),
@@ -21,7 +22,6 @@ export const createExpenditureSchema = z.object({
 
     departmentId: z.number().int(),
     ddoId: z.number().int(),
-    divisionId: z.number().int(),
 
     workName: z.string().optional(),
     expenditureType: z.enum(["CAPITAL", "REVENUE"]),
@@ -37,7 +37,7 @@ export const createExpenditureSchema = z.object({
 
     /* ================= CLASSIFICATION ================= */
     salaryType: z.enum(["SALARY", "NON_SALARY"]),
-    planType: z.enum(["PLAN", "NON_PLAN"]),
+    planType: z.string().min(1),
     financialYear: z.string(),
     objectHead: z.string().optional(),
 
@@ -50,7 +50,7 @@ export const createExpenditureSchema = z.object({
     works: decimalField,
     loansAdvances: decimalField,
 
-    loanType: z.enum(["GOVT", "OTHER"]).optional(),
+    loanType: z.enum(["BUILDING_LOAN", "CAR_LOAN"]).optional(),
     loanRepayGovt: decimalField,
     loanRepayOther: decimalField,
 
@@ -95,14 +95,14 @@ export const createExpenditureSchema = z.object({
     amountInWords: z.string(),
 
     /* ================= REMARKS ================= */
-    remarks: z.string().optional(),
+    remarks: z.string().nullable().optional(),
 
     /* ================= CHEQUE / TREASURY ================= */
     chequeBookNo: z.string().optional(),
     chequeNo: z.string().optional(),
     chequeIssueDate: z.string().optional(),
 
-    treasuryName: z.string().optional(),
-    treasuryVoucherNo: z.string().optional(),
-    treasuryDate: z.string().optional(),
+    treasuryName: z.string().nullable().optional(),
+    treasuryVoucherNo: z.string().nullable().optional(),
+    treasuryDate: z.string().nullable().optional(),
 });

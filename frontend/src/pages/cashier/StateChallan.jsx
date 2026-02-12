@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FormWrapper from "../../components/Forms/FormWrapper";
 import InputField from "../../components/Forms/InputField";
 import SelectField from "../../components/Forms/SelectField";
@@ -11,8 +11,25 @@ import Breadcrumbs from "../../components/ui/Breadcrumbs";
 const StateChallan = () => {
   const [form, setForm] = useState({
     challanNo: "",
+    challanDate: "",
+    stateNo: "",
+    from: "",
+    to: "",
+    subject: "",
+    challanType: "",
     department: "",
-    paymentMode: "",
+    divisionCode: "",
+    doo: "",
+    majorHead: "",
+    subMajorHead: "",
+    subSubMajorHead: "",
+    minorHead: "",
+    detailHead: "",
+    treasuryName: "",
+    treasuryChallanNo: "",
+    treasuryChallanDate: "",
+    totalAmount: "",
+    amountInWords: "",
     remarks: "",
   });
 
@@ -32,6 +49,12 @@ const StateChallan = () => {
     }
   };
 
+const handleSubmit = (e) => {
+  e.preventDefault()
+  console.log(form);
+}
+
+
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">
       <div className="border-b border-zinc-400 leading-9">
@@ -43,10 +66,10 @@ const StateChallan = () => {
           ]}
         />
 
-        <h1 className="font-unbounded">Fill Challan Details :</h1>
+        <h1 className="font-unbounded">Fill State Challan Details :</h1>
       </div>
 
-      <FormWrapper onSubmit={(e) => e.preventDefault()}>
+      <FormWrapper onSubmit={handleSubmit}>
         <InputField
           label="Challan No."
           name="challanNo"

@@ -1,12 +1,12 @@
 import { GoPlus } from "react-icons/go";
 
-const TableButton = ({ name, onClick }) => {
+const TableButton = ({ name, icon = <GoPlus />, onClick }) => {
   return (
     <button
       onClick={onClick}
-      className="px-5 py-2 rounded-full bg-black text-white text-sm font-unbounded font-light flex items-center justify-center gap-2">
+      className="px-5 py-2 cursor-pointer rounded-full bg-black text-white text-sm font-unbounded font-light flex items-center justify-center gap-2">
       {name}
-      <GoPlus className="text-white text-xl" />
+      <span className="text-white text-xl">{icon}</span>
     </button>
   );
 };

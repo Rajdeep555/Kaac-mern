@@ -9,7 +9,9 @@ import planNonPlanRoutes from "./modules/planNonPlan/planNonPlan.routes.js"
 import departmentRoutes from "./modules/department/department.routes.js"
 import headRoutes from "./modules/heads/head.route.js"
 import generateChallanNoRoutes from "./modules/generateChallanNo/generate.route.js"
-import expenditreRoutes from "./modules/expenditure/expenditure.route.js"
+import expenditureRoutes from "./modules/expenditure/expenditure.route.js"
+import objectHeadRoutes from "./modules/objectHead/objectHead.route.js"
+import grantRoutes from "./modules/grants/grant.route.js"
 
 
 const router = express.Router();
@@ -24,7 +26,9 @@ router.use("/v1/planNonPlan", planNonPlanRoutes);
 router.use("/v1/department", departmentRoutes)
 router.use("/v1/heads", headRoutes);
 router.use("/v1/challan", generateChallanNoRoutes);
-router.use("/v1/expenditure", expenditreRoutes);
+router.use("/v1/expenditure", expenditureRoutes);
+router.use("/v1/objectHead", objectHeadRoutes);
+router.use("/v1/grants", grantRoutes);
 
 // router.all(/.*/, (req, res) => {
 //     res.status(404).json({

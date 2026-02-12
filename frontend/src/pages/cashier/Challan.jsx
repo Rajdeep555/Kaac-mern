@@ -102,6 +102,7 @@ const Challan = () => {
       amount: data.totalAmount.replace(/,/g, ""),
       remarks: data.remarks,
     };
+    console.log("The challan form data:", data)
 
     const res = await fetch("/api/challan", {
       method: "POST",
@@ -138,6 +139,7 @@ const Challan = () => {
           helperText="(in case of receipt in cash by the Cashier)"
           name="counterfoilNo"
           register={register}
+          {...register("counterfoilNo")}
         />
 
         <DateField
@@ -145,6 +147,7 @@ const Challan = () => {
           name="counterfoilDate"
           register={register}
           readonly={true}
+          {...register("counterfoilDate")}
         />
 
         <InputField
@@ -154,12 +157,14 @@ const Challan = () => {
           name="challanNo"
           register={register}
           placeholder={isChallanLoading ? "fetching..." : ""}
+          {...register("challanNo")}
         />
 
         <DateField
           label="Challan Date"
           name="challanDate"
           register={register}
+          {...register("challanDate")}
         />
 
         <SelectField
@@ -171,6 +176,7 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             // { label: "02-CSS", value: "css" },
           ]}
+          {...register("challanType")}
         />
 
         <SelectField
@@ -179,6 +185,7 @@ const Challan = () => {
           register={register}
           options={departments}
           disabled={isDepartmentLoading}
+          {...register("departmentId")}
         />
 
         <SelectField
@@ -187,6 +194,7 @@ const Challan = () => {
           register={register}
           options={divisions}
           disabled={isDivisionLoading}
+          {...register("divisionId")}
         />
 
         <SelectField
@@ -196,6 +204,7 @@ const Challan = () => {
           removable
           options={ddos}
           disabled={isDdoLoading}
+          {...register("ddoId")}
         />
 
         <SelectField
@@ -207,6 +216,7 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             { label: "02-CSS", value: "css" },
           ]}
+          {...register("majorHead")}
         />
 
         <SelectField
@@ -218,6 +228,7 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             { label: "02-CSS", value: "css" },
           ]}
+          {...register("subMajorHead")}
         />
 
         <SelectField
@@ -229,6 +240,7 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             { label: "02-CSS", value: "css" },
           ]}
+          {...register("subSubMajorHead")}
         />
 
         <SelectField
@@ -240,6 +252,7 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             { label: "02-CSS", value: "css" },
           ]}
+          {...register("minorHead")}
         />
 
         <SelectField
@@ -251,6 +264,7 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             { label: "02-CSS", value: "css" },
           ]}
+          {...register("detailHead")}
         />
 
         <SelectField
@@ -262,24 +276,28 @@ const Challan = () => {
             { label: "01-Council", value: "council" },
             { label: "02-CSS", value: "css" },
           ]}
+          {...register("treasuryCode")}
         />
 
         <InputField
           label="Treasury Challan No"
           name="treasuryChallanNo"
           register={register}
+          {...register("treasuryChallanNo")}
         />
 
         <DateField
           label="Treasury Challan Date"
           name="treasuryChallanDate"
           register={register}
+          {...register("treasuryChallanDate")}
         />
 
         <InputField
           label="Total Amount"
           name="totalAmount"
           register={register}
+          {...register("amount")}
         />
 
         <InputField
@@ -287,6 +305,7 @@ const Challan = () => {
           name="amountInWords"
           register={register}
           readonly={true}
+          {...register("remarks")}
         />
 
         <TextAreaField label="Remarks" name="remarks" register={register} />

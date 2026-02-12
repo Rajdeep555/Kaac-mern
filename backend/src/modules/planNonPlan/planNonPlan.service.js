@@ -1,20 +1,43 @@
-import prisma from "../../config/database.js"
+import prisma from "../../config/database.js";
 
 export const createPlanNonPlan = async (data) => {
-    //check if already exists
-    const existingPlanNonPlan = await prisma.planNonPlan.findUnique({
-        where: {
-            name: data.name
-        }
-    })
-    if (existingPlanNonPlan) {
-        throw new Error("Plan non plan already exists")
+    const { name, sector } = data;
+
+    if (!name || !sector) {
+        throw new Error("Name and sector are required");
     }
+
+    const existingPlanNonPlan = await prisma.planNonPlan.findFirst({
+        where: {
+            name,
+            sector,
+            isActive: true,
+        },
+    });
+
+    if (existingPlanNonPlan) {
+        throw new Error("Plan / Non-Plan already exists");
+    }
+
     return prisma.planNonPlan.create({
         data: {
-            name: data.name,
-            sector: data.sector,
-            isActive: data.isActive
-        }
-    })
-}
+            name,
+            sector,
+            isActive: true,
+        },
+    });
+};
+
+export const getAllPlanNonPlans = async () => {
+    return prisma.planNonPlan.findMany({
+        select: {
+            id: true,
+            name: true,
+            sector: true,
+            isActive: true,
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+};
