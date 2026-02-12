@@ -26,7 +26,7 @@ const totalRows = [
   },
 ];
 
-const Form5C = () => {
+const Form5C = ({ sector }) => {
   return (
     <div className="w-full overflow-x-auto border-2">
       <div className="flex flex-col items-center">

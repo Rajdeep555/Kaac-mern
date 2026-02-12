@@ -33,11 +33,14 @@ const challanData = [
   },
 ];
 
-const Form4 = () => {
+const Form4 = ({ sector }) => {
   return (
     <div className="w-full overflow-x-auto border-2">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">FORM NO. 4</h1>
+        {sector && (
+          <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
+        )}
         <h2 className="py-4 font-semibold">
           Register of Remittances to Treasury (PLA)
         </h2>

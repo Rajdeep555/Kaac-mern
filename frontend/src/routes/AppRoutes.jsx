@@ -84,6 +84,7 @@ const AppRoutes = createBrowserRouter([
               { path: "generate-reports", element: <GenerateReports /> },
               { path: "state-recipt-report", element: <State_Recipt_Report /> },
               { path: "track-forms", element: <TrackForms /> },
+              { path: "track-forms/:sector", element: <TrackForms /> },
               { path: "track-statements", element: <TrackStatements /> },
             ],
           },

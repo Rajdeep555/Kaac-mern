@@ -19,7 +19,7 @@ const headDetails = [
   },
 ]
 
-const Form7A = () => {
+const Form7A = ({ sector }) => {
 
   const grandTotal = headDetails.reduce((sum, item) => sum + item.amount, 0);
 

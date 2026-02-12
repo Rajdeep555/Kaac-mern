@@ -30,10 +30,18 @@ const GenerateReports = () => {
           </div>
 
           <div
-            onClick={() => navigate("/reports/state")}
+            onClick={() => navigate("/track-forms/state")}
             className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
             <VscFile />
             State Report
+            <VscArrowRight className="ml-13" />
+          </div>
+
+          <div
+            onClick={() => navigate("/track-forms/consolidated")}
+            className="w-3xs bg-gray-300 px-4 py-4 cursor-pointer active:scale-95 rounded flex items-center gap-5">
+            <VscFile />
+            Consolidated Report
             <VscArrowRight className="ml-13" />
           </div>
 

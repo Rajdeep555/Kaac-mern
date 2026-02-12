@@ -8,7 +8,7 @@ const registerData = [
   },
 ];
 
-const Form7 = () => {
+const Form7 = ({ sector }) => {
   const months = [
     "JAN",
     "FEB",

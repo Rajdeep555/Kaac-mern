@@ -48,7 +48,7 @@ const months = [
   },
 ];
 
-const Form9 = () => {
+const Form9 = ({ sector }) => {
   const year = "2026";
   return (
     <div className="w-full overflow-x-auto bg-white border-2">

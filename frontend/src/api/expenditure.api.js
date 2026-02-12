@@ -9,5 +9,7 @@ export const getExpenditureById = (id) => http.get(`/expenditure/${id}`);
 export const getCashierExpenditures = (params = {}) =>
     http.get("/expenditure/cashier", { params });
 
-export const getAdminExpenditures = (params = {}) =>
-    http.get("/expenditure/admin", { params });
+export const getAdminExpenditures = (params = {}) => {
+    console.log('API Call params:', params); // Debug log
+    return http.get("/expenditure/admin", { params });
+};

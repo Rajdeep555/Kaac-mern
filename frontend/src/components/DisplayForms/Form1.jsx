@@ -59,10 +59,15 @@ const registerData = [
     treasuryClassification: "Utility",
   },
 ];
-const Form1 = () => {
+const Form1 = ({ sector }) => {
   return (
     <div className="w-full overflow-x-auto  bg-white border-2">
       <h1 className="text-center py-4 text-xl font-bold">Form No. 1</h1>
+      {sector && (
+        <p className="text-center text-sm font-medium text-gray-600">
+          Sector: {sector}
+        </p>
+      )}
       <div className="py-4 text-center font-semibold">
         <p>Cash Book of <span>..........</span> for the month of <span>.........</span></p>
       </div>

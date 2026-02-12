@@ -48,7 +48,7 @@ const receiptData = [
   },
 ];
 
-const Form8 = () => {
+const Form8 = ({ sector }) => {
   return (
     <div className="w-full overflow-x-auto  bg-white border-2">
       <div className="flex flex-col items-center">

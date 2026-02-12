@@ -180,7 +180,7 @@ const dbMoney = [
   },
 ];
 
-const Form12 = () => {
+const Form12 = ({ sector }) => {
 
 const moneyMap = Object.fromEntries(
   dbMoney.map(item => [item.id, item])

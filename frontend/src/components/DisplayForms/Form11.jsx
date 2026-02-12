@@ -110,7 +110,7 @@ const dbData = [
 ];
 
 
-const Form11 = () => {
+const Form11 = ({ sector }) => {
 
   const data = tableStructure.map(row => {
   const match = dbData.find(d => d.number === row.number);

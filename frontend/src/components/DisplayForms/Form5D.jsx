@@ -59,7 +59,7 @@ const registerData = [
     treasuryClassification: "Utility",
   },
 ];
-const Form5D = () => {
+const Form5D = ({ sector }) => {
   return (
     <div className="w-full overflow-x-auto border-2">
       <h1 className="text-center py-4 text-xl font-bold">Form No. 5D</h1>
