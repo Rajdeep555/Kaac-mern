@@ -1,44 +1,42 @@
-import {
-    createChallan,
-    getChallanById,
-    updateChallan,
-} from "./challan.service.js";
+import logger from "../../utils/logger.js";
+import { createCashReceiptSchema } from "./cash.schema.js"
+import { createCashReceipt, getAllCashReceipts, getCashReceiptById, updateCashReceipt } from "./cash.service.js";
 
-
-export const createChallanController = async (req, res) => {
+export const create = async (req, res) => {
     try {
-        const challan = await createChallan({
-            ...req.body,
+        const parsed = createCashReceiptSchema.parse(req.body);
+
+        const receipt = await createCashReceipt({
+            ...parsed,
             cashierId: req.user.id
-        });
+        })
 
         return res.status(201).json({
             success: true,
-            message: "Challan created successfully",
-            data: challan,
-        });
+            message: "Cash receipt created successfully",
+            data: receipt
+        })
     } catch (error) {
-        return res.status(500).json({
+        logger.error("Failed to create cash receipt", error);
+        return res.status(400).json({
             success: false,
-            message: "Failed to create challan",
-            error: error.message,
+            message: error.message,
         });
     }
-};
+}
 
-
-export const updateChallanController = async (req, res) => {
+export const update = async (req, res) => {
     try {
-        const updated = await updateChallan(
+        const updated = await updateCashReceipt(
             req.params.id,
             req.body,
             req.user.id,
             req.user.role
-        );
+        )
 
         return res.status(200).json({
             success: true,
-            message: "Challan updated successfully",
+            message: "Cash receipt updated successfully",
             data: updated,
         });
     } catch (error) {
@@ -47,11 +45,11 @@ export const updateChallanController = async (req, res) => {
             message: error.message,
         });
     }
-};
+}
 
-export const getChallanByIdController = async (req, res) => {
+export const getById = async (req, res) => {
     try {
-        const challan = await getChallanById(
+        const receipt = await getCashReceiptById(
             req.params.id,
             req.user.id,
             req.user.role
@@ -59,39 +57,35 @@ export const getChallanByIdController = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            data: challan,
+            data: receipt,
         });
     } catch (error) {
         return res.status(404).json({
             success: false,
-            message: error.message,
-        });
+            message: error.message
+        })
     }
-};
+}
 
-
-export const getAllChallansController = async (req, res) => {
+export const getAll = async (req, res) => {
     try {
-        const { page, limit, departmentId, challanType } = req.query;
+        const { page, limit } = req.query;
 
-        const result = await getAllChallans({
+        const result = await getAllCashReceipts({
             page: Number(page) || 1,
             limit: Number(limit) || 10,
-            departmentId,
-            challanType,
             userId: req.user.id,
             role: req.user.role,
-        });
+        })
 
         return res.status(200).json({
             success: true,
-            ...resuct,
-        });
+            ...result
+        })
     } catch (error) {
         return res.status(500).json({
             success: false,
             message: error.message,
         });
     }
-};
-
+}

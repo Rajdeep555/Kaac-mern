@@ -49,11 +49,10 @@ const StateChallan = () => {
     }
   };
 
-const handleSubmit = (e) => {
-  e.preventDefault()
-  console.log(form);
-}
-
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log(form);
+  };
 
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">

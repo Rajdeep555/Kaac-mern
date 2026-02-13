@@ -14,6 +14,8 @@ export const useDivisions = () => {
 
             try {
                 const res = await getDivisions();
+                console.log("div" + res?.data?.divisions)
+
                 const list = Array.isArray(res?.data?.divisions)
                     ? res.data.divisions
                     : [];
@@ -28,6 +30,8 @@ export const useDivisions = () => {
                         value: division.id,
                     }))
                 );
+
+                console.log(divisionOptions)
             } catch (err) {
                 console.error("Failed to fetch divisions", err);
                 setError(err);

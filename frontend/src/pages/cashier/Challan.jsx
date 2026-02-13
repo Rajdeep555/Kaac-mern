@@ -13,7 +13,7 @@ import { getGeneratedChallanNo } from "../../api/autoChallan.api.js";
 import { useDepartments } from "../../hooks/useDepartments.js";
 import { useDivisions } from "../../hooks/useDivisions.js";
 import { useDdo } from "../../hooks/useDDO.js";
-
+import { createChallan } from "../../api/challan.api.js";
 
 const Challan = () => {
   const [isChallanLoading, setIsChallanLoading] = useState(true);
@@ -21,7 +21,7 @@ const Challan = () => {
     type: "COUNCIL",
   });
 
-  const { divisions, loading: isDivisionLoading } = useDivisions();
+  const { divisionOptions, loading: isDivisionLoading } = useDivisions();
   const { ddos, loading: isDdoLoading } = useDdo();
 
   const {
@@ -52,6 +52,20 @@ const Challan = () => {
 
   // Auto convert amount to words
   const totalAmount = watch("totalAmount");
+
+  useEffect(() => {
+    if (!totalAmount) {
+      setValue("amountInWords", "");
+      return;
+    }
+
+    const raw = totalAmount.toString().replace(/,/g, "");
+
+    if (isNaN(raw)) return;
+
+    setValue("totalAmount", formatIndianNumber(raw));
+    setValue("amountInWords", rupeesToWords(raw));
+  }, [totalAmount, setValue]);
 
   useEffect(() => {
     if (!totalAmount) return;
@@ -102,18 +116,9 @@ const Challan = () => {
       amount: data.totalAmount.replace(/,/g, ""),
       remarks: data.remarks,
     };
-    console.log("The challan form data:", data)
+    console.log("The challan form data:", data);
 
-    const res = await fetch("/api/challan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      alert("Failed to create challan");
-      return;
-    }
+    const res = await createChallan(payload);
 
     const result = await res.json();
     alert(`Challan created successfully\nChallan No: ${result.challanNo}`);
@@ -192,7 +197,7 @@ const Challan = () => {
           label="Division Code"
           name="divisionCode"
           register={register}
-          options={divisions}
+          options={divisionOptions}
           disabled={isDivisionLoading}
           {...register("divisionId")}
         />
@@ -297,7 +302,7 @@ const Challan = () => {
           label="Total Amount"
           name="totalAmount"
           register={register}
-          {...register("amount")}
+          {...register("totalAmount")}
         />
 
         <InputField
@@ -305,7 +310,7 @@ const Challan = () => {
           name="amountInWords"
           register={register}
           readonly={true}
-          {...register("remarks")}
+          {...register("amountInWords")}
         />
 
         <TextAreaField label="Remarks" name="remarks" register={register} />

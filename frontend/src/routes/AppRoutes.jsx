@@ -33,8 +33,8 @@ import Expenditure from "../pages/cashier/Expenditure";
 import GeneratedExpenditure from "../pages/cashier/GeneratedExpenditure";
 import CreateExpenditure from "../pages/cashier/expenditure/CreateExpenditure";
 import EditExpenditure from "../pages/cashier/expenditure/EditExpenditure";
-import CashReceipt from "../pages/cashier/expenditure/CashReceipt";
-import GeneratedCashReceipt from "../pages/cashier/expenditure/GeneratedCashReceipt";
+import CashReceipt from "../pages/cashier/CashReceipt";
+import GeneratedCashReceipt from "../pages/cashier/GeneratedCashReceipt";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -112,8 +112,12 @@ const AppRoutes = createBrowserRouter([
               },
               { path: "expenditures/new", element: <CreateExpenditure /> },
               { path: "expenditures/:id/edit", element: <EditExpenditure /> },
-              { path: "cash-receipt", element:<CashReceipt /> },
-              { path: "generated-cash-receipt", element:<GeneratedCashReceipt /> }
+              { path: "cash-receipt", element: <CashReceipt /> },
+              { path: "/cash-receipt/:id", element: <CashReceipt /> },
+              {
+                path: "generated-cash-receipt",
+                element: <GeneratedCashReceipt />,
+              },
             ],
           },
 
