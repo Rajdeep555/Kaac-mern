@@ -33,7 +33,7 @@ const FormWrapper = ({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="bg-blue-600 text-white w-32 font-unbounded font-light px-6 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
+            className="bg-blue-600 text-white min-w-32 font-unbounded font-light px-6 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed">
             {isSubmitting ? "Submitting..." : submitText}
           </button>
         </div>

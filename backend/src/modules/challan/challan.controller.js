@@ -1,5 +1,6 @@
 import {
     createChallan,
+    getAllChallans,
     getChallanById,
     updateChallan,
 } from "./challan.service.js";
@@ -85,7 +86,7 @@ export const getAllChallansController = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            ...resuct,
+            ...result,
         });
     } catch (error) {
         return res.status(500).json({

@@ -145,14 +145,24 @@ model Heads {
 model ChallanHeads {
   id  Int        @id @default(autoincrement())
   majorHead   String
+  majorHeadCode String @default("0")
   subMajor    String?
+  subMajorCode String? @default("0")
+  subMajorParentCode String? @default("0")
   subSubMajor String?
+  subSubMajorCode String? @default("0")
+  subSubMajorParentCode String? @default("0")
   minorHead   String?
+  minorHeadCode String? @default("0")
+  minorHeadParentCode String? @default("0")
   detailHead  String?
+  detailHeadCode String? @default("0")
+  detailHeadParentCode String? @default("0")
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
 
 
 model Challan {
@@ -343,3 +353,6 @@ enum ChallanType {
   COUNCIL
   CSS
 }
+
+
+

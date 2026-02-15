@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { http } from "../api/apiClient.js";
+import { http } from "../api/apiClient";
 
 const AuthContext = createContext(null);
 const STORAGE_KEY = "app_auth";
@@ -17,47 +17,92 @@ export function AuthProvider({ children }) {
 
   const isAuthed = !!token;
 
+  // ===============================
+  // Restore session on app load
+  // ===============================
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      setToken(parsed?.token ?? null);
-      setUser(parsed?.user ?? null);
-      if (parsed?.token) {
-        http.defaults.headers.common.Authorization = `Bearer ${parsed?.token}`;
+    const initAuth = async () => {
+      const raw = localStorage.getItem(STORAGE_KEY);
+
+      if (!raw) {
+        setAuthLoading(false);
+        return;
       }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-    setAuthLoading(false);
+
+      try {
+        const parsed = JSON.parse(raw);
+        const savedToken = parsed?.token;
+
+        if (!savedToken) throw new Error("No token");
+
+        setToken(savedToken);
+        http.defaults.headers.common.Authorization = `Bearer ${savedToken}`;
+
+        // 🔥 VERIFY TOKEN WITH BACKEND
+        const res = await http.get("/auth/me");
+        setUser(res.data.user);
+      } catch (error) {
+        clearSession();
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
+  // ===============================
+  // Keep axios header updated
+  // ===============================
   useEffect(() => {
-    if (token) http.defaults.headers.common.Authorization = `Bearer ${token}`;
-    else delete http.defaults.headers.common.Authorization;
+    if (token) {
+      http.defaults.headers.common.Authorization = `Bearer ${token}`;
+    } else {
+      delete http.defaults.headers.common.Authorization;
+    }
   }, [token]);
 
+  // ===============================
+  // Set Session
+  // ===============================
   const setSession = ({ token: t, user: u }) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: t, user: u }));
     setToken(t);
     setUser(u);
   };
 
+  // ===============================
+  // Clear Session
+  // ===============================
   const clearSession = () => {
     localStorage.removeItem(STORAGE_KEY);
     setToken(null);
     setUser(null);
   };
 
+  // ===============================
+  // Login
+  // ===============================
   const login = async ({ email, password }) => {
     const res = await http.post("/auth/login", { email, password });
-    setSession({ token: res.data.token, user: res.data.user });
+
+    const { token, user } = res.data;
+
+    setSession({ token, user });
+
     return res.data;
   };
 
-  const logout = () => clearSession();
+  // ===============================
+  // Logout
+  // ===============================
+  const logout = () => {
+    clearSession();
+  };
 
+  // ===============================
+  // Context Value
+  // ===============================
   const value = useMemo(
     () => ({
       token,
@@ -76,6 +121,8 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider />");
+  if (!ctx) {
+    throw new Error("useAuth must be used inside <AuthProvider />");
+  }
   return ctx;
 }

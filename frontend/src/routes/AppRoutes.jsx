@@ -98,6 +98,7 @@ const AppRoutes = createBrowserRouter([
             element: <RequireAuth allowedRoles={["CASHIER"]} />,
             children: [
               { path: "challan", element: <Challan /> },
+              { path: "challan/:id", element: <Challan /> },
               { path: "generated-challan", element: <GeneratedChallans /> },
               { path: "state-challan", element: <StateChallan /> },
               {

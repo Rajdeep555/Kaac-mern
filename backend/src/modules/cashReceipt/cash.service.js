@@ -153,3 +153,14 @@ export const getAllCashReceipts = async ({
         throw error;
     }
 }
+
+export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role) => {
+    const receipt = await prisma.cashReceipt.findFirst({
+        where: {
+            counterfoilNo,
+            isActive: true,
+            ...(role === "CASHIER" && { cashierId: userId }),
+        }
+    })
+    return receipt;
+}

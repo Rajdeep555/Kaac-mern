@@ -1,6 +1,6 @@
 import logger from "../../utils/logger.js";
 import { createCashReceiptSchema } from "./cash.schema.js"
-import { createCashReceipt, getAllCashReceipts, getCashReceiptById, updateCashReceipt } from "./cash.service.js";
+import { createCashReceipt, getAllCashReceipts, getCashReceiptByCounterfoilNo, getCashReceiptById, updateCashReceipt } from "./cash.service.js";
 
 export const create = async (req, res) => {
     try {
@@ -81,6 +81,34 @@ export const getAll = async (req, res) => {
         return res.status(200).json({
             success: true,
             ...result
+        })
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}
+
+
+export const getByCounterfoilNo = async (req, res) => {
+    try {
+        const receipt = await getCashReceiptByCounterfoilNo(
+            req.params.counterfoilNo,
+            req.user.id,
+            req.user.role,
+        )
+
+        if (!receipt) {
+            return res.status(404).json({
+                success: false,
+                message: "Counterfoil no not found"
+            })
+        }
+
+        return res.json({
+            success: true,
+            data: receipt
         })
     } catch (error) {
         return res.status(500).json({
