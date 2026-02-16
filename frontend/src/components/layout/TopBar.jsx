@@ -1,20 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { AiFillBell } from "react-icons/ai";
 import { CgProfile } from "react-icons/cg";
-import { menuItems } from "./SideBar";
-import { Link, NavLink, useNavigate } from "react-router";
 import { BsArrowRight } from "react-icons/bs";
+import { FiSearch } from "react-icons/fi";
+import { Link, useNavigate } from "react-router";
+import { menuItems } from "./SideBar";
 import { useAuth } from "../../context/AuthContext";
 
 const TopBar = () => {
   const { user, role } = useAuth();
-
   const [search, setSearch] = useState("");
-
   const [searchItem, setSearchItem] = useState([]);
-
   const [index, setIndex] = useState(-1);
-
+  const [notifOpen, setNotifOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,18 +27,13 @@ const TopBar = () => {
     menuItems.forEach((item) => {
       if (!item.roles.includes(user.role)) return;
 
-      //direvt link
       if (
         item.type === "link" &&
         item.label.toLowerCase().includes(search.toLowerCase())
       ) {
-        results.push({
-          ...item,
-          searchKey: `link-${item.to}`,
-        });
+        results.push({ ...item, searchKey: `link-${item.to}` });
       }
 
-      //dropdown children
       if (item.type === "dropdown" && item.children) {
         item.children.forEach((child) => {
           if (child.label.toLowerCase().includes(search.toLowerCase())) {
@@ -53,21 +46,29 @@ const TopBar = () => {
       }
     });
 
-    if (!results.length) {
-      setSearchItem("not found item");
-    }
-    // console.log(results);
-
     setSearchItem(results);
     setIndex(-1);
   }, [search, user.role]);
 
-  // console.log(searchItem);
-
   return (
-    <div className="h-20 w-full bg-background ml-1 shadow">
-      <div className="w-[90%] bg-amber-00 mx-auto h-full flex justify-between items-center">
-        <div>
+    <div
+      className="flex-shrink-0 relative z-40"
+      style={{ fontFamily: "'Georgia', serif" }}>
+      {/* ── Main TopBar ── */}
+      <div
+        className="w-full flex items-center justify-between px-6"
+        style={{
+          height: "60px",
+          background: "#ffffff",
+          borderBottom: "1px solid #e5e7eb",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
+        }}>
+        {/* Left: Search */}
+        <div className="relative flex items-center" style={{ width: "380px" }}>
+          <FiSearch
+            className="absolute left-3 text-gray-400 pointer-events-none"
+            size={15}
+          />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -89,44 +90,162 @@ const TopBar = () => {
                 navigate(searchItem[index].to);
                 setSearch("");
               }
+              if (e.key === "Escape") setSearch("");
             }}
-            className="outline-0 border-b w-100 px-4 py-2 "
             type="search"
-            placeholder="Search "
+            placeholder="Search modules, reports, forms..."
+            className="w-full pl-9 pr-4 py-2 text-sm rounded border text-gray-700 placeholder-gray-400 outline-none transition-all duration-150"
+            style={{
+              background: "#f9fafb",
+              borderColor: search ? "#1a3a5c" : "#d1d5db",
+              fontFamily: "'Georgia', serif",
+              fontSize: "12px",
+            }}
           />
         </div>
-        <div className="flex gap-5">
-          <AiFillBell
-            onClick={() => alert("No Notifications yet!")}
-            className="icon-md icon-cursor "
+
+        {/* Center: Page label */}
+        <div className="flex items-center gap-2">
+          <div
+            className="w-1 h-4 rounded-full"
+            style={{ background: "#c9a84c" }}
           />
-          <CgProfile
-            onClick={() => navigate(`/profile`)}
-            className="icon-md icon-cursor "
+          <span
+            className="text-xs font-bold tracking-wider uppercase"
+            style={{ color: "#0f2744" }}>
+            Financial Management System
+          </span>
+          <div
+            className="w-1 h-4 rounded-full"
+            style={{ background: "#c9a84c" }}
           />
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-4">
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              onClick={() => setNotifOpen((p) => !p)}
+              className="relative flex items-center justify-center w-9 h-9 rounded transition-all duration-150 cursor-pointer"
+              style={{
+                background: notifOpen ? "#f0f4f8" : "transparent",
+                border: "1.5px solid #e5e7eb",
+              }}>
+              <AiFillBell size={17} style={{ color: "#1a3a5c" }} />
+              {/* Dot */}
+              <span
+                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
+                style={{ background: "#c9a84c", border: "1.5px solid white" }}
+              />
+            </button>
+
+            {notifOpen && (
+              <div
+                className="absolute right-0 top-11 rounded border text-sm overflow-hidden"
+                style={{
+                  width: "240px",
+                  background: "#fff",
+                  borderColor: "#e5e7eb",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+                }}>
+                <div
+                  className="px-4 py-2.5 border-b"
+                  style={{ background: "#0f2744", borderColor: "#1a3a5c" }}>
+                  <p className="text-xs font-bold text-white tracking-wide">
+                    Notifications
+                  </p>
+                </div>
+                <div className="px-4 py-6 text-center">
+                  <p className="text-xs text-gray-400">No notifications yet.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="w-px h-6" style={{ background: "#e5e7eb" }} />
+
+          {/* User Profile */}
+          <button
+            onClick={() => navigate("/profile")}
+            className="flex items-center gap-2.5 cursor-pointer group">
+            <img
+              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              style={{ border: "2px solid #c9a84c" }}
+              src="https://static.vecteezy.com/system/resources/previews/007/409/979/original/people-icon-design-avatar-icon-person-icons-people-icons-are-set-in-trendy-flat-style-user-icon-set-vector.jpg"
+              alt="User"
+            />
+            <div className="text-left">
+              <p
+                className="text-xs font-bold leading-tight"
+                style={{ color: "#0f2744" }}>
+                {user.name}
+              </p>
+              <p
+                className="text-xs leading-tight"
+                style={{ color: "#c9a84c", fontSize: "10px" }}>
+                {role}
+              </p>
+            </div>
+          </button>
         </div>
       </div>
+
+      {/* ── Search Dropdown ── */}
       {search.length > 0 && (
-        <div className="h-auto w-100 bg-gray-300 -mt-5 ml-15 flex flex-col rounded overflow-hidden relative z-50">
-          {searchItem.length !== 0 ? (
-            searchItem.map((item, idx) => {
-              return (
-                <Link
-                  onClick={() => setSearch("")}
-                  to={item.to}
-                  className={`cursor-pointer p-3 w-full flex justify-between items-center px-4
-                  ${idx === index ? "bg-gray-500" : "hover:bg-gray-500"}
-                `}
-                  key={item.id}>
-                  {item.label}
-                  <BsArrowRight />
-                </Link>
-              );
-            })
+        <div
+          className="absolute left-6 top-14 rounded border overflow-hidden"
+          style={{
+            width: "380px",
+            background: "#ffffff",
+            borderColor: "#1a3a5c",
+            boxShadow: "0 8px 24px rgba(15,39,68,0.15)",
+            zIndex: 100,
+          }}>
+          {/* Header */}
+          <div
+            className="px-3 py-2 border-b"
+            style={{ background: "#0f2744", borderColor: "#1a3a5c" }}>
+            <p className="text-xs text-white font-semibold tracking-wide">
+              {searchItem.length > 0
+                ? `${searchItem.length} result${searchItem.length > 1 ? "s" : ""} found`
+                : "No results"}
+            </p>
+          </div>
+
+          {searchItem.length > 0 ? (
+            searchItem.map((item, idx) => (
+              <Link
+                key={item.searchKey || item.id}
+                to={item.to}
+                onClick={() => setSearch("")}
+                className="flex items-center justify-between px-4 py-2.5 text-sm border-b transition-all duration-100 cursor-pointer"
+                style={{
+                  borderColor: "#f3f4f6",
+                  background: idx === index ? "#f0f4f8" : "transparent",
+                  borderLeft:
+                    idx === index
+                      ? "3px solid #c9a84c"
+                      : "3px solid transparent",
+                  color: idx === index ? "#0f2744" : "#374151",
+                  fontFamily: "'Georgia', serif",
+                  fontSize: "12px",
+                }}>
+                <span className="font-medium">{item.label}</span>
+                <BsArrowRight
+                  size={13}
+                  style={{ color: idx === index ? "#c9a84c" : "#9ca3af" }}
+                />
+              </Link>
+            ))
           ) : (
-            <span className="py-2.5 px-2 text-navlink-red">Not Found</span>
+            <div className="px-4 py-5 text-center">
+              <p className="text-xs text-gray-400">
+                No modules match "<strong>{search}</strong>"
+              </p>
+            </div>
           )}
-          {console.log(index)}
         </div>
       )}
     </div>

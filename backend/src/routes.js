@@ -15,6 +15,8 @@ import grantRoutes from "./modules/grants/grant.route.js"
 import challanRoutes from "./modules/challan/challan.routes.js"
 import cashReceiptRoutes from "./modules/cashReceipt/cash.route.js"
 import challanHeadRoutes from "./modules/challanHeads/challanHead.route.js"
+import openingBalaceRoutes from "./modules/openingBalance/opening.route.js"
+import treasuryPlaRoutes from "./modules/treasuryPla/treasurypla.route.js"
 
 const router = express.Router();
 
@@ -34,6 +36,8 @@ router.use("/v1/grants", grantRoutes);
 router.use("/v1/challan", challanRoutes);
 router.use("/v1/cashReceipt", cashReceiptRoutes);
 router.use("/v1/challanHeads", challanHeadRoutes)
+router.use("/v1/openingBalance", openingBalaceRoutes);
+router.use("/v1/treasuryPla", treasuryPlaRoutes);
 
 // router.all(/.*/, (req, res) => {
 //     res.status(404).json({

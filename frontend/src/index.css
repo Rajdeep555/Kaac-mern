@@ -74,10 +74,11 @@
 }
 
 /* track-point */
-.track-point{
-    @apply h-13 w-13 border-2 border-purple-500 bg-purple-500 cursor-pointer active:scale-95 rounded-full flex justify-center items-center px-4 relative z-10 
+.track-point {
+    @apply h-13 w-13 border-2 border-purple-500 bg-purple-500 cursor-pointer active:scale-95 rounded-full flex justify-center items-center px-4 relative z-10
 }
-.track-border{
+
+.track-border {
     @apply h-13 w-13 border-2 border-purple-500 cursor-pointer active:scale-95 rounded-full flex justify-center items-center px-4 relative z-10 bg-white
 }
 

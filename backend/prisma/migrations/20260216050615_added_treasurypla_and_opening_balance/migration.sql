@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ChallanHeads" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
