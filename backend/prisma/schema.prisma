@@ -298,6 +298,8 @@ model Expenditure {
   user                      User       @relation(fields: [cashierId], references: [id])
   ddo                       DDO        @relation(fields: [ddoId], references: [id])
   department                Department @relation(fields: [departmentId], references: [id])
+
+  challansfrombill challanFromBill[]
 }
 
 model OpeningBalance {
@@ -328,6 +330,75 @@ model TreasuryPla {
   user User @relation(fields: [cashierId], references: [id])
 }
 
+model challanTwo {
+  id        Int      @id @default(autoincrement())
+  kaacChallanNo String
+  kaacChallanDate DateTime
+  sector    Sector?
+  majorHead String?
+  subMajor  String?
+  minorHead String?
+  divisonCode String?
+  ddoCode String?
+  treasuryCode String?
+  treasuryChallanNo String?
+  treasuryChallanDate DateTime
+  loansReceivedGovt Decimal?   @db.Decimal(14, 2)
+  loansReceivedOther Decimal?   @db.Decimal(14, 2)
+  depositReceivedTransferredItems Decimal?   @db.Decimal(14, 2)
+  grantsInAid Decimal?   @db.Decimal(14, 2)
+  amount Decimal?   @db.Decimal(14, 2)
+  narration String?
+  
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model challanFromBill {
+  id        Int      @id @default(autoincrement())
+  challanNo String
+  idFromExpenditure Int
+  sector    Sector?
+  departmentId Int?
+  ddoId Int?
+  majorHead String?
+  subMajor  String?
+  minorHead String?
+  treasuryCode String? 
+  voucharDate DateTime
+  amount Decimal?   @db.Decimal(14, 2)
+  amountType String
+  chequeNo String?
+  chequeDate DateTime
+  salaryNonSalary String?
+  expenditureType String?
+  treasuryChallanNo String?
+  treasuryChallanDate DateTime
+  
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expenditure Expenditure @relation(fields: [idFromExpenditure], references: [id], onDelete: Cascade)
+}
+
+model cashbookInformations {
+  id        Int      @id @default(autoincrement())
+  sector    Sector?
+  month     Int?
+  year      Int?
+  financialYear String?
+  receiptCashColumn Decimal?   @db.Decimal(14, 2)
+  receiptTreasuryPla Decimal?   @db.Decimal(14, 2)
+  disbursementCashColumn Decimal?   @db.Decimal(14, 2)
+  disbursementTreasuryPla Decimal?   @db.Decimal(14, 2)
+  
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum SalaryType {
   SALARY
   NON_SALARY
@@ -339,7 +410,7 @@ enum PlanType {
 }
 
 enum LoanType {
-  BUIDLING_LOAN
+  BUILDING_LOAN
   CAR_LOAN
 }
 

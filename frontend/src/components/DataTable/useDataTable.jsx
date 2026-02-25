@@ -31,8 +31,8 @@ export function useDataTable({
         searchableKeys.some((key) =>
           String(row?.[key] ?? "")
             .toLowerCase()
-            .includes(s)
-        )
+            .includes(s),
+        ),
       );
     }
 

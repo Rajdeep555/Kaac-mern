@@ -9,7 +9,7 @@ const GeneratedExpenditure = () => {
 
   // Example: COUNCIL + both treasury / non-treasury
   const { data: expenditures, loading } = useCashierExpenditures({
-    sector: "COUNCIL",
+    sector: ["COUNCIL", "STATE"],
   });
 
   const columns = [

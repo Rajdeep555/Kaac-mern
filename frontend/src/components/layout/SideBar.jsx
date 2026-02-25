@@ -173,8 +173,8 @@ export const menuItems = [
       },
       {
         id: nanoid(),
-        label: "Receipt Report",
-        to: "/receipt-report",
+        label: "Recovery Challan",
+        to: "/recovery-challan",
         icon: <MdSupervisorAccount />,
       },
     ],

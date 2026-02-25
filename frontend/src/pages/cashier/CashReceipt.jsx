@@ -4,7 +4,7 @@ import Breadcrumbs from "../../components/ui/Breadcrumbs";
 import InputField from "../../components/Forms/InputField";
 import DateField from "../../components/Forms/DateField";
 import { useNavigate, useParams } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createCashReceipt,
   getCashReceiptById,
@@ -12,10 +12,14 @@ import {
 } from "../../api/cashReceipt.api.js";
 import { showToast } from "../../utils/toast.js";
 
+// ✅ Cache lives OUTSIDE component — persists across mounts/navigations
+const receiptCache = {};
+
 const CashReceipt = () => {
-  // checking while it is edit or create
   const { id } = useParams();
   const navigate = useNavigate();
+  const [isFetching, setIsFetching] = useState(false);
+  const hasFetched = useRef(false); // ✅ track if already fetched this mount
 
   const {
     register,
@@ -26,40 +30,57 @@ const CashReceipt = () => {
 
   const isEditMode = Boolean(id);
 
-  //loading data while editing
+  /* ================= LOAD DATA FOR EDIT MODE ================= */
   useEffect(() => {
     if (!isEditMode) return;
+    if (hasFetched.current) return; // ✅ already ran this mount, skip
+    hasFetched.current = true; // ✅ mark as ran
 
+    const applyData = (data) => {
+      reset({
+        ...data,
+        date: data.date ? data.date.slice(0, 10) : "",
+        letterDate: data.letterDate ? data.letterDate.slice(0, 10) : "",
+      });
+    };
+
+    // ✅ Use cache if available — zero API call
+    if (receiptCache[id]) {
+      applyData(receiptCache[id]);
+      return;
+    }
+
+    // ✅ Not cached — fetch from API
     const fetchReceipt = async () => {
+      setIsFetching(true);
       try {
         const res = await getCashReceiptById(id);
 
         if (res.data.success) {
           const data = res.data.data;
-
-          // converting ISO Dates
-
-          reset({
-            ...data,
-            date: data.date ? data.date.slice(0, 10) : "",
-            letterDate: data.letterDate ? data.letterDate.slice(0, 10) : "",
-          });
+          receiptCache[id] = data; // ✅ store in cache
+          applyData(data);
         }
       } catch (error) {
         console.error("Failed to fetch receipt", error);
+        showToast("Failed to load receipt data", "error");
+      } finally {
+        setIsFetching(false);
       }
     };
 
     fetchReceipt();
-  }, [id, isEditMode, reset]);
+  }, [id, isEditMode]); // ✅ removed reset from deps — stabilized via hasFetched
 
-  //submit
+  /* ================= SUBMIT ================= */
   const onSubmit = async (data) => {
     try {
       if (isEditMode) {
-        await updateCashReceipt(id, data);
-        showToast("Receipt Updated Successfully!", "success");
+        const res = await updateCashReceipt(id, data);
 
+        delete receiptCache[id]; // ✅ bust cache after update
+
+        showToast("Receipt Updated Successfully!", "success");
         navigate("/generated-cash-receipt", {
           state: { receipt: res.data.data },
         });
@@ -91,56 +112,87 @@ const CashReceipt = () => {
         </h1>
       </div>
 
-      <FormWrapper onSubmit={handleSubmit(onSubmit)}>
-        <InputField
-          label="Counterfoil No."
-          name="counterfoilNo"
-          register={register}
-          {...register("counterfoilNo")}
-        />
+      {/* ✅ Full page loader while fetching */}
+      {isFetching ? (
+        <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500">
+          <svg
+            className="animate-spin"
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none">
+            <circle cx="12" cy="12" r="10" stroke="#d1d5db" strokeWidth="3" />
+            <path
+              d="M12 2a10 10 0 0 1 10 10"
+              stroke="#0f2744"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="text-sm font-medium">Loading receipt data...</span>
+        </div>
+      ) : (
+        <FormWrapper
+          onSubmit={handleSubmit(onSubmit)}
+          submitText={isEditMode ? "Update" : "Submit"}
+          isSubmitting={isSubmitting}>
+          <InputField
+            label="Counterfoil No."
+            name="counterfoilNo"
+            register={register}
+            required
+            error={errors.counterfoilNo?.message}
+          />
 
-        <DateField
-          label="Date"
-          name="date"
-          register={register}
-          {...register("date")}
-        />
+          <DateField
+            label="Date"
+            name="date"
+            register={register}
+            required
+            error={errors.date?.message}
+          />
 
-        <InputField
-          label="Recevied From"
-          name="receivedFrom"
-          register={register}
-          {...register("receivedFrom")}
-        />
+          <InputField
+            label="Received From"
+            name="receivedFrom"
+            register={register}
+            required
+            error={errors.receivedFrom?.message}
+          />
 
-        <InputField
-          label="Letter No"
-          name="letterNo"
-          register={register}
-          {...register("letterNo")}
-        />
+          <InputField
+            label="Letter No"
+            name="letterNo"
+            register={register}
+            required
+            error={errors.letterNo?.message}
+          />
 
-        <DateField
-          label="Letter Date"
-          name="letterDate"
-          register={register}
-          {...register("letterDate")}
-        />
+          <DateField
+            label="Letter Date"
+            name="letterDate"
+            register={register}
+            required
+            error={errors.letterDate?.message}
+          />
 
-        <InputField
-          label="Rupees In Cash"
-          name="rupeesInCash"
-          register={register}
-          {...register("rupeesInCash")}
-        />
+          <InputField
+            label="Rupees In Cash"
+            name="rupeesInCash"
+            register={register}
+            required
+            error={errors.rupeesInCash?.message}
+          />
 
-        <InputField
-          label="By Cheque/Bank"
-          name="byChequeBank"
-          register={register}
-          {...register("byChequeBank")}
-        />
-      </FormWrapper>
+          <InputField
+            label="By Cheque/Bank"
+            name="byChequeBank"
+            register={register}
+            required
+            error={errors.byChequeBank?.message}
+          />
+        </FormWrapper>
+      )}
     </div>
   );
 };

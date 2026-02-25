@@ -39,9 +39,8 @@ const Expenditure = () => {
   const navigate = useNavigate();
   const isEditMode = Boolean(id);
 
-  // const { role } = useAuth(); // Import useAuth
-  // console.log("Current user role:", role);
-
+  // NEW STATE: Track when data is fully loaded
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isExpenditureLoading, setIsExpenditureLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -169,7 +168,7 @@ const Expenditure = () => {
     fetchSubSubHeads,
     fetchDetailHeads,
     fetchSubDetailHeads,
-  } = useHeadHierarchy(sector);
+  } = useHeadHierarchy(sector, isEditMode);
 
   /* ================= LOAD DATA FOR EDIT MODE ================= */
   useEffect(() => {
@@ -178,23 +177,54 @@ const Expenditure = () => {
         setIsExpenditureLoading(true);
         try {
           const response = await getExpenditureById(id);
-          reset(response.data);
+          const data = response.data.data; // FIXED: unwrap the nested data
+
+          // Helper to format ISO date → "YYYY-MM-DD" for <input type="date">
+          const toDateInput = (isoStr) => {
+            if (!isoStr) return "";
+            try {
+              return new Date(isoStr).toISOString().split("T")[0];
+            } catch {
+              return "";
+            }
+          };
+
+          const flatData = {
+            ...data,
+
+            // Flatten department/ddo objects → just the ID string
+            department: String(data.departmentId ?? data.department?.id ?? ""),
+            ddo: String(data.ddoId ?? data.ddo?.id ?? ""),
+
+            // Format ISO dates → "YYYY-MM-DD" for date inputs
+            voucherDate: toDateInput(data.voucherDate),
+            requisitionDate: toDateInput(data.requisitionDate),
+            chequeIssueDate: toDateInput(data.chequeIssueDate),
+            treasuryDate: toDateInput(data.treasuryDate),
+          };
+
+          console.log("FLAT DATA FOR RESET:", flatData); // Should now show all real values
+          reset(flatData);
+          setIsDataLoaded(true);
         } catch (error) {
           console.error("Failed to load expenditure", error);
           toast.error("Failed to load expenditure data");
-          navigate("/expenditure");
+          navigate("/expenditures");
         } finally {
           setIsExpenditureLoading(false);
         }
       };
 
       loadExpenditure();
+    } else {
+      // For create mode, data is "loaded" immediately
+      setIsDataLoaded(true);
     }
   }, [id, isEditMode, navigate, reset]);
 
   /* ================= RESET ALL ON SECTOR CHANGE ================= */
   useEffect(() => {
-    if (!sector) return;
+    if (!sector || !isDataLoaded || isEditMode) return;
 
     setValue("majorHead", "");
     setValue("subMajorHead", "");
@@ -203,11 +233,11 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [sector, setValue]);
+  }, [sector, setValue, isDataLoaded, isEditMode]);
 
   /* ================= MAJOR → SUB MAJOR ================= */
   useEffect(() => {
-    if (!majorHead) return;
+    if (!majorHead || !isDataLoaded || isEditMode) return;
 
     fetchSubMajors(majorHead);
 
@@ -217,11 +247,11 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [majorHead]); // REMOVED setValue and fetchSubMajors from dependencies
+  }, [majorHead, isDataLoaded, isEditMode]);
 
   /* ================= SUB MAJOR → MINOR ================= */
   useEffect(() => {
-    if (!subMajorHead) return;
+    if (!subMajorHead || !isDataLoaded || isEditMode) return;
 
     fetchMinors({
       majorHeadCode: majorHead,
@@ -233,11 +263,11 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [subMajorHead, majorHead]); // REMOVED setValue and fetchMinors
+  }, [subMajorHead, majorHead, isDataLoaded, isEditMode]);
 
   /* ================= MINOR → SUB HEAD ================= */
   useEffect(() => {
-    if (!minorHead) return;
+    if (!minorHead || !isDataLoaded || isEditMode) return;
 
     fetchSubHeads({
       majorHeadCode: majorHead,
@@ -249,11 +279,11 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [minorHead, majorHead, subMajorHead]); // REMOVED setValue and fetchSubHeads
+  }, [minorHead, majorHead, subMajorHead, isDataLoaded, isEditMode]);
 
   /* ================= SUB HEAD → SUB SUB HEAD ================= */
   useEffect(() => {
-    if (subHead === "") return;
+    if (subHead === "" || !isDataLoaded || isEditMode) return;
 
     fetchSubSubHeads({
       majorHeadCode: majorHead,
@@ -265,11 +295,11 @@ const Expenditure = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [subHead, majorHead, subMajorHead, minorHead]); // REMOVED setValue and fetchSubSubHeads
+  }, [subHead, majorHead, subMajorHead, minorHead, isDataLoaded, isEditMode]);
 
   /* ================= SUB SUB HEAD → DETAIL ================= */
   useEffect(() => {
-    if (subSubHead === "") return;
+    if (subSubHead === "" || !isDataLoaded || isEditMode) return;
 
     fetchDetailHeads({
       majorHeadCode: majorHead,
@@ -281,11 +311,19 @@ const Expenditure = () => {
 
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-  }, [subSubHead, majorHead, subMajorHead, minorHead, subHead]); // REMOVED setValue and fetchDetailHeads
+  }, [
+    subSubHead,
+    majorHead,
+    subMajorHead,
+    minorHead,
+    subHead,
+    isDataLoaded,
+    isEditMode,
+  ]);
 
   /* ================= DETAIL → SUB DETAIL ================= */
   useEffect(() => {
-    if (!detailHead) return;
+    if (!detailHead || !isDataLoaded || isEditMode) return;
 
     fetchSubDetailHeads({
       majorHeadCode: majorHead,
@@ -297,10 +335,21 @@ const Expenditure = () => {
     });
 
     setValue("subDetailHead", "");
-  }, [detailHead, majorHead, subMajorHead, minorHead, subHead, subSubHead]); // REMOVED setValue and fetchSubDetailHeads
+  }, [
+    detailHead,
+    majorHead,
+    subMajorHead,
+    minorHead,
+    subHead,
+    subSubHead,
+    isDataLoaded,
+    isEditMode,
+  ]);
 
   /* ================= CALCULATE GROSS AMOUNT ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const gross =
       Number(watch("payOfficers") || 0) +
       Number(watch("payEstablishment") || 0) +
@@ -320,6 +369,7 @@ const Expenditure = () => {
       shouldValidate: false,
     });
   }, [
+    isDataLoaded,
     watch("payOfficers"),
     watch("payEstablishment"),
     watch("allowanceHonorary"),
@@ -332,10 +382,12 @@ const Expenditure = () => {
     watch("securityDeposit"),
     watch("earnestMoney"),
     watch("transferPayment"),
-  ]); // REMOVED setValue and watch from dependencies
+  ]);
 
   /* ================= CALCULATE GROSS DEDUCTION ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const grossDeduction =
       Number(watch("cgst") || 0) +
       Number(watch("sgst") || 0) +
@@ -366,6 +418,7 @@ const Expenditure = () => {
       shouldValidate: false,
     });
   }, [
+    isDataLoaded,
     watch("cgst"),
     watch("sgst"),
     watch("igst"),
@@ -389,10 +442,12 @@ const Expenditure = () => {
     watch("vat"),
     watch("advanceRecovery"),
     watch("otherDeductions"),
-  ]); // REMOVED setValue
+  ]);
 
   /* ================= CALCULATE CPF PAYABLE ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const cpfPayable =
       Number(watch("cpfCouncil") || 0) +
       Number(watch("cpfContribution") || 0) +
@@ -402,10 +457,17 @@ const Expenditure = () => {
       shouldDirty: false,
       shouldValidate: false,
     });
-  }, [watch("cpfCouncil"), watch("cpfContribution"), watch("cpfRecovery")]); // REMOVED setValue
+  }, [
+    isDataLoaded,
+    watch("cpfCouncil"),
+    watch("cpfContribution"),
+    watch("cpfRecovery"),
+  ]);
 
   /* ================= CALCULATE NET DEDUCTION ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const netDeduction =
       Number(watch("grossDeduction") || 0) - Number(watch("cpfPayable") || 0);
 
@@ -413,10 +475,12 @@ const Expenditure = () => {
       shouldDirty: false,
       shouldValidate: false,
     });
-  }, [watch("grossDeduction"), watch("cpfPayable")]); // REMOVED setValue
+  }, [isDataLoaded, watch("grossDeduction"), watch("cpfPayable")]);
 
   /* ================= CALCULATE NET AMOUNT ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const netAmount =
       Number(watch("grossAmount") || 0) - Number(watch("netDeduction") || 0);
 
@@ -428,10 +492,12 @@ const Expenditure = () => {
       shouldDirty: false,
       shouldValidate: false,
     });
-  }, [watch("grossAmount"), watch("netDeduction")]); // REMOVED setValue
+  }, [isDataLoaded, watch("grossAmount"), watch("netDeduction")]);
 
   /* ================= AMOUNT TO WORDS ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const payable = watch("amountPayable");
 
     if (!payable || payable === 0) {
@@ -447,11 +513,11 @@ const Expenditure = () => {
       shouldDirty: false,
       shouldValidate: false,
     });
-  }, [watch("amountPayable")]); // REMOVED setValue
+  }, [isDataLoaded, watch("amountPayable")]);
 
   /* ================= GET VOUCHER NO (CREATE MODE ONLY) ================= */
   useEffect(() => {
-    if (isEditMode || !sector) {
+    if (isEditMode || !sector || !isDataLoaded) {
       return;
     }
 
@@ -473,21 +539,23 @@ const Expenditure = () => {
     };
 
     fetchNextVoucherNo();
-  }, [sector, isEditMode]); // REMOVED setValue
+  }, [sector, isEditMode, isDataLoaded]);
 
   /* ================= AUTO SELECT FINANCIAL YEAR ================= */
   useEffect(() => {
-    if (isEditMode) return;
+    if (isEditMode || !isDataLoaded) return;
 
     const currentFY = getFinancialYears(2023)[0];
     setValue("financialYear", currentFY, {
       shouldDirty: false,
       shouldValidate: false,
     });
-  }, [isEditMode]); // REMOVED setValue - runs once on mount
+  }, [isEditMode, isDataLoaded]);
 
   /* ================= RESET LOAN TYPE ================= */
   useEffect(() => {
+    if (!isDataLoaded) return;
+
     const amount = Number(loansAdvances);
     if (!amount || amount <= 0) {
       setValue("loanType", "", {
@@ -495,7 +563,7 @@ const Expenditure = () => {
         shouldValidate: false,
       });
     }
-  }, [loansAdvances]); // REMOVED setValue
+  }, [loansAdvances, isDataLoaded]);
 
   /* ================= TRANSFORM DATA FOR BACKEND ================= */
   const transformDataForBackend = (data) => {
@@ -602,6 +670,7 @@ const Expenditure = () => {
       treasuryDate: toISODate(data.treasuryDate),
     };
   };
+
   /* ================= SUBMIT ================= */
   const onSubmit = async (data) => {
     setIsSubmitting(true);
@@ -610,7 +679,7 @@ const Expenditure = () => {
       const payload = transformDataForBackend(data);
 
       // Log the payload for debugging
-      console.log(" SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
+      // console.log(" SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
 
       let response;
       if (isEditMode) {
@@ -621,8 +690,12 @@ const Expenditure = () => {
         toast.success("Expenditure created successfully!");
       }
 
-      console.log("Response:", response.data);
-      navigate("/expenditure");
+      // console.log("Response:", response.data);
+      if (!isEditMode) {
+        reset(); // ✅ Clears all fields back to defaultValuesa
+      }
+
+      navigate("/expenditures");
     } catch (error) {
       console.error("Failed to submit expenditure", error);
 
@@ -638,7 +711,7 @@ const Expenditure = () => {
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.error ||
-        error.response?.data?.issues?.[0]?.message || // Zod validation errors
+        error.response?.data?.issues?.[0]?.message ||
         `Failed to ${isEditMode ? "update" : "create"} expenditure`;
 
       toast.error(errorMessage);
@@ -662,7 +735,7 @@ const Expenditure = () => {
           <Breadcrumbs
             items={[
               { label: "Dashboard", path: "/" },
-              { label: "Expenditure", path: "/expenditures" },
+              { label: "Expenditures", path: "/expenditures" }, // ✅ Fixed path
               {
                 label: isEditMode ? "Edit Expenditure" : "Create Expenditure",
                 path: "/expenditure",
@@ -674,7 +747,8 @@ const Expenditure = () => {
             <TableButton
               onClick={() => navigate("/generated-expenditure")}
               icon
-              name="Expenditures"></TableButton>
+              name="Generated Expenditures"
+            />
           </div>
         </div>
 
@@ -712,12 +786,18 @@ const Expenditure = () => {
             { label: "Select Type", value: "" },
             { label: "Capital", value: "CAPITAL" },
             { label: "Revenue", value: "REVENUE" },
+            {
+              label: "Deposit Bearing / Non Bearing Interest",
+              value: "DEPOSIT BEARING",
+            },
           ]}
         />
 
         {/* Head Hierarchy */}
         <HeadHierarchySection
           register={register}
+          loading={loading}
+          isEditMode={isEditMode}
           sector={sector}
           majorHead={majorHead}
           subMajorHead={subMajorHead}
@@ -725,7 +805,6 @@ const Expenditure = () => {
           subHead={subHead}
           subSubHead={subSubHead}
           detailHead={detailHead}
-          loading={loading}
           majorHeads={majorHeads}
           subMajors={subMajors}
           minors={minors}
@@ -820,29 +899,6 @@ const Expenditure = () => {
           name="treasuryDate"
           register={register}
         />
-
-        {/* Submit Button
-        <div className="col-span-full flex justify-end gap-4 mt-6">
-          <button
-            type="button"
-            onClick={() => navigate("/expenditure")}
-            className="px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-            disabled={isSubmitting}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            disabled={isSubmitting || isExpenditureLoading}>
-            {isSubmitting
-              ? isEditMode
-                ? "Updating..."
-                : "Creating..."
-              : isEditMode
-                ? "Update Expenditure"
-                : "Create Expenditure"}
-          </button> */}
-        {/* </div> */}
       </FormWrapper>
     </div>
   );

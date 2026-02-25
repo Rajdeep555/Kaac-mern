@@ -4,13 +4,16 @@ const decimalField = z
     .union([z.string(), z.number()])
     .optional()
     .transform((val) => {
-        if (val === undefined || val === "" || val === null) return null;
-        return Number(val);
+        if (val === undefined || val === "" || val === null) return 0; // ✅ Change to 0
+        const num = Number(val);
+        return isNaN(num) ? 0 : num; // ✅ Handle NaN
     });
+
+// ✅ Make calculated totals optional or default to 0
+const requiredDecimal = z.number().min(0); // ✅ For grossAmount etc.
 
 export const createExpenditureSchema = z.object({
     /* ================= BASIC ================= */
-
     sector: z.enum(["COUNCIL", "STATE"]),
     voucherNo: z.string().min(1),
     voucherDate: z.string().optional(),
@@ -20,14 +23,14 @@ export const createExpenditureSchema = z.object({
 
     grantNo: z.string().optional(),
 
-    departmentId: z.number().int(),
-    ddoId: z.number().int(),
+    departmentId: z.number().int().positive(),
+    ddoId: z.number().int().positive(),
 
     workName: z.string().optional(),
     expenditureType: z.enum(["CAPITAL", "REVENUE"]),
 
     /* ================= HEADS ================= */
-    majorHead: z.string(),
+    majorHead: z.string().min(1),
     subMajorHead: z.string().optional(),
     minorHead: z.string().optional(),
     subHead: z.string().optional(),
@@ -38,7 +41,7 @@ export const createExpenditureSchema = z.object({
     /* ================= CLASSIFICATION ================= */
     salaryType: z.enum(["SALARY", "NON_SALARY"]),
     planType: z.string().min(1),
-    financialYear: z.string(),
+    financialYear: z.string().min(1),
     objectHead: z.string().optional(),
 
     /* ================= AMOUNT BREAKUP ================= */
@@ -50,7 +53,7 @@ export const createExpenditureSchema = z.object({
     works: decimalField,
     loansAdvances: decimalField,
 
-    loanType: z.enum(["BUILDING_LOAN", "CAR_LOAN"]).optional(),
+    loanType: z.enum(["BUILDING_LOAN", "CAR_LOAN"]).optional().nullable(),
     loanRepayGovt: decimalField,
     loanRepayOther: decimalField,
 
@@ -59,7 +62,7 @@ export const createExpenditureSchema = z.object({
     transferPayment: decimalField,
 
     /* ================= TOTAL ================= */
-    grossAmount: z.number(),
+    grossAmount: decimalField, // Changed from z.number()
 
     /* ================= DEDUCTIONS ================= */
     cgst: decimalField,
@@ -86,20 +89,21 @@ export const createExpenditureSchema = z.object({
     advanceRecovery: decimalField,
     otherDeductions: decimalField,
 
-    grossDeduction: z.number(),
-    cpfPayable: z.number(),
-    netDeduction: z.number(),
-    netAmount: z.number(),
-    amountPayable: z.number(),
+    // ✅ All calculated totals use decimalField now
+    grossDeduction: decimalField,
+    cpfPayable: decimalField,
+    netDeduction: decimalField,
+    netAmount: decimalField,
+    amountPayable: decimalField,
 
-    amountInWords: z.string(),
+    amountInWords: z.string().min(1),
 
     /* ================= REMARKS ================= */
     remarks: z.string().nullable().optional(),
 
     /* ================= CHEQUE / TREASURY ================= */
-    chequeBookNo: z.string().optional(),
-    chequeNo: z.string().optional(),
+    chequeBookNo: z.string().optional().nullable(),
+    chequeNo: z.string().optional().nullable(),
     chequeIssueDate: z.string().optional(),
 
     treasuryName: z.string().nullable().optional(),

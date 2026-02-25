@@ -35,6 +35,7 @@ import CreateExpenditure from "../pages/cashier/expenditure/CreateExpenditure";
 import EditExpenditure from "../pages/cashier/expenditure/EditExpenditure";
 import CashReceipt from "../pages/cashier/CashReceipt";
 import GeneratedCashReceipt from "../pages/cashier/GeneratedCashReceipt";
+import ChallanOfRecoveryFromBills from "../pages/cashier/ChallanOfRecoveryFromBills";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -118,6 +119,14 @@ const AppRoutes = createBrowserRouter([
               {
                 path: "generated-cash-receipt",
                 element: <GeneratedCashReceipt />,
+              },
+              {
+                path: "recovery-challan",
+                element: <ChallanOfRecoveryFromBills />,
+              },
+              {
+                path: "recovery-challan/:id",
+                element: <ChallanOfRecoveryFromBills />,
               },
             ],
           },

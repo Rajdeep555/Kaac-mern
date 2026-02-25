@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getCashierExpenditures } from "../api/expenditure.api";
+import { getCashierExpenditures } from "../api/expenditure.api.js";
 
 export const useCashierExpenditures = ({
     sector,

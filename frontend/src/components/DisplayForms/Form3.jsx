@@ -100,7 +100,7 @@ const Form3 = ({ data: dataProp = [], title, sector }) => {
 
       <hr className="w-full mb-4 h-0.5 bg-black" />
 
-      <div className="w-full overflow-x-auto my-8 ">
+      <div className="w-full overflow-x-auto my-8">
         <table className="min-w-330 border border-black text-[11px] text-center mx-4">
           <thead>
             <tr>

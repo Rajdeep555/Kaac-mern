@@ -35,7 +35,6 @@ const StateChallan = () => {
     treasuryChallanNo: "",
     treasuryChallanDate: "",
     amountInWords: "",
-    remarks: "",
   });
 
   const handleChange = (e) => {
