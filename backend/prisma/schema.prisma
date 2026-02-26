@@ -197,6 +197,7 @@ model CashReceipt {
   id            Int       @id @default(autoincrement())
   cashierId     Int
   counterfoilNo String?
+  sector        Sector @default(COUNCIL)
   date          DateTime?
   receivedFrom  String?
   letterNo      String?
@@ -393,7 +394,7 @@ model cashbookInformations {
   receiptTreasuryPla Decimal?   @db.Decimal(14, 2)
   disbursementCashColumn Decimal?   @db.Decimal(14, 2)
   disbursementTreasuryPla Decimal?   @db.Decimal(14, 2)
-  
+
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

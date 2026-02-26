@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useParams } from "react-router-dom";
 import Statement1 from "../../components/Statements/Statement1";
 import Statement2 from "../../components/Statements/Statement2";
 import Statement3 from "../../components/Statements/Statement3";
@@ -8,6 +9,12 @@ import Statement6 from "../../components/Statements/Statement6";
 import Statement7 from "../../components/Statements/Statement7";
 import SearchFunction from "../SearchFunction";
 import Button from "../../components/ui/Button";
+
+const SECTOR_LABELS = {
+  council: "COUNCIL",
+  state: "STATE",
+  consolidated: "CONSOLIDATED",
+};
 
 const STATEMENT_LABELS = {
   1: "Opening Balance",
@@ -20,19 +27,29 @@ const STATEMENT_LABELS = {
 };
 
 const TrackStatements = () => {
+  const { sector } = useParams(); // ← pulls "council" / "state" / "consolidated"
   const [activeStep, setActiveStep] = useState("1");
+
+  // Normalize to uppercase enum — exactly like TrackForms
+  const sectorType = sector
+    ? SECTOR_LABELS[sector.toLowerCase()] || null
+    : null;
 
   const array = ["1", "2", "3", "4", "5", "6", "7"];
 
-  const stepComponents = {
-    1: <Statement1 />,
-    2: <Statement2 />,
-    3: <Statement3 />,
-    4: <Statement4 />,
-    5: <Statement5 />,
-    6: <Statement6 />,
-    7: <Statement7 />,
-  };
+  // useMemo so sector doesn't cause unnecessary re-renders
+  const stepComponents = useMemo(
+    () => ({
+      1: <Statement1 sector={sectorType} />,
+      2: <Statement2 sector={sectorType} />,
+      3: <Statement3 sector={sectorType} />,
+      4: <Statement4 sector={sectorType} />,
+      5: <Statement5 sector={sectorType} />,
+      6: <Statement6 sector={sectorType} />,
+      7: <Statement7 sector={sectorType} />, // ← sector now passed correctly
+    }),
+    [sectorType], // re-renders only when sector changes
+  );
 
   return (
     <div
@@ -48,7 +65,6 @@ const TrackStatements = () => {
             "linear-gradient(135deg, #0f2744 0%, #1a3a5c 60%, #1e4976 100%)",
           borderBottom: "4px solid #c9a84c",
         }}>
-        {/* Tricolor stripe */}
         <div
           style={{
             height: "5px",
@@ -64,7 +80,6 @@ const TrackStatements = () => {
             alignItems: "center",
             justifyContent: "space-between",
           }}>
-          {/* Left: Emblem + Title */}
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <div
               style={{
@@ -121,7 +136,6 @@ const TrackStatements = () => {
                   fontSize: "18px",
                   fontWeight: "700",
                   color: "#ffffff",
-                  letterSpacing: "0.5px",
                 }}>
                 Financial Management System
               </h1>
@@ -130,14 +144,13 @@ const TrackStatements = () => {
                   margin: "1px 0 0",
                   fontSize: "11px",
                   color: "#93b8d8",
-                  letterSpacing: "0.5px",
                 }}>
                 Treasury & Accounts Department
               </p>
             </div>
           </div>
 
-          {/* Right: Module Badge */}
+          {/* Sector Badge — dynamic like TrackForms */}
           <div
             style={{
               display: "flex",
@@ -159,7 +172,6 @@ const TrackStatements = () => {
                 alignItems: "center",
                 justifyContent: "center",
               }}>
-              {/* Document icon */}
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <rect
                   x="3"
@@ -206,20 +218,22 @@ const TrackStatements = () => {
                 }}>
                 Statements Module
               </p>
+              {/* Show current sector in header */}
               <p
                 style={{
                   margin: "1px 0 0",
                   fontSize: "10px",
-                  color: "#93b8d8",
+                  color: "#c9a84c",
+                  fontWeight: "600",
                 }}>
-                Financial Statements Register
+                {sectorType ?? "All Sectors"}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Sub-header: Search + Breadcrumb ── */}
+      {/* ── Sub-header ── */}
       <div
         style={{
           background: "#ffffff",
@@ -243,6 +257,14 @@ const TrackStatements = () => {
           <span style={{ color: "#1a3a5c", fontWeight: "600" }}>
             Statements
           </span>
+          {sectorType && (
+            <>
+              <span style={{ color: "#9ca3af" }}>›</span>
+              <span style={{ color: "#c9a84c", fontWeight: "600" }}>
+                {sectorType}
+              </span>
+            </>
+          )}
         </div>
         <div style={{ flex: 1, maxWidth: "420px", marginLeft: "32px" }}>
           <SearchFunction />
@@ -251,7 +273,6 @@ const TrackStatements = () => {
 
       {/* ── Main Content ── */}
       <div style={{ padding: "28px 32px" }}>
-        {/* ── Section Title ── */}
         <div style={{ marginBottom: "24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div
@@ -328,7 +349,7 @@ const TrackStatements = () => {
                   fontSize: "11px",
                   color: "#9ca3af",
                 }}>
-                Currently Viewing
+                Currently Viewing — {sectorType ?? "All Sectors"}
               </p>
             </div>
           </div>
@@ -363,7 +384,6 @@ const TrackStatements = () => {
             Statement Index
           </p>
 
-          {/* Progress bar */}
           <div
             style={{
               width: "100%",
@@ -384,7 +404,6 @@ const TrackStatements = () => {
             />
           </div>
 
-          {/* Statement Buttons */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {array.map((row) => {
               const isActive = activeStep === row;
@@ -451,7 +470,6 @@ const TrackStatements = () => {
             })}
           </div>
 
-          {/* Prev / Next */}
           <div
             style={{
               display: "flex",
@@ -518,7 +536,6 @@ const TrackStatements = () => {
             overflow: "hidden",
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
           }}>
-          {/* Statement header strip */}
           <div
             style={{
               background: "#0f2744",
@@ -597,11 +614,10 @@ const TrackStatements = () => {
                 letterSpacing: "1px",
                 textTransform: "uppercase",
               }}>
-              Official Record
+              {sectorType ?? "All Sectors"}
             </span>
           </div>
 
-          {/* Actual statement content */}
           <div>{stepComponents[activeStep]}</div>
         </div>
 
@@ -622,11 +638,10 @@ const TrackStatements = () => {
             All records are official government documents. Unauthorized access
             is prohibited.
           </p>
-          <Button />
         </div>
       </div>
 
-      {/* ── Bottom Footer ── */}
+      {/* ── Bottom Footer ──
       <div
         style={{
           background: "#0f2744",
@@ -642,7 +657,7 @@ const TrackStatements = () => {
         <p style={{ margin: 0, fontSize: "11px", color: "#93b8d8" }}>
           Official Use Only — Confidential
         </p>
-      </div>
+      </div> */}
     </div>
   );
 };
