@@ -12,6 +12,7 @@ import { GiPoliceOfficerHead } from "react-icons/gi";
 import { AiFillAlert } from "react-icons/ai";
 import { nanoid } from "nanoid";
 import { useAuth } from "../../context/AuthContext";
+import logo from "../../assets/logo.jpg";
 
 export const menuItems = [
   {
@@ -22,14 +23,7 @@ export const menuItems = [
     icon: <RiDashboardFill />,
     roles: ["ADMIN", "CASHIER"],
   },
-  {
-    id: nanoid(),
-    type: "link",
-    label: "Accountant",
-    to: "/accountant",
-    icon: <MdSupervisorAccount />,
-    roles: ["ADMIN"],
-  },
+
   {
     id: nanoid(),
     type: "link",
@@ -243,12 +237,12 @@ const Sidebar = () => {
         <div className="flex items-center gap-3">
           {/* Ashoka wheel emblem */}
           <div
-            className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+            className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
             style={{
               border: "2px solid #c9a84c",
               background: "rgba(201,168,76,0.12)",
             }}>
-            <svg width="26" height="26" viewBox="0 0 30 30" fill="none">
+            {/* <svg width="26" height="26" viewBox="0 0 30 30" fill="none">
               <circle
                 cx="15"
                 cy="15"
@@ -271,7 +265,8 @@ const Sidebar = () => {
                   />
                 ),
               )}
-            </svg>
+            </svg> */}
+            <img src={logo} alt="KAAC" className="w-14 h-14 object-contain" />
           </div>
           <div>
             <p

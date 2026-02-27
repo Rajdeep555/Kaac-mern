@@ -3,10 +3,10 @@ import logger from "../../utils/logger.js";
 
 // ─────────────────────────────────────────────────────────────
 // FORM 4 - Register of Remittances to Treasury (PLA)
-// Data comes from 3 tables: challan, challanTwo, challanFromBill
+// Data comes from 4 tables: challan, challanTwo, challanFromBill,
+// stateChallan (STATE sector only)
 // ─────────────────────────────────────────────────────────────
 
-// Amount types allowed from challanFromBill table
 const ALLOWED_AMOUNT_TYPES = [
     "Earnest Money",
     "Professional Tax",
@@ -21,28 +21,18 @@ const ALLOWED_AMOUNT_TYPES = [
     "Other Deductions",
 ];
 
-// Helper — combines majorHead, subMajor, minorHead into one string
-// Skips null/empty parts automatically
-const buildClassification = (majorHead, subMajor, minorHead) => {
+// Helper — now variadic to support any number of head levels
+const buildClassification = (...parts) => {
     return (
-        [majorHead, subMajor, minorHead]
-            .filter((part) => part && part.trim() !== "")
-            .join(" / ") || "-"
+        parts.filter((part) => part && part.trim() !== "").join(" / ") || "-"
     );
 };
 
 // ─────────────────────────────────────────────────────────────
 
-// Get rows from Challan table
-// Challan has no sector column — filters by challanType instead
-// challanType enum values should match your sector (COUNCIL / STATE)
-// CONSOLIDATED → no filter → returns all challanTypes
 const getForm4ChallanRows = async (sector) => {
     const where = { isActive: true };
 
-    // Map sector to challanType
-    // ⚠️ If your ChallanType enum is different (e.g REVENUE/CAPITAL),
-    // change the values below to match your actual enum
     if (sector && sector !== "CONSOLIDATED") {
         where.challanType = sector;
     }
@@ -60,22 +50,17 @@ const getForm4ChallanRows = async (sector) => {
         treasury: row.treasuryCode ?? "-",
         amount: parseFloat(row.amount ?? "0"),
         refItemNo: row.treasuryChallanNo ?? "-",
-        // Combined heads as classification
         classification: buildClassification(
             row.majorHead,
             row.subMajorHead,
             row.minorHead
         ),
         remarks: row.remarks ?? "-",
-        // Use challanType as sector for display in CONSOLIDATED view
         sector: row.challanType ?? null,
         source: "challan",
     }));
 };
 
-// Get rows from ChallanTwo table
-// Filters by sector if COUNCIL or STATE
-// CONSOLIDATED → no filter → fetches all sectors
 const getForm4ChallanTwoRows = async (sector) => {
     const where = { isActive: true };
 
@@ -96,7 +81,6 @@ const getForm4ChallanTwoRows = async (sector) => {
         treasury: row.treasuryCode ?? "-",
         amount: row.amount ? parseFloat(row.amount.toString()) : 0,
         refItemNo: row.treasuryChallanNo ?? "-",
-        // Combined heads as classification
         classification: buildClassification(
             row.majorHead,
             row.subMajor,
@@ -108,17 +92,10 @@ const getForm4ChallanTwoRows = async (sector) => {
     }));
 };
 
-// Get rows from ChallanFromBill table
-// Filters by sector if COUNCIL or STATE
-// CONSOLIDATED → no filter → fetches all sectors
-// Only fetches rows where amountType is in the ALLOWED_AMOUNT_TYPES list
 const getForm4ChallanFromBillRows = async (sector) => {
     const where = {
         isActive: true,
-        // Only fetch rows with these specific amountTypes
-        amountType: {
-            in: ALLOWED_AMOUNT_TYPES,
-        },
+        amountType: { in: ALLOWED_AMOUNT_TYPES },
     };
 
     if (sector && sector !== "CONSOLIDATED") {
@@ -138,13 +115,11 @@ const getForm4ChallanFromBillRows = async (sector) => {
         treasury: row.treasuryCode ?? "-",
         amount: row.amount ? parseFloat(row.amount.toString()) : 0,
         refItemNo: row.treasuryChallanNo ?? "-",
-        // Combined heads as classification
         classification: buildClassification(
             row.majorHead,
             row.subMajor,
             row.minorHead
         ),
-        // Show amountType in remarks for challanFromBill
         remarks: row.amountType ?? "-",
         sector: row.sector ?? null,
         source: "challanFromBill",
@@ -152,27 +127,82 @@ const getForm4ChallanFromBillRows = async (sector) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Main Form 4 function
-// Fetches all 3 tables in parallel, merges and sorts by date
+// NEW — StateChallan rows (STATE sector only)
+// Amount is stored in lakhs → multiply by 100000
+// Classification spans all 7 head levels
+// isActive check: StateChallan has no isActive field in the
+// schema above, so we filter by sector = "STATE" only.
+// If you add isActive to the model later, add it to `where`.
 // ─────────────────────────────────────────────────────────────
+const getForm4StateChallanRows = async () => {
+    const rows = await prisma.stateChallan.findMany({
+        where: {
+            sector: "STATE",
+        },
+        orderBy: { challanDate: "asc" },
+    });
 
+    logger.info(`Fetched ${rows.length} rows from StateChallan table`);
+
+    return rows.map((row) => ({
+        id: `stateChallan-${row.id}`,
+        clnNo: row.challanNo ?? "-",
+        date: row.challanDate ?? row.createdAt,
+        treasury: row.treasuryCode ?? "-",
+        amount:
+            row.totalAmount != null
+                ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                : 0,
+        // Cash Book Item No. = challanNo per spec
+        refItemNo: row.challanNo ?? "-",
+        classification: buildClassification(
+            row.majorHead,
+            row.subMajorHead,
+            row.minorHead,
+            row.subHead,
+            row.subSubHead,
+            row.detailHead,
+            row.subDetailHead
+        ),
+        remarks: row.remarks ?? "-",
+        sector: "STATE",
+        source: "stateChallan",
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────
+// Main Form 4 function
+// Fetches all tables in parallel, merges and sorts by date
+// StateChallan is only fetched when sector is STATE or CONSOLIDATED
+// ─────────────────────────────────────────────────────────────
 export const getForm4Data = async (sector) => {
     try {
         logger.info(`Fetching Form 4 data for sector: ${sector ?? "ALL"}`);
 
-        // Run all 3 queries at the same time (parallel = faster)
-        const [challanRows, challanTwoRows, challanFromBillRows] = await Promise.all(
-            [
-                getForm4ChallanRows(sector),          // ✅ now receives sector
-                getForm4ChallanTwoRows(sector),
-                getForm4ChallanFromBillRows(sector),
-            ]
-        );
+        const includeStateChallans =
+            !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-        // Merge all rows into one array
-        const allRows = [...challanRows, ...challanTwoRows, ...challanFromBillRows];
+        const [
+            challanRows,
+            challanTwoRows,
+            challanFromBillRows,
+            stateChallanRows,       // ← NEW
+        ] = await Promise.all([
+            getForm4ChallanRows(sector),
+            getForm4ChallanTwoRows(sector),
+            getForm4ChallanFromBillRows(sector),
+            includeStateChallans            // ← only runs when relevant
+                ? getForm4StateChallanRows()
+                : Promise.resolve([]),
+        ]);
 
-        // Sort by date ascending (oldest first)
+        const allRows = [
+            ...challanRows,
+            ...challanTwoRows,
+            ...challanFromBillRows,
+            ...stateChallanRows,            // ← NEW
+        ];
+
         const sorted = allRows.sort((a, b) => new Date(a.date) - new Date(b.date));
 
         logger.info(`Form 4 total rows returned: ${sorted.length}`);
@@ -184,18 +214,15 @@ export const getForm4Data = async (sector) => {
     }
 };
 
-// ----------------------------------------------------------
 
-/**
- * form 5A starts here ---
- */
+// ----------------------------------------------------------
 
 // ─────────────────────────────────────────────────────────────
 // FORM 5A - Classified Abstract of Receipts
-// Data comes from 2 tables: challan, challanFromBill
+// Data comes from 3 tables: challan, challanFromBill,
+// stateChallan (STATE sector only)
 // ─────────────────────────────────────────────────────────────
 
-// Amount types allowed from challanFromBill for Form 5A
 const FORM5A_ALLOWED_AMOUNT_TYPES = [
     "Professional Tax",
     "Monopoly",
@@ -203,7 +230,8 @@ const FORM5A_ALLOWED_AMOUNT_TYPES = [
     "MC Forest Royalty",
 ];
 
-// Get rows from Challan table for Form 5A
+// ─────────────────────────────────────────────────────────────
+
 const getForm5AChallanRows = async (sector) => {
     const where = { isActive: true };
 
@@ -227,14 +255,10 @@ const getForm5AChallanRows = async (sector) => {
     }));
 };
 
-// Get rows from ChallanFromBill table for Form 5A
-// Only allowed amount types
 const getForm5AChallanFromBillRows = async (sector) => {
     const where = {
         isActive: true,
-        amountType: {
-            in: FORM5A_ALLOWED_AMOUNT_TYPES,
-        },
+        amountType: { in: FORM5A_ALLOWED_AMOUNT_TYPES },
     };
 
     if (sector && sector !== "CONSOLIDATED") {
@@ -257,22 +281,68 @@ const getForm5AChallanFromBillRows = async (sector) => {
     }));
 };
 
+// ─────────────────────────────────────────────────────────────
+// NEW — StateChallan rows (STATE sector only)
+// Amount stored in lakhs → multiply by 100000
+// Classification uses all head levels, but Form 5A groups
+// by majorHead so only majorHead drives the grouping key.
+// subMajor → subMajorHead, minorHead → minorHead (direct fields)
+// No isActive field on StateChallan model — filter by sector only
+// ─────────────────────────────────────────────────────────────
+const getForm5AStateChallanRows = async () => {
+    const rows = await prisma.stateChallan.findMany({
+        where: {
+            sector: "STATE",
+        },
+        orderBy: { challanDate: "asc" },
+    });
+
+    logger.info(
+        `Form5A: Fetched ${rows.length} rows from StateChallan`
+    );
+
+    return rows.map((row) => ({
+        majorHead: row.majorHead ?? "Unknown",
+        subMajor: row.subMajorHead ?? "-",
+        minorHead: row.minorHead ?? "-",
+        amount:
+            row.totalAmount != null
+                ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                : 0,
+        sector: "STATE",
+        source: "stateChallan",
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────
 // Main Form 5A function
 // Groups rows by majorHead
 // If multiple rows share the same majorHead → show each as detail + total row
 // If only one row for a majorHead → show just that row
+// ─────────────────────────────────────────────────────────────
 export const getForm5AData = async (sector) => {
     try {
         logger.info(`Fetching Form 5A data for sector: ${sector ?? "ALL"}`);
 
-        // Fetch both tables in parallel
-        const [challanRows, challanFromBillRows] = await Promise.all([
-            getForm5AChallanRows(sector),
-            getForm5AChallanFromBillRows(sector),
-        ]);
+        const includeStateChallans =
+            !sector || sector === "CONSOLIDATED" || sector === "STATE";
+
+        // Fetch all tables in parallel
+        const [challanRows, challanFromBillRows, stateChallanRows] =
+            await Promise.all([
+                getForm5AChallanRows(sector),
+                getForm5AChallanFromBillRows(sector),
+                includeStateChallans            // ← only runs when relevant
+                    ? getForm5AStateChallanRows()
+                    : Promise.resolve([]),
+            ]);
 
         // Merge all rows
-        const allRows = [...challanRows, ...challanFromBillRows];
+        const allRows = [
+            ...challanRows,
+            ...challanFromBillRows,
+            ...stateChallanRows,               // ← NEW
+        ];
 
         // Group rows by majorHead
         const grouped = allRows.reduce((acc, row) => {
@@ -285,14 +355,12 @@ export const getForm5AData = async (sector) => {
         }, {});
 
         // Build final result
-        // Each group has: majorHead, rows (detail rows), total, hasMultiple
         const result = Object.entries(grouped).map(([majorHead, rows]) => {
             const total = rows.reduce((sum, row) => sum + row.amount, 0);
             return {
                 majorHead,
                 rows,
-                total,
-                // If more than one row for same majorHead → show total row
+                total: parseFloat(total.toFixed(2)),
                 hasMultiple: rows.length > 1,
             };
         });
@@ -305,6 +373,7 @@ export const getForm5AData = async (sector) => {
         throw error;
     }
 };
+
 
 // ─────────────────────────────────────────────────────────────
 
@@ -668,19 +737,21 @@ export const getForm5DData = async (sector) => {
 //           Part II Deposit Fund (Debt-Deposit-Remittances)
 //
 // RECEIPT SIDE:
-//   Expenditure  → cpfCouncil+cpfContribution+cpfRecovery,
-//                  securityDepositsDeduction, earnestMoneyDeduction,
-//                  grossAmount (cheques drawn)
-//   ChallanTwo   → grantsInAid (Deposits from Govt)
+//   Expenditure    → cpfCouncil+cpfContribution+cpfRecovery,
+//                    securityDepositsDeduction, earnestMoneyDeduction,
+//                    grossAmount (cheques drawn)
+//   ChallanTwo     → grantsInAid (Deposits from Govt)
+//   StateChallan   → totalAmount * 100000 (STATE / CONSOLIDATED only)
 //
 // PAYMENT SIDE:
-//   Expenditure  → cpfCouncil+cpfContribution+cpfRecovery (remittance CPF),
-//                  securityDeposit, earnestMoney, transferPayment,
-//                  earnestMoneyDeduction+securityDepositsDeduction (remit treasury)
-//   Challan      → amount (remittance to treasury PLAs)
-//   ChallanTwo   → amount (remittance to treasury PLAs)
+//   Expenditure    → cpfCouncil+cpfContribution+cpfRecovery (remittance CPF),
+//                    securityDeposit, earnestMoney, transferPayment,
+//                    earnestMoneyDeduction+securityDepositsDeduction (remit treasury)
+//   Challan        → amount (remittance to treasury PLAs)
+//   ChallanTwo     → amount (remittance to treasury PLAs)
 //   ChallanFromBill → specific amountTypes (remittance to treasury PLAs)
 // ─────────────────────────────────────────────────────────────
+
 
 const FORM5E_TREASURY_TYPES = [
     "Professional Tax",
@@ -698,63 +769,86 @@ export const getForm5EData = async (sector) => {
         const challanSectorFilter =
             sector && sector !== "CONSOLIDATED" ? { challanType: sector } : {};
 
-        const [expenditureRows, challanTwoRows, challanRows, challanFromBillRows] =
-            await Promise.all([
-                prisma.expenditure.findMany({
-                    where: { isActive: true, ...sectorFilter },
-                    select: {
-                        id: true,
-                        voucherNo: true,
-                        cpfCouncil: true,
-                        cpfContribution: true,
-                        cpfRecovery: true,
-                        securityDepositsDeduction: true,
-                        earnestMoneyDeduction: true,
-                        grossAmount: true,
-                        securityDeposit: true,
-                        earnestMoney: true,
-                        transferPayment: true,
-                    },
-                    orderBy: { voucherDate: "asc" },
-                }),
-                prisma.challanTwo.findMany({
-                    where: { isActive: true, ...sectorFilter },
-                    select: {
-                        id: true,
-                        kaacChallanNo: true,
-                        grantsInAid: true,
-                        amount: true,
-                    },
-                    orderBy: { kaacChallanDate: "asc" },
-                }),
-                prisma.challan.findMany({
-                    where: { isActive: true, ...challanSectorFilter },
+        const includeStateChallans =
+            !sector || sector === "CONSOLIDATED" || sector === "STATE";
+
+        const [
+            expenditureRows,
+            challanTwoRows,
+            challanRows,
+            challanFromBillRows,
+            stateChallanRows,
+        ] = await Promise.all([
+            prisma.expenditure.findMany({
+                where: { isActive: true, ...sectorFilter },
+                select: {
+                    id: true,
+                    voucherNo: true,
+                    sector: true,               // ← per-row sector check
+                    cpfCouncil: true,
+                    cpfContribution: true,
+                    cpfRecovery: true,
+                    securityDepositsDeduction: true,
+                    earnestMoneyDeduction: true,
+                    grossAmount: true,
+                    securityDeposit: true,
+                    earnestMoney: true,
+                    transferPayment: true,
+                    grantsInAid: true,          // ← STATE transferItems
+                    works: true,                // ← STATE transferItems
+                },
+                orderBy: { voucherDate: "asc" },
+            }),
+            prisma.challanTwo.findMany({
+                where: { isActive: true, ...sectorFilter },
+                select: {
+                    id: true,
+                    kaacChallanNo: true,
+                    grantsInAid: true,
+                    amount: true,
+                },
+                orderBy: { kaacChallanDate: "asc" },
+            }),
+            prisma.challan.findMany({
+                where: { isActive: true, ...challanSectorFilter },
+                select: {
+                    id: true,
+                    challanNo: true,
+                    amount: true,
+                },
+                orderBy: { challanDate: "asc" },
+            }),
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    amountType: { in: FORM5E_TREASURY_TYPES },
+                    ...sectorFilter,
+                },
+                select: {
+                    id: true,
+                    challanNo: true,
+                    amountType: true,
+                    amount: true,
+                },
+                orderBy: { voucharDate: "asc" },
+            }),
+            includeStateChallans
+                ? prisma.stateChallan.findMany({
+                    where: { sector: "STATE" },
                     select: {
                         id: true,
                         challanNo: true,
-                        amount: true,
+                        totalAmount: true,
                     },
                     orderBy: { challanDate: "asc" },
-                }),
-                prisma.challanFromBill.findMany({
-                    where: {
-                        isActive: true,
-                        amountType: { in: FORM5E_TREASURY_TYPES },
-                        ...sectorFilter,
-                    },
-                    select: {
-                        id: true,
-                        challanNo: true,
-                        amountType: true,
-                        amount: true,
-                    },
-                    orderBy: { voucharDate: "asc" },
-                }),
-            ]);
+                })
+                : Promise.resolve([]),
+        ]);
 
         logger.info(
             `Form5E: expenditure=${expenditureRows.length}, challanTwo=${challanTwoRows.length}, ` +
-            `challan=${challanRows.length}, challanFromBill=${challanFromBillRows.length}`
+            `challan=${challanRows.length}, challanFromBill=${challanFromBillRows.length}, ` +
+            `stateChallan=${stateChallanRows.length}`
         );
 
         const safe = (v) => {
@@ -772,7 +866,7 @@ export const getForm5EData = async (sector) => {
             const cpfSub = safe(row.cpfCouncil) + safe(row.cpfContribution) + safe(row.cpfRecovery);
             const secDep = safe(row.securityDepositsDeduction);
             const earnest = safe(row.earnestMoneyDeduction);
-            const govtDep = 0; // empty for expenditure
+            const govtDep = 0;
             const cheques = safe(row.grossAmount);
             const total = cpfSub + secDep + earnest + govtDep + cheques;
 
@@ -807,7 +901,32 @@ export const getForm5EData = async (sector) => {
             };
         }).filter(Boolean);
 
-        const receiptRows = [...receiptFromExpenditure, ...receiptFromChallanTwo];
+        // 3. StateChallan receipt rows (STATE / CONSOLIDATED only)
+        const receiptFromStateChallan = stateChallanRows.map((row) => {
+            const govtDep =
+                row.totalAmount != null
+                    ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                    : 0;
+
+            if (govtDep === 0) return null;
+
+            return {
+                id: `SC-R-${row.id}`,
+                cashBookItemNo: row.challanNo ?? "-",
+                cpfSub: 0,
+                securityDep: 0,
+                earnestMoney: 0,
+                govtDeposit: govtDep,
+                chequesDrawn: 0,
+                totalReceipt: govtDep,
+            };
+        }).filter(Boolean);
+
+        const receiptRows = [
+            ...receiptFromExpenditure,
+            ...receiptFromChallanTwo,
+            ...receiptFromStateChallan,
+        ];
 
         // ══════════════════════════════════════════════════════════
         // PAYMENT ROWS
@@ -815,13 +934,29 @@ export const getForm5EData = async (sector) => {
 
         // 1. Expenditure payment rows
         const paymentFromExpenditure = expenditureRows.map((row) => {
-            const cpfAdvances = 0; // empty per spec
+            const cpfAdvances = 0;
             const remitCpf = safe(row.cpfCouncil) + safe(row.cpfContribution) + safe(row.cpfRecovery);
             const paySecDep = safe(row.securityDeposit);
             const repayEarnest = safe(row.earnestMoney);
-            const transferItems = safe(row.transferPayment);
             const remitTreasury = safe(row.earnestMoneyDeduction) + safe(row.securityDepositsDeduction);
-            const total = cpfAdvances + remitCpf + paySecDep + repayEarnest + transferItems + remitTreasury;
+
+            // ─────────────────────────────────────────────────────
+            // Per-row sector check — NOT the query-level sector param
+            //
+            // STATE rows:   transferItems = transferPayment + grantsInAid + works
+            // COUNCIL rows: transferItems = transferPayment only
+            //
+            // This ensures CONSOLIDATED mode doesn't incorrectly add
+            // grantsInAid from COUNCIL expenditure rows into transferItems
+            // ─────────────────────────────────────────────────────
+            const isStateRow = row.sector === "STATE";
+            const transferItems = isStateRow
+                ? safe(row.transferPayment) + safe(row.grantsInAid) + safe(row.works)
+                : safe(row.transferPayment);
+
+            const total =
+                cpfAdvances + remitCpf + paySecDep +
+                repayEarnest + transferItems + remitTreasury;
 
             if (total === 0) return null;
 
@@ -838,7 +973,7 @@ export const getForm5EData = async (sector) => {
             };
         }).filter(Boolean);
 
-        // 2. Challan payment rows — only remittance to treasury PLAs
+        // 2. Challan payment rows
         const paymentFromChallan = challanRows.map((row) => {
             const remitTreasury = safe(row.amount);
             if (remitTreasury === 0) return null;
@@ -856,7 +991,7 @@ export const getForm5EData = async (sector) => {
             };
         }).filter(Boolean);
 
-        // 3. ChallanTwo payment rows — only remittance to treasury PLAs
+        // 3. ChallanTwo payment rows — remittanceTreasury (amount field)
         const paymentFromChallanTwo = challanTwoRows.map((row) => {
             const remitTreasury = safe(row.amount);
             if (remitTreasury === 0) return null;
@@ -874,7 +1009,7 @@ export const getForm5EData = async (sector) => {
             };
         }).filter(Boolean);
 
-        // 4. ChallanFromBill payment rows — specific types → remittance treasury
+        // 4. ChallanFromBill payment rows
         const paymentFromChallanFromBill = challanFromBillRows.map((row) => {
             const remitTreasury = safe(row.amount);
             if (remitTreasury === 0) return null;
@@ -926,7 +1061,8 @@ export const getForm5EData = async (sector) => {
         );
 
         logger.info(
-            `Form5E done: receiptRows=${receiptRows.length}, paymentRows=${paymentRows.length}`
+            `Form5E done: receiptRows=${receiptRows.length}, paymentRows=${paymentRows.length}, ` +
+            `transferTotal=${paymentTotals.transferItems}`
         );
 
         return { receiptRows, paymentRows, receiptTotals, paymentTotals };
@@ -1065,11 +1201,13 @@ export const getForm6Data = async (sector) => {
 
 // ─────────────────────────────────────────────────────────────
 // FORM 7 - Month wise register
-// Data from 3 tables:
+// Data from 4 tables:
 //   challan         → all active rows, use challanDate
 //   challanTwo      → grantsInAid amount only, use kaacChallanDate
 //   challanFromBill → only 'Professional Tax', 'Forest Royalty',
 //                     'Monopoly', 'MC Forest Royalty', use voucharDate
+//   stateChallan    → totalAmount * 100000, use challanDate
+//                     (STATE / CONSOLIDATED only)
 // Rows = full head code, Columns = months (JAN-DEC)
 // ─────────────────────────────────────────────────────────────
 
@@ -1091,28 +1229,6 @@ const emptyMonths = () =>
 const getMonthName = (date) => {
     if (!date) return null;
     return MONTHS[new Date(date).getMonth()];
-};
-
-// Add a row's amount into the grouped map
-const addToGroup = (grouped, grandTotalMonths, key, headInfo, amount, date) => {
-    const monthName = getMonthName(date);
-
-    // Initialize group if not exists
-    if (!grouped[key]) {
-        grouped[key] = {
-            headCode: key,
-            ...headInfo,
-            months: emptyMonths(),
-            total: 0,
-        };
-    }
-
-    if (monthName) {
-        grouped[key].months[monthName] += amount;
-        grandTotalMonths[monthName] += amount;
-    }
-
-    grouped[key].total += amount;
 };
 
 export const getForm7Data = async (sector) => {
@@ -1137,17 +1253,47 @@ export const getForm7Data = async (sector) => {
             challanFromBillWhere.sector = sector;
         }
 
-        const [challanRows, challanTwoRows, challanFromBillRows] = await Promise.all([
+        const includeStateChallans =
+            !sector || sector === "CONSOLIDATED" || sector === "STATE";
+
+        const [
+            challanRows,
+            challanTwoRows,
+            challanFromBillRows,
+            stateChallanRows,           // ← NEW
+        ] = await Promise.all([
             prisma.challan.findMany({ where: challanWhere }),
             prisma.challanTwo.findMany({ where: challanTwoWhere }),
             prisma.challanFromBill.findMany({ where: challanFromBillWhere }),
+
+            // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
+            // No isActive field on model — filter by sector = "STATE"
+            includeStateChallans
+                ? prisma.stateChallan.findMany({
+                    where: { sector: "STATE" },
+                    select: {
+                        id: true,
+                        challanDate: true,
+                        totalAmount: true,
+                        majorHead: true,
+                        subMajorHead: true,
+                        minorHead: true,
+                        subHead: true,
+                        subSubHead: true,
+                        detailHead: true,
+                        subDetailHead: true,
+                    },
+                    orderBy: { challanDate: "asc" },
+                })
+                : Promise.resolve([]),
         ]);
 
         logger.info(
-            `Form7: challan=${challanRows.length}, challanTwo=${challanTwoRows.length}, challanFromBill=${challanFromBillRows.length}`
+            `Form7: challan=${challanRows.length}, challanTwo=${challanTwoRows.length}, ` +
+            `challanFromBill=${challanFromBillRows.length}, stateChallan=${stateChallanRows.length}`
         );
 
-        // ── Step 1: group by full head code (same as before) ────
+        // ── Step 1: group by full head code ─────────────────────
         const grouped = {};
         const grandTotalMonths = emptyMonths();
         let grandTotal = 0;
@@ -1264,8 +1410,54 @@ export const getForm7Data = async (sector) => {
             grandTotal += amount;
         });
 
+        // ─────────────────────────────────────────────────────────
+        // NEW — Process StateChallan
+        // amount = totalAmount * 100000 (stored in lakhs)
+        // date   = challanDate
+        // headCode uses all 7 levels available on the model
+        // ─────────────────────────────────────────────────────────
+        stateChallanRows.forEach((row) => {
+            const amount =
+                row.totalAmount != null
+                    ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                    : 0;
+
+            if (!amount) return;
+
+            const headCode = buildFullHeadCode({
+                majorHead: row.majorHead,
+                subMajorHead: row.subMajorHead,
+                minorHead: row.minorHead,
+                subHead: row.subHead,
+                subSubHead: row.subSubHead,
+                detailHead: row.detailHead,
+                subDetailHead: row.subDetailHead,
+            });
+
+            const key = headCode || `stateChallan-${row.id}`;
+
+            if (!grouped[key]) {
+                grouped[key] = {
+                    headCode: key,
+                    majorHead: row.majorHead ?? "-",
+                    subMajorHead: row.subMajorHead ?? "-",
+                    minorHead: row.minorHead ?? "-",
+                    detailHead: row.detailHead ?? "-",
+                    months: emptyMonths(),
+                    total: 0,
+                };
+            }
+
+            const monthName = getMonthName(row.challanDate);
+            if (monthName) {
+                grouped[key].months[monthName] += amount;
+                grandTotalMonths[monthName] += amount;
+            }
+            grouped[key].total += amount;
+            grandTotal += amount;
+        });
+
         // ── Step 2: group by majorHead for total rows ────────────
-        // { "0028": [ row1, row2 ], "0029": [ row3 ] }
         const majorHeadGroups = {};
 
         Object.values(grouped).forEach((row) => {
@@ -1280,7 +1472,6 @@ export const getForm7Data = async (sector) => {
         const result = Object.entries(majorHeadGroups)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([majorHead, rows]) => {
-                // Calculate majorHead-level totals across all months
                 const majorHeadMonthTotals = MONTHS.reduce((acc, m) => {
                     acc[m] = rows.reduce((sum, row) => sum + (row.months[m] ?? 0), 0);
                     return acc;
@@ -1293,7 +1484,6 @@ export const getForm7Data = async (sector) => {
                     rows: rows.sort((a, b) => a.headCode.localeCompare(b.headCode)),
                     majorHeadMonthTotals,
                     majorHeadTotal,
-                    // Show total row only if more than one head code under same majorHead
                     hasMultiple: rows.length > 1,
                 };
             });
@@ -1301,7 +1491,7 @@ export const getForm7Data = async (sector) => {
         logger.info(`Form 7 total majorHead groups: ${result.length}`);
 
         return {
-            groups: result,       // grouped by majorHead
+            groups: result,
             grandTotalMonths,
             grandTotal,
         };
@@ -1310,5 +1500,6 @@ export const getForm7Data = async (sector) => {
         throw error;
     }
 };
+
 
 

@@ -23,7 +23,7 @@ export const useForm5B = ({ sector } = {}, { enabled = true } = {}) => {
 
     useEffect(() => {
         fetchData();
-    }, [fetchData]);
+    }, [sector, enabled]); // ✅ primitives only, not fetchData
 
     return { form5BData, loading, error, refetch: fetchData };
 };

@@ -568,11 +568,11 @@ const Expenditure = () => {
   /* ================= TRANSFORM DATA FOR BACKEND ================= */
   const transformDataForBackend = (data) => {
     const toNumber = (val) => {
-      if (val === "" || val === null || val === undefined) return null;
-      return Number(val);
+      if (val === "" || val === null || val === undefined) return 0; // ✅ 0 instead of null (Zod decimalField expects number)
+      const num = Number(val);
+      return isNaN(num) ? 0 : num;
     };
 
-    // Convert date string to ISO format for backend
     const toISODate = (dateStr) => {
       if (!dateStr) return null;
       try {
@@ -583,6 +583,7 @@ const Expenditure = () => {
     };
 
     return {
+      /* ================= BASIC ================= */
       sector: data.sector,
       voucherNo: data.voucherNo,
       voucherDate: toISODate(data.voucherDate),
@@ -590,26 +591,30 @@ const Expenditure = () => {
       requisitionDate: toISODate(data.requisitionDate),
       grantNo: data.grantNo || null,
 
-      // IMPORTANT: Make sure these are valid numbers
+      // ✅ FIXED: Both sent as Number — Zod schema transforms them
       departmentId: data.department ? Number(data.department) : null,
       ddoId: data.ddo ? Number(data.ddo) : null,
 
       workName: data.workName || null,
       expenditureType: data.expenditureType,
 
-      majorHead: data.majorHead,
-      subMajorHead: data.subMajorHead || null,
-      minorHead: data.minorHead || null,
-      subHead: data.subHead || null,
-      subSubHead: data.subSubHead || null,
-      detailHead: data.detailHead || null,
-      subDetailHead: data.subDetailHead || null,
+      /* ================= HEADS ================= */
+      // ✅ FIXED: empty string instead of null — Zod expects string
+      majorHead: data.majorHead || "",
+      subMajorHead: data.subMajorHead || "",
+      minorHead: data.minorHead || "",
+      subHead: data.subHead || "",
+      subSubHead: data.subSubHead || "",
+      detailHead: data.detailHead || "",
+      subDetailHead: data.subDetailHead || "",
 
+      /* ================= CLASSIFICATION ================= */
       salaryType: data.salaryType,
       planType: data.planType,
       financialYear: data.financialYear,
       objectHead: data.objectHead || null,
 
+      /* ================= AMOUNT BREAKUP ================= */
       payOfficers: toNumber(data.payOfficers),
       payEstablishment: toNumber(data.payEstablishment),
       allowanceHonorary: toNumber(data.allowanceHonorary),
@@ -624,8 +629,9 @@ const Expenditure = () => {
       earnestMoney: toNumber(data.earnestMoney),
       transferPayment: toNumber(data.transferPayment),
 
-      grossAmount: toNumber(data.grossAmount) || 0,
+      grossAmount: toNumber(data.grossAmount),
 
+      /* ================= DEDUCTIONS ================= */
       cgst: toNumber(data.cgst),
       sgst: toNumber(data.sgst),
       igst: toNumber(data.igst),
@@ -650,18 +656,21 @@ const Expenditure = () => {
       advanceRecovery: toNumber(data.advanceRecovery),
       otherDeductions: toNumber(data.otherDeductions),
 
-      grossDeduction: toNumber(data.grossDeduction) || 0,
-      cpfPayable: toNumber(data.cpfPayable) || 0,
-      netDeduction: toNumber(data.netDeduction) || 0,
-      netAmount: toNumber(data.netAmount) || 0,
-      amountPayable: toNumber(data.amountPayable) || 0,
+      /* ================= CALCULATED TOTALS ================= */
+      grossDeduction: toNumber(data.grossDeduction),
+      cpfPayable: toNumber(data.cpfPayable),
+      netDeduction: toNumber(data.netDeduction),
+      netAmount: toNumber(data.netAmount),
+      amountPayable: toNumber(data.amountPayable),
       amountInWords: data.amountInWords || "",
 
+      /* ================= REMARKS ================= */
       remarks:
         typeof data.remarks === "string" && data.remarks.trim() !== ""
           ? data.remarks.trim()
           : null,
 
+      /* ================= CHEQUE / TREASURY ================= */
       chequeBookNo: data.chequeBookNo || null,
       chequeNo: data.chequeNo || null,
       chequeIssueDate: toISODate(data.chequeIssueDate),

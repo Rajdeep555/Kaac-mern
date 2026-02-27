@@ -8,19 +8,20 @@ datasource db {
 }
 
 model User {
-  id           Int           @id @default(autoincrement())
-  name         String
-  email        String        @unique
-  password     String
-  isActive     Boolean       @default(true)
-  role         UserRole      @default(CASHIER)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  cashReceipt  CashReceipt[]
-  challans     Challan[]
-  expenditures Expenditure[]
+  id             Int              @id @default(autoincrement())
+  name           String
+  email          String           @unique
+  password       String
+  isActive       Boolean          @default(true)
+  role           UserRole         @default(CASHIER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  cashReceipt    CashReceipt[]
+  challans       Challan[]
+  expenditures   Expenditure[]
   openingBalance OpeningBalance[]
-  treasuryPla  TreasuryPla[]
+  treasuryPla    TreasuryPla[]
+  stateChallan   StateChallan[]
 }
 
 model Division {
@@ -99,7 +100,7 @@ model ObjectHead {
 model Department {
   id           Int           @id @default(autoincrement())
   name         String
-  code         String
+  code         String        @unique
   sector       Sector?
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
@@ -197,7 +198,6 @@ model CashReceipt {
   id            Int       @id @default(autoincrement())
   cashierId     Int
   counterfoilNo String?
-  sector        Sector @default(COUNCIL)
   date          DateTime?
   receivedFrom  String?
   letterNo      String?
@@ -207,11 +207,12 @@ model CashReceipt {
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  sector        Sector    @default(COUNCIL)
   user          User      @relation(fields: [cashierId], references: [id])
 }
 
 model Expenditure {
-  id                        Int        @id @default(autoincrement())
+  id                        Int               @id @default(autoincrement())
   /// ================= BASIC DETAILS =================
   sector                    Sector
   voucherNo                 String
@@ -236,50 +237,50 @@ model Expenditure {
   financialYear             String
   objectHead                String?
   /// ================= AMOUNT BREAKUP =================
-  payOfficers               Decimal?   @db.Decimal(14, 2)
-  payEstablishment          Decimal?   @db.Decimal(14, 2)
-  allowanceHonorary         Decimal?   @db.Decimal(14, 2)
-  contingencies             Decimal?   @db.Decimal(14, 2)
-  grantsInAid               Decimal?   @db.Decimal(14, 2)
-  works                     Decimal?   @db.Decimal(14, 2)
-  loansAdvances             Decimal?   @db.Decimal(14, 2)
+  payOfficers               Decimal?          @db.Decimal(14, 2)
+  payEstablishment          Decimal?          @db.Decimal(14, 2)
+  allowanceHonorary         Decimal?          @db.Decimal(14, 2)
+  contingencies             Decimal?          @db.Decimal(14, 2)
+  grantsInAid               Decimal?          @db.Decimal(14, 2)
+  works                     Decimal?          @db.Decimal(14, 2)
+  loansAdvances             Decimal?          @db.Decimal(14, 2)
   loanType                  LoanType?
-  loanRepayGovt             Decimal?   @db.Decimal(14, 2)
-  loanRepayOther            Decimal?   @db.Decimal(14, 2)
-  securityDeposit           Decimal?   @db.Decimal(14, 2)
-  earnestMoney              Decimal?   @db.Decimal(14, 2)
-  transferPayment           Decimal?   @db.Decimal(14, 2)
+  loanRepayGovt             Decimal?          @db.Decimal(14, 2)
+  loanRepayOther            Decimal?          @db.Decimal(14, 2)
+  securityDeposit           Decimal?          @db.Decimal(14, 2)
+  earnestMoney              Decimal?          @db.Decimal(14, 2)
+  transferPayment           Decimal?          @db.Decimal(14, 2)
   /// ================= TOTAL =================
-  grossAmount               Decimal    @db.Decimal(14, 2)
+  grossAmount               Decimal           @db.Decimal(14, 2)
   /// ================= DEDUCTIONS =================
-  cgst                      Decimal?   @db.Decimal(14, 2)
-  sgst                      Decimal?   @db.Decimal(14, 2)
-  igst                      Decimal?   @db.Decimal(14, 2)
-  earnestMoneyDeduction     Decimal?   @db.Decimal(14, 2)
-  ptax                      Decimal?   @db.Decimal(14, 2)
-  itax                      Decimal?   @db.Decimal(14, 2)
-  carLoanRecovery           Decimal?   @db.Decimal(14, 2)
-  houseLoanRecovery         Decimal?   @db.Decimal(14, 2)
-  cpfCouncil                Decimal?   @db.Decimal(14, 2)
-  cpfContribution           Decimal?   @db.Decimal(14, 2)
-  cpfRecovery               Decimal?   @db.Decimal(14, 2)
-  houseRent                 Decimal?   @db.Decimal(14, 2)
-  securityDepositsDeduction Decimal?   @db.Decimal(14, 2)
-  forestRoyalty             Decimal?   @db.Decimal(14, 2)
-  monopoly                  Decimal?   @db.Decimal(14, 2)
-  mcForestRoyalty           Decimal?   @db.Decimal(14, 2)
-  mdrrf                     Decimal?   @db.Decimal(14, 2)
-  dmft                      Decimal?   @db.Decimal(14, 2)
-  labourCess                Decimal?   @db.Decimal(14, 2)
-  itForestRoyalty           Decimal?   @db.Decimal(14, 2)
-  vat                       Decimal?   @db.Decimal(14, 2)
-  advanceRecovery           Decimal?   @db.Decimal(14, 2)
-  otherDeductions           Decimal?   @db.Decimal(14, 2)
-  grossDeduction            Decimal    @db.Decimal(14, 2)
-  cpfPayable                Decimal    @db.Decimal(14, 2)
-  netDeduction              Decimal    @db.Decimal(14, 2)
-  netAmount                 Decimal    @db.Decimal(14, 2)
-  amountPayable             Decimal    @db.Decimal(14, 2)
+  cgst                      Decimal?          @db.Decimal(14, 2)
+  sgst                      Decimal?          @db.Decimal(14, 2)
+  igst                      Decimal?          @db.Decimal(14, 2)
+  earnestMoneyDeduction     Decimal?          @db.Decimal(14, 2)
+  ptax                      Decimal?          @db.Decimal(14, 2)
+  itax                      Decimal?          @db.Decimal(14, 2)
+  carLoanRecovery           Decimal?          @db.Decimal(14, 2)
+  houseLoanRecovery         Decimal?          @db.Decimal(14, 2)
+  cpfCouncil                Decimal?          @db.Decimal(14, 2)
+  cpfContribution           Decimal?          @db.Decimal(14, 2)
+  cpfRecovery               Decimal?          @db.Decimal(14, 2)
+  houseRent                 Decimal?          @db.Decimal(14, 2)
+  securityDepositsDeduction Decimal?          @db.Decimal(14, 2)
+  forestRoyalty             Decimal?          @db.Decimal(14, 2)
+  monopoly                  Decimal?          @db.Decimal(14, 2)
+  mcForestRoyalty           Decimal?          @db.Decimal(14, 2)
+  mdrrf                     Decimal?          @db.Decimal(14, 2)
+  dmft                      Decimal?          @db.Decimal(14, 2)
+  labourCess                Decimal?          @db.Decimal(14, 2)
+  itForestRoyalty           Decimal?          @db.Decimal(14, 2)
+  vat                       Decimal?          @db.Decimal(14, 2)
+  advanceRecovery           Decimal?          @db.Decimal(14, 2)
+  otherDeductions           Decimal?          @db.Decimal(14, 2)
+  grossDeduction            Decimal           @db.Decimal(14, 2)
+  cpfPayable                Decimal           @db.Decimal(14, 2)
+  netDeduction              Decimal           @db.Decimal(14, 2)
+  netAmount                 Decimal           @db.Decimal(14, 2)
+  amountPayable             Decimal           @db.Decimal(14, 2)
   amountInWords             String
   /// ================= REMARKS =================
   remarks                   String?
@@ -291,113 +292,141 @@ model Expenditure {
   treasuryVoucherNo         String?
   treasuryDate              DateTime?
   /// ================= STATUS =================
-  isActive                  Boolean    @default(true)
-  createdAt                 DateTime   @default(now())
-  updatedAt                 DateTime   @updatedAt
+  isActive                  Boolean           @default(true)
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
   planType                  String
   cashierId                 Int
-  user                      User       @relation(fields: [cashierId], references: [id])
-  ddo                       DDO        @relation(fields: [ddoId], references: [id])
-  department                Department @relation(fields: [departmentId], references: [id])
-
-  challansfrombill challanFromBill[]
+  user                      User              @relation(fields: [cashierId], references: [id])
+  ddo                       DDO               @relation(fields: [ddoId], references: [id])
+  department                Department        @relation(fields: [departmentId], references: [id])
+  challansfrombill          challanFromBill[]
 }
 
 model OpeningBalance {
-  id         Int      @id @default(autoincrement())
-  cashierId      Int
-  amount     Decimal  @db.Decimal(14, 2)
-  month      Int
-  year       Int
-  sector     Sector?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  user        User      @relation(fields: [cashierId], references: [id])
-}
-
-model TreasuryPla {
   id        Int      @id @default(autoincrement())
   cashierId Int
-  amount      Decimal  @db.Decimal(14, 2)
+  amount    Decimal  @db.Decimal(14, 2)
   month     Int
   year      Int
   sector    Sector?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [cashierId], references: [id])
+}
 
-  user User @relation(fields: [cashierId], references: [id])
+model TreasuryPla {
+  id        Int      @id @default(autoincrement())
+  cashierId Int
+  amount    Decimal  @db.Decimal(14, 2)
+  month     Int
+  year      Int
+  sector    Sector?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [cashierId], references: [id])
 }
 
 model challanTwo {
-  id        Int      @id @default(autoincrement())
-  kaacChallanNo String
-  kaacChallanDate DateTime
-  sector    Sector?
-  majorHead String?
-  subMajor  String?
-  minorHead String?
-  divisonCode String?
-  ddoCode String?
-  treasuryCode String?
-  treasuryChallanNo String?
-  treasuryChallanDate DateTime
-  loansReceivedGovt Decimal?   @db.Decimal(14, 2)
-  loansReceivedOther Decimal?   @db.Decimal(14, 2)
-  depositReceivedTransferredItems Decimal?   @db.Decimal(14, 2)
-  grantsInAid Decimal?   @db.Decimal(14, 2)
-  amount Decimal?   @db.Decimal(14, 2)
-  narration String?
-  
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                              Int      @id @default(autoincrement())
+  kaacChallanNo                   String
+  kaacChallanDate                 DateTime
+  sector                          Sector?
+  majorHead                       String?
+  subMajor                        String?
+  minorHead                       String?
+  divisonCode                     String?
+  ddoCode                         String?
+  treasuryCode                    String?
+  treasuryChallanNo               String?
+  treasuryChallanDate             DateTime
+  loansReceivedGovt               Decimal? @db.Decimal(14, 2)
+  loansReceivedOther              Decimal? @db.Decimal(14, 2)
+  depositReceivedTransferredItems Decimal? @db.Decimal(14, 2)
+  grantsInAid                     Decimal? @db.Decimal(14, 2)
+  amount                          Decimal? @db.Decimal(14, 2)
+  narration                       String?
+  isActive                        Boolean  @default(true)
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
 }
 
 model challanFromBill {
-  id        Int      @id @default(autoincrement())
-  challanNo String
-  idFromExpenditure Int
-  sector    Sector?
-  departmentId Int?
-  ddoId Int?
-  majorHead String?
-  subMajor  String?
-  minorHead String?
-  treasuryCode String? 
-  voucharDate DateTime
-  amount Decimal?   @db.Decimal(14, 2)
-  amountType String
-  chequeNo String?
-  chequeDate DateTime
-  salaryNonSalary String?
-  expenditureType String?
-  treasuryChallanNo String?
+  id                  Int         @id @default(autoincrement())
+  challanNo           String
+  idFromExpenditure   Int
+  sector              Sector?
+  departmentId        Int?
+  ddoId               Int?
+  majorHead           String?
+  subMajor            String?
+  minorHead           String?
+  treasuryCode        String?
+  voucharDate         DateTime
+  amount              Decimal?    @db.Decimal(14, 2)
+  amountType          String
+  chequeNo            String?
+  chequeDate          DateTime
+  salaryNonSalary     String?
+  expenditureType     String?
+  treasuryChallanNo   String?
   treasuryChallanDate DateTime
-  
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  expenditure Expenditure @relation(fields: [idFromExpenditure], references: [id], onDelete: Cascade)
+  isActive            Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  expenditure         Expenditure @relation(fields: [idFromExpenditure], references: [id], onDelete: Cascade)
 }
 
 model cashbookInformations {
-  id        Int      @id @default(autoincrement())
-  sector    Sector?
-  month     Int?
-  year      Int?
-  financialYear String?
-  receiptCashColumn Decimal?   @db.Decimal(14, 2)
-  receiptTreasuryPla Decimal?   @db.Decimal(14, 2)
-  disbursementCashColumn Decimal?   @db.Decimal(14, 2)
-  disbursementTreasuryPla Decimal?   @db.Decimal(14, 2)
+  id                      Int      @id @default(autoincrement())
+  sector                  Sector?
+  month                   Int?
+  year                    Int?
+  financialYear           String?
+  receiptCashColumn       Decimal? @db.Decimal(14, 2)
+  receiptTreasuryPla      Decimal? @db.Decimal(14, 2)
+  disbursementCashColumn  Decimal? @db.Decimal(14, 2)
+  disbursementTreasuryPla Decimal? @db.Decimal(14, 2)
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
 
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model StateChallan {
+  challanNo          String?
+  challanDate        DateTime?
+  cashierId          Int
+  stateNo            String?
+  from               String?
+  to                 String?
+  subject            String?
+  ddo                String?
+  divisionCode       String?
+  majorHead          String?
+  subMajorHead       String?
+  minorHead          String?
+  subHead            String?
+  subSubHead         String?
+  detailHead         String?
+  subDetailHead      String?
+  purpose            String?
+  remarks            String?
+  totalAmount        Float?
+  amountInWords      String?
+  focNo              String?
+  sanctionLetterNo   String?
+  sanctionLetterDate DateTime?
+  treasuryCode       String?
+  treasuryChallanNo  String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sector             Sector
+  id                 Int       @id @default(autoincrement())
+  user               User      @relation(fields: [cashierId], references: [id])
+
+  @@map("state_challans")
 }
 
 enum SalaryType {
@@ -430,3 +459,7 @@ enum ChallanType {
   COUNCIL
   CSS
 }
+
+
+
+

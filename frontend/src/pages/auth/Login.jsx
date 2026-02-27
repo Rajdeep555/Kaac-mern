@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { FiMail, FiLock, FiEye, FiEyeOff, FiAlertCircle } from "react-icons/fi";
+import logo from "../../assets/logo.jpg";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -102,12 +103,12 @@ const Login = () => {
           {/* Top: Emblem + Org name */}
           <div className="flex flex-col items-center gap-4 mt-4">
             <div
-              className="w-20 h-20 rounded-full flex items-center justify-center"
+              className="w-24 h-24 rounded-full flex items-center justify-center overflow-hidden"
               style={{
                 border: "2px solid #c9a84c",
                 background: "rgba(201,168,76,0.12)",
               }}>
-              <svg width="48" height="48" viewBox="0 0 30 30" fill="none">
+              {/* <svg width="48" height="48" viewBox="0 0 30 30" fill="none">
                 <circle
                   cx="15"
                   cy="15"
@@ -130,7 +131,8 @@ const Login = () => {
                     />
                   ),
                 )}
-              </svg>
+              </svg> */}
+              <img src={logo} alt="KAAC" className="w-24 h-24 object-contain" />
             </div>
 
             <div className="text-center">

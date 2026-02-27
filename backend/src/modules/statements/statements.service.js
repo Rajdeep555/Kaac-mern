@@ -148,13 +148,10 @@ const getStatement5ChallanRows = async (sector) => {
 };
 
 // Get rows from ChallanFromBill table
-// Only allowed amount types — same as Form 5A
 const getStatement5ChallanFromBillRows = async (sector) => {
     const where = {
         isActive: true,
-        amountType: {
-            in: STATEMENT5_ALLOWED_AMOUNT_TYPES, // ← filter applied
-        },
+        amountType: { in: STATEMENT5_ALLOWED_AMOUNT_TYPES },
     };
 
     if (sector && sector !== "CONSOLIDATED") {
@@ -177,22 +174,92 @@ const getStatement5ChallanFromBillRows = async (sector) => {
     }));
 };
 
+// ─────────────────────────────────────────────────────────────
+// NEW — Get rows from StateChallan table
+// Only fetched when sector is STATE or CONSOLIDATED
+// No isActive field on model — but spec says check isActive:
+// If you add isActive to StateChallan model later, add it to where
+// heads = majorHead → subMajorHead → minorHead → subHead →
+//         subSubHead → detailHead → subDetailHead
+// amount = totalAmount * 100000 (stored in lakhs)
+// ─────────────────────────────────────────────────────────────
+const getStatement5StateChallanRows = async () => {
+    const rows = await prisma.stateChallan.findMany({
+        where: { sector: "STATE" },
+        select: {
+            id: true,
+            totalAmount: true,
+            majorHead: true,
+            subMajorHead: true,
+            minorHead: true,
+            subHead: true,
+            subSubHead: true,
+            detailHead: true,
+            subDetailHead: true,
+        },
+        orderBy: { challanDate: "asc" },
+    });
+
+    logger.info(
+        `Statement5: Fetched ${rows.length} rows from StateChallan`
+    );
+
+    return rows.map((row) => ({
+        majorHead: row.majorHead ?? "Unknown",
+        subMajor: row.subMajorHead ?? "-",
+        minorHead: row.minorHead ?? "-",
+        subHead: row.subHead ?? "-",
+        subSubHead: row.subSubHead ?? "-",
+        detailHead: row.detailHead ?? "-",
+        subDetailHead: row.subDetailHead ?? "-",
+        amount:
+            row.totalAmount != null
+                ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                : 0,
+        sector: "STATE",
+        source: "stateChallan",
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────
 // Main Statement 5 function
+// ─────────────────────────────────────────────────────────────
 export const getStatement5Data = async (sector) => {
     try {
         logger.info(`Fetching Statement 5 data for sector: ${sector ?? "ALL"}`);
 
-        // Fetch both tables in parallel — same as Form 5A
-        const [challanRows, challanFromBillRows] = await Promise.all([
-            getStatement5ChallanRows(sector),
-            getStatement5ChallanFromBillRows(sector),
-        ]);
+        const includeStateChallans =
+            !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-        const allRows = [...challanRows, ...challanFromBillRows];
+        const [challanRows, challanFromBillRows, stateChallanRows] =
+            await Promise.all([
+                getStatement5ChallanRows(sector),
+                getStatement5ChallanFromBillRows(sector),
+                includeStateChallans
+                    ? getStatement5StateChallanRows()
+                    : Promise.resolve([]),
+            ]);
 
-        // Group by majorHead-minorHead as the "heads" key
+        const allRows = [
+            ...challanRows,
+            ...challanFromBillRows,
+            ...stateChallanRows,            // ← NEW
+        ];
+
+        // ── Group by full head chain ─────────────────────────────
+        // Challan / ChallanFromBill group on majorHead-minorHead (2 parts)
+        // StateChallan groups on all 7 parts — extra parts are included
+        // when present so finer head codes get their own group
         const grouped = allRows.reduce((acc, row) => {
-            const key = [row.majorHead, row.minorHead]
+            const key = [
+                row.majorHead,
+                row.subMajor,
+                row.minorHead,
+                row.subHead,       // present only on stateChallan rows
+                row.subSubHead,    // present only on stateChallan rows
+                row.detailHead,    // present only on stateChallan rows
+                row.subDetailHead, // present only on stateChallan rows
+            ]
                 .filter((p) => p && p !== "-")
                 .join("-");
 
@@ -206,7 +273,7 @@ export const getStatement5Data = async (sector) => {
             return {
                 heads,
                 rows,
-                total,
+                total: parseFloat(total.toFixed(2)),
                 hasMultiple: rows.length > 1,
             };
         });
@@ -515,7 +582,6 @@ const FY_MONTHS = [
     { month: "March", num: 3 },
 ];
 
-// Amount types allowed from challanFromBill
 const CHALLAN_FROM_BILL_AMOUNT_TYPES = [
     "Professional Tax",
     "Forest Royalty",
@@ -543,12 +609,16 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
         const challanTwoSectorFilter = isChallanConsolidated ? {} : { sector };
         const expenditureSectorFilter = isChallanConsolidated ? {} : { sector };
 
+        const includeStateChallans =
+            !sector || sector === "CONSOLIDATED" || sector === "STATE";
+
         const [
             openingBalances,
             challans,
             challanFromBills,
             challanTwos,
             expenditures,
+            stateChallans,              // ← NEW
         ] = await Promise.all([
             prisma.openingBalance.findMany({
                 where: { isActive: true, ...(isChallanConsolidated ? {} : { sector }) },
@@ -574,13 +644,26 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                 where: { isActive: true, ...expenditureSectorFilter },
                 select: { voucherDate: true, grossAmount: true },
             }),
+
+            // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
+            // No isActive field on model — filter by sector = "STATE"
+            // Only challanDate + totalAmount needed for receipt grouping
+            includeStateChallans
+                ? prisma.stateChallan.findMany({
+                    where: { sector: "STATE" },
+                    select: {
+                        challanDate: true,
+                        totalAmount: true,
+                    },
+                })
+                : Promise.resolve([]),
         ]);
 
-        // ── Helper: get month number from date ───────────────
+        // ── Helper: get month number from date ───────────────────
         const getMonthNum = (date) =>
             date ? new Date(date).getMonth() + 1 : null;
 
-        // ── Helper: sum amounts by month ─────────────────────
+        // ── Helper: sum amounts by month ─────────────────────────
         const sumByMonth = (records, dateField, amountField) => {
             const map = new Map();
             for (const r of records) {
@@ -591,7 +674,7 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
             return map;
         };
 
-        // Opening balance from DB only for April (first month of FY)
+        // Opening balance — April only
         const openingByMonth = new Map(
             openingBalances.map((o) => [o.month, Number(o.amount ?? 0)])
         );
@@ -601,12 +684,29 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
         const challanTwoByMonth = sumByMonth(challanTwos, "createdAt", "amount");
         const expenditureByMonth = sumByMonth(expenditures, "voucherDate", "grossAmount");
 
-        // ── Build rows with carry-forward logic ──────────────
-        let carryForward = 0; // tracks closing balance → next month's opening
+        // ─────────────────────────────────────────────────────────
+        // NEW — StateChallan: sum converted amount by month
+        // totalAmount is in lakhs → multiply by 100000
+        // Uses challanDate as the date field
+        // ─────────────────────────────────────────────────────────
+        const stateChallanByMonth = (() => {
+            const map = new Map();
+            for (const r of stateChallans) {
+                const m = getMonthNum(r.challanDate);
+                if (!m) continue;
+                const amt =
+                    r.totalAmount != null
+                        ? parseFloat((r.totalAmount * 100000).toFixed(2))
+                        : 0;
+                map.set(m, (map.get(m) ?? 0) + amt);
+            }
+            return map;
+        })();
+
+        // ── Build rows with carry-forward logic ──────────────────
+        let carryForward = 0;
 
         const rows = FY_MONTHS.map(({ month, num }, index) => {
-            // First month (April) → use DB opening balance
-            // Every subsequent month → use previous month's closing balance
             const openingBalance =
                 index === 0
                     ? (openingByMonth.get(num) ?? 0)
@@ -615,13 +715,13 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
             const receipt =
                 (challanByMonth.get(num) ?? 0) +
                 (challanFromBillByMonth.get(num) ?? 0) +
-                (challanTwoByMonth.get(num) ?? 0);
+                (challanTwoByMonth.get(num) ?? 0) +
+                (stateChallanByMonth.get(num) ?? 0);  // ← NEW
 
             const disbursement = expenditureByMonth.get(num) ?? 0;
 
             const closingBalance = openingBalance + receipt - disbursement;
 
-            // Carry closing balance forward to next month
             carryForward = closingBalance;
 
             return {
@@ -642,4 +742,3 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
         throw error;
     }
 };
-

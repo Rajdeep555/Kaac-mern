@@ -1,13 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { getCashierExpenditures } from "../api/expenditure.api.js";
 
 export const useCashierExpenditures = ({
     sector,
-    treasuryStatus, // "yes" | "no" | undefined
+    treasuryStatus,
 } = {}) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // ✅ Serialize sector array → stable string for useEffect comparison
+    const sectorKey = useMemo(() => {
+        if (!sector) return "";
+        return Array.isArray(sector) ? sector.join(",") : sector;
+    }, [JSON.stringify(sector)]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const fetchExpenditures = async () => {
@@ -17,7 +23,6 @@ export const useCashierExpenditures = ({
                     sector,
                     treasury: treasuryStatus,
                 });
-
                 setData(res.data.data || []);
             } catch (err) {
                 console.error("Failed to fetch expenditures", err);
@@ -28,7 +33,7 @@ export const useCashierExpenditures = ({
         };
 
         fetchExpenditures();
-    }, [sector, treasuryStatus]);
+    }, [sectorKey, treasuryStatus]); // ✅ sectorKey is a stable string
 
     return { data, loading, error };
 };

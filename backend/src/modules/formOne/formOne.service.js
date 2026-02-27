@@ -1,10 +1,6 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
-// ─────────────────────────────────────────────────────────────
-// Amount types that go into Treasury PLA column (DR side)
-// and Disbursement Cash column (CR side)
-// ─────────────────────────────────────────────────────────────
 const PLA_AMOUNT_TYPES = [
     "Earnest Money",
     "Professional Tax",
@@ -35,16 +31,14 @@ const CASH_AMOUNT_TYPES = [
 ];
 
 function getFyRange(year) {
-    const from = new Date(year, 3, 1);       // 1 April
-    const to = new Date(year + 1, 2, 31);  // 31 March
+    const from = new Date(year, 3, 1);
+    const to = new Date(year + 1, 2, 31);
     return { from, to };
 }
 
-// Build a fully empty row — all fields null
 function createEmptyRow() {
     return {
         id: null,
-        // DR side
         receiptDate: null,
         receiptItemNo: null,
         receiptCounterfoilNo: null,
@@ -52,7 +46,6 @@ function createEmptyRow() {
         receiptCashAmount: null,
         receiptPlaColumn: null,
         receiptClassification: null,
-        // CR side
         disbursementDate: null,
         voucherNo: null,
         disbursementCounterfoilNo: null,
@@ -64,11 +57,9 @@ function createEmptyRow() {
     };
 }
 
-// Build classification string from head codes
-const buildClassification = (major, subMajor, minor) =>
-    [major, subMajor, minor]
-        .filter((p) => p && p.trim() !== "")
-        .join("-");
+const buildClassification = (...parts) =>
+    parts.filter((p) => p && p.trim() !== "").join("-");
+
 
 export const getCashbookRowsByFy = async (year, sector) => {
     try {
@@ -80,31 +71,24 @@ export const getCashbookRowsByFy = async (year, sector) => {
             to: to.toISOString().slice(0, 10),
         });
 
-        // ── Sector filters ───────────────────────────────────────
         const sectorFilter =
             sector && sector !== "CONSOLIDATED" ? { sector } : {};
-
         const challanSectorFilter =
             sector && sector !== "CONSOLIDATED" ? { challanType: sector } : {};
+        const isStateSector = sector === "STATE";
 
-        // ── Fetch all tables in parallel ─────────────────────────
         const [
             cashReceipts,
             challans,
             challanFromBills,
             challanTwoRows,
             expenditures,
+            stateChallans,
         ] = await Promise.all([
-            // 1. CashReceipt
             prisma.cashReceipt.findMany({
-                where: {
-                    date: { gte: from, lte: to },
-                    isActive: true,
-                },
+                where: { date: { gte: from, lte: to }, isActive: true },
                 orderBy: { date: "asc" },
             }),
-
-            // 2. Challan (all active in FY)
             prisma.challan.findMany({
                 where: {
                     challanDate: { gte: from, lte: to },
@@ -113,8 +97,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { challanDate: "asc" },
             }),
-
-            // 3. ChallanFromBill — only PLA + Cash types
             prisma.challanFromBill.findMany({
                 where: {
                     voucharDate: { gte: from, lte: to },
@@ -124,8 +106,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { voucharDate: "asc" },
             }),
-
-            // 4. ChallanTwo
             prisma.challanTwo.findMany({
                 where: {
                     kaacChallanDate: { gte: from, lte: to },
@@ -134,8 +114,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { kaacChallanDate: "asc" },
             }),
-
-            // 5. Expenditure
             prisma.expenditure.findMany({
                 where: {
                     voucherDate: { gte: from, lte: to },
@@ -144,203 +122,233 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { voucherDate: "asc" },
             }),
+            isStateSector
+                ? prisma.stateChallan.findMany({
+                    where: {
+                        challanDate: { gte: from, lte: to },
+                        sector: "STATE",
+                    },
+                    orderBy: { challanDate: "asc" },
+                })
+                : Promise.resolve([]),
         ]);
 
-        logger.info(`Data fetched`, {
+        // ── Raw fetch counts ─────────────────────────────────────
+        logger.info(`[CASHBOOK] Raw fetch counts`, {
             cashReceipts: cashReceipts.length,
             challans: challans.length,
             challanFromBills: challanFromBills.length,
             challanTwoRows: challanTwoRows.length,
             expenditures: expenditures.length,
+            stateChallans: stateChallans.length,
+        });
+
+        // ── Challan split ────────────────────────────────────────
+        const challansWithoutCounterfoil = challans.filter(
+            (c) => !c.counterfoilNo || c.counterfoilNo.trim() === ""
+        );
+        const challansWithCounterfoil = challans.filter(
+            (c) => c.counterfoilNo && c.counterfoilNo.trim() !== ""
+        );
+        logger.info(`[CASHBOOK] Challan split`, {
+            withoutCounterfoil: challansWithoutCounterfoil.length,
+            withCounterfoil: challansWithCounterfoil.length,
+        });
+
+        // ── ChallanFromBill split ────────────────────────────────
+        const cfbPlaRows = challanFromBills.filter((cfb) =>
+            PLA_AMOUNT_TYPES.includes(cfb.amountType)
+        );
+        const cfbCashRows = challanFromBills.filter((cfb) =>
+            CASH_AMOUNT_TYPES.includes(cfb.amountType)
+        );
+        logger.info(`[CASHBOOK] ChallanFromBill split`, {
+            plaTypeRows: cfbPlaRows.length,
+            cashTypeRows: cfbCashRows.length,
+            plaAmountTotal: cfbPlaRows.reduce(
+                (sum, r) => sum + parseFloat(r.amount?.toString() ?? "0"), 0
+            ),
+            cashAmountTotal: cfbCashRows.reduce(
+                (sum, r) => sum + parseFloat(r.amount?.toString() ?? "0"), 0
+            ),
         });
 
         const rows = [];
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 1: CashReceipt
-        // Date, counterfoilNo, receivedFrom+letterNo+letterDate,
-        // rupeesInCash in Cash column, PLA=empty, Classification=empty
         // ════════════════════════════════════════════════════════
+        let c1Total = 0;
         cashReceipts.forEach((r) => {
             const row = createEmptyRow();
-
             row.id = `R-${r.id}`;
-
-            row.receiptDate = r.date
-                ? r.date.toISOString().slice(0, 10)
-                : null;
-            row.receiptItemNo = null; // empty per spec
+            row.receiptDate = r.date ? r.date.toISOString().slice(0, 10) : null;
             row.receiptCounterfoilNo = r.counterfoilNo ?? null;
-
-            // Particulars = receivedFrom + letterNo + letterDate
             const parts = [
                 r.receivedFrom,
                 r.letterNo ? `Letter No: ${r.letterNo}` : null,
-                r.letterDate ? `Letter Date: ${new Date(r.letterDate).toLocaleDateString()}` : null,
+                r.letterDate
+                    ? `Letter Date: ${new Date(r.letterDate).toLocaleDateString()}`
+                    : null,
             ].filter(Boolean);
             row.receiptParticulars = parts.join(" | ") || null;
-
-            row.receiptCashAmount = r.rupeesInCash
-                ? parseFloat(r.rupeesInCash)
-                : null;
-            row.receiptPlaColumn = null; // empty
-            row.receiptClassification = null; // empty
-
+            row.receiptCashAmount = r.rupeesInCash ? parseFloat(r.rupeesInCash) : null;
+            row.receiptPlaColumn = null;
+            row.receiptClassification = null;
+            c1Total += row.receiptCashAmount ?? 0;
             rows.push(row);
+        });
+        logger.info(`[CASHBOOK] DR Condition 1 — CashReceipt`, {
+            rowsAdded: cashReceipts.length,
+            totalCashAmount: c1Total,
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 2: Challan (WITHOUT counterfoilNo)
-        // Date=challanDate, No.ofItem=challanNo, counterfoil=empty,
-        // Particulars=remarks, Cash=empty, PLA=amount,
-        // Classification=minorHead-detailHead
+        // DR SIDE — CONDITION 2: Challan WITHOUT counterfoilNo
         // ════════════════════════════════════════════════════════
-        challans
-            .filter((c) => !c.counterfoilNo || c.counterfoilNo.trim() === "")
-            .forEach((c) => {
-                const row = createEmptyRow();
-
-                row.id = `C-DR-${c.id}`;
-
-                row.receiptDate = c.challanDate
-                    ? c.challanDate.toISOString().slice(0, 10)
-                    : null;
-                row.receiptItemNo = c.challanNo ?? null;
-                row.receiptCounterfoilNo = null; // empty — no counterfoil
-                row.receiptParticulars = c.remarks ?? null;
-                row.receiptCashAmount = null; // empty
-                row.receiptPlaColumn = c.amount
-                    ? parseFloat(c.amount.toString())
-                    : null;
-                row.receiptClassification = [c.minorHead, c.detailHead]
-                    .filter(Boolean)
-                    .join("-") || null;
-
-                rows.push(row);
-            });
+        let c2Total = 0;
+        challansWithoutCounterfoil.forEach((c) => {
+            const row = createEmptyRow();
+            row.id = `C-DR-${c.id}`;
+            row.receiptDate = c.challanDate
+                ? c.challanDate.toISOString().slice(0, 10)
+                : null;
+            row.receiptItemNo = c.challanNo ?? null;
+            row.receiptCounterfoilNo = null;
+            row.receiptParticulars = c.remarks ?? null;
+            row.receiptCashAmount = null;
+            row.receiptPlaColumn = c.amount ? parseFloat(c.amount.toString()) : null;
+            row.receiptClassification =
+                [c.minorHead, c.detailHead].filter(Boolean).join("-") || null;
+            c2Total += row.receiptPlaColumn ?? 0;
+            rows.push(row);
+        });
+        logger.info(`[CASHBOOK] DR Condition 2 — Challan (no counterfoil)`, {
+            rowsAdded: challansWithoutCounterfoil.length,
+            totalPlaAmount: c2Total,
+        });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3A: ChallanFromBill (PLA types)
-        // One row per amountType entry
-        // Date=voucharDate, No.ofItem=challanNo, counterfoil=empty,
-        // Particulars=amountType, Cash=empty, PLA=amount,
-        // Classification=majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        challanFromBills
-            .filter((cfb) => PLA_AMOUNT_TYPES.includes(cfb.amountType))
-            .forEach((cfb) => {
-                const row = createEmptyRow();
-
-                row.id = `CFB-DR-PLA-${cfb.id}`;
-
-                row.receiptDate = cfb.voucharDate
-                    ? cfb.voucharDate.toISOString().slice(0, 10)
-                    : null;
-                row.receiptItemNo = cfb.challanNo ?? null;
-                row.receiptCounterfoilNo = null;
-                row.receiptParticulars = cfb.amountType ?? null;
-                row.receiptCashAmount = null;
-                row.receiptPlaColumn = cfb.amount
-                    ? parseFloat(cfb.amount.toString())
-                    : null;
-                row.receiptClassification = buildClassification(
-                    cfb.majorHead, cfb.subMajor, cfb.minorHead
-                );
-
-                rows.push(row);
-            });
+        let c3aTotal = 0;
+        cfbPlaRows.forEach((cfb) => {
+            const row = createEmptyRow();
+            row.id = `CFB-DR-PLA-${cfb.id}`;
+            row.receiptDate = cfb.voucharDate
+                ? cfb.voucharDate.toISOString().slice(0, 10)
+                : null;
+            row.receiptItemNo = cfb.challanNo ?? null;
+            row.receiptCounterfoilNo = null;
+            row.receiptParticulars = cfb.amountType ?? null;
+            row.receiptCashAmount = null;
+            row.receiptPlaColumn = cfb.amount
+                ? parseFloat(cfb.amount.toString())
+                : null;
+            row.receiptClassification = buildClassification(
+                cfb.majorHead, cfb.subMajor, cfb.minorHead
+            );
+            c3aTotal += row.receiptPlaColumn ?? 0;
+            rows.push(row);
+        });
+        logger.info(`[CASHBOOK] DR Condition 3A — ChallanFromBill (PLA types)`, {
+            rowsAdded: cfbPlaRows.length,
+            totalPlaAmount: c3aTotal,
+            amountTypeBreakdown: cfbPlaRows.reduce((acc, r) => {
+                acc[r.amountType] = (acc[r.amountType] ?? 0) +
+                    parseFloat(r.amount?.toString() ?? "0");
+                return acc;
+            }, {}),
+        });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3B: ChallanFromBill (Cash types)
-        // One row per amountType entry
-        // Date=voucharDate, No.ofItem=challanNo, counterfoil=empty,
-        // Particulars=amountType, Cash=amount, PLA=empty,
-        // Classification=majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        challanFromBills
-            .filter((cfb) => CASH_AMOUNT_TYPES.includes(cfb.amountType))
-            .forEach((cfb) => {
-                const row = createEmptyRow();
-
-                row.id = `CFB-DR-CASH-${cfb.id}`;
-
-                row.receiptDate = cfb.voucharDate
-                    ? cfb.voucharDate.toISOString().slice(0, 10)
-                    : null;
-                row.receiptItemNo = cfb.challanNo ?? null;
-                row.receiptCounterfoilNo = null;
-                row.receiptParticulars = cfb.amountType ?? null;
-                row.receiptCashAmount = cfb.amount
-                    ? parseFloat(cfb.amount.toString())
-                    : null;
-                row.receiptPlaColumn = null;
-                row.receiptClassification = buildClassification(
-                    cfb.majorHead, cfb.subMajor, cfb.minorHead
-                );
-
-                rows.push(row);
-            });
+        let c3bTotal = 0;
+        cfbCashRows.forEach((cfb) => {
+            const row = createEmptyRow();
+            row.id = `CFB-DR-CASH-${cfb.id}`;
+            row.receiptDate = cfb.voucharDate
+                ? cfb.voucharDate.toISOString().slice(0, 10)
+                : null;
+            row.receiptItemNo = cfb.challanNo ?? null;
+            row.receiptCounterfoilNo = null;
+            row.receiptParticulars = cfb.amountType ?? null;
+            row.receiptCashAmount = cfb.amount
+                ? parseFloat(cfb.amount.toString())
+                : null;
+            row.receiptPlaColumn = null;
+            row.receiptClassification = buildClassification(
+                cfb.majorHead, cfb.subMajor, cfb.minorHead
+            );
+            c3bTotal += row.receiptCashAmount ?? 0;
+            rows.push(row);
+        });
+        logger.info(`[CASHBOOK] DR Condition 3B — ChallanFromBill (Cash types)`, {
+            rowsAdded: cfbCashRows.length,
+            totalCashAmount: c3bTotal,
+            amountTypeBreakdown: cfbCashRows.reduce((acc, r) => {
+                acc[r.amountType] = (acc[r.amountType] ?? 0) +
+                    parseFloat(r.amount?.toString() ?? "0");
+                return acc;
+            }, {}),
+        });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 4: Challan WITH counterfoilNo
-        // Appears on BOTH DR and CR sides as two separate rows
+        // DR SIDE — CONDITION 4: Challan WITH counterfoilNo (DR + CR)
         // ════════════════════════════════════════════════════════
-        challans
-            .filter((c) => c.counterfoilNo && c.counterfoilNo.trim() !== "")
-            .forEach((c) => {
-                const challanDate = c.challanDate
-                    ? c.challanDate.toISOString().slice(0, 10)
-                    : null;
+        let c4DrTotal = 0;
+        let c4CrTotal = 0;
+        challansWithCounterfoil.forEach((c) => {
+            const challanDate = c.challanDate
+                ? c.challanDate.toISOString().slice(0, 10)
+                : null;
 
-                // ── DR row ───────────────────────────────────────────
-                const drRow = createEmptyRow();
+            const drRow = createEmptyRow();
+            drRow.id = `C-DR-CF-${c.id}`;
+            drRow.receiptDate = challanDate;
+            drRow.receiptItemNo = c.challanNo ?? null;
+            drRow.receiptCounterfoilNo = c.counterfoilNo ?? null;
+            drRow.receiptParticulars = c.remarks ?? null;
+            drRow.receiptCashAmount = null;
+            drRow.receiptPlaColumn = c.amount
+                ? parseFloat(c.amount.toString())
+                : null;
+            drRow.receiptClassification =
+                [c.minorHead, c.detailHead].filter(Boolean).join("-") || null;
+            c4DrTotal += drRow.receiptPlaColumn ?? 0;
+            rows.push(drRow);
 
-                drRow.id = `C-DR-CF-${c.id}`;
-
-                drRow.receiptDate = challanDate;
-                drRow.receiptItemNo = c.challanNo ?? null;
-                drRow.receiptCounterfoilNo = c.counterfoilNo ?? null;
-                drRow.receiptParticulars = c.remarks ?? null;
-                drRow.receiptCashAmount = null;
-                drRow.receiptPlaColumn = c.amount
-                    ? parseFloat(c.amount.toString())
-                    : null;
-                drRow.receiptClassification = [c.minorHead, c.detailHead]
-                    .filter(Boolean)
-                    .join("-") || null;
-
-                rows.push(drRow);
-
-                // ── CR row (same challan, counterfoil present) ───────
-                const crRow = createEmptyRow();
-
-                crRow.id = `C-CR-CF-${c.id}`;
-
-                crRow.disbursementDate = challanDate;
-                crRow.voucherNo = c.challanNo ?? null;
-                crRow.disbursementCounterfoilNo = c.counterfoilNo ?? null;
-                crRow.disbursementDetails = c.remarks ?? null;
-                crRow.disbursementCashAmount = c.amount
-                    ? parseFloat(c.amount.toString())
-                    : null;
-                crRow.chequeNo = null;  // empty
-                crRow.plaColumnPayment = null;  // empty
-                crRow.treasuryClassification = c.minorHead ?? null;
-
-                rows.push(crRow);
-            });
+            const crRow = createEmptyRow();
+            crRow.id = `C-CR-CF-${c.id}`;
+            crRow.disbursementDate = challanDate;
+            crRow.voucherNo = c.challanNo ?? null;
+            crRow.disbursementCounterfoilNo = c.counterfoilNo ?? null;
+            crRow.disbursementDetails = c.remarks ?? null;
+            crRow.disbursementCashAmount = c.amount
+                ? parseFloat(c.amount.toString())
+                : null;
+            crRow.chequeNo = null;
+            crRow.plaColumnPayment = null;
+            crRow.treasuryClassification = c.minorHead ?? null;
+            c4CrTotal += crRow.disbursementCashAmount ?? 0;
+            rows.push(crRow);
+        });
+        logger.info(`[CASHBOOK] DR+CR Condition 4 — Challan (with counterfoil)`, {
+            challansProcessed: challansWithCounterfoil.length,
+            drRowsAdded: challansWithCounterfoil.length,
+            crRowsAdded: challansWithCounterfoil.length,
+            drPlaTotal: c4DrTotal,
+            crCashTotal: c4CrTotal,
+        });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 5: ChallanTwo
-        // Date=kaacChallanDate, No.ofItem=kaacChallanNo,
-        // counterfoil=empty, Particulars=remarks,
-        // Cash=empty, PLA=amount, Classification=minorHead
         // ════════════════════════════════════════════════════════
+        let c5Total = 0;
         challanTwoRows.forEach((ct) => {
             const row = createEmptyRow();
-
             row.id = `CT-DR-${ct.id}`;
-
             row.receiptDate = ct.kaacChallanDate
                 ? ct.kaacChallanDate.toISOString().slice(0, 10)
                 : null;
@@ -352,75 +360,120 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 ? parseFloat(ct.amount.toString())
                 : null;
             row.receiptClassification = ct.minorHead ?? null;
+            c5Total += row.receiptPlaColumn ?? 0;
+            rows.push(row);
+        });
+        logger.info(`[CASHBOOK] DR Condition 5 — ChallanTwo`, {
+            rowsAdded: challanTwoRows.length,
+            totalPlaAmount: c5Total,
+        });
+
+        // ════════════════════════════════════════════════════════
+        // DR SIDE — CONDITION 6: StateChallan (STATE only)
+        // ════════════════════════════════════════════════════════
+        let c6Total = 0;
+        stateChallans.forEach((sc) => {
+            const row = createEmptyRow();
+            row.id = `SC-DR-${sc.id}`;
+            row.receiptDate = sc.challanDate
+                ? sc.challanDate.toISOString().slice(0, 10)
+                : null;
+            row.receiptItemNo = sc.challanNo ?? null;
+            row.receiptCounterfoilNo = null;
+            row.receiptParticulars = sc.remarks ?? null;
+            row.receiptCashAmount = null;
+            row.receiptPlaColumn =
+                sc.totalAmount != null
+                    ? parseFloat((sc.totalAmount * 100000).toFixed(2))
+                    : null;
+            row.receiptClassification = buildClassification(
+                sc.majorHead, sc.subMajorHead, sc.minorHead,
+                sc.subHead, sc.subSubHead, sc.detailHead, sc.subDetailHead
+            );
+            c6Total += row.receiptPlaColumn ?? 0;
+
+            logger.debug(`[CASHBOOK] SC-DR-${sc.id}`, {
+                challanNo: sc.challanNo,
+                challanDate: row.receiptDate,
+                totalAmountInLakhs: sc.totalAmount,
+                convertedAmount: row.receiptPlaColumn,
+                classification: row.receiptClassification,
+            });
 
             rows.push(row);
+        });
+        logger.info(`[CASHBOOK] DR Condition 6 — StateChallan`, {
+            rowsAdded: stateChallans.length,
+            totalPlaAmount: c6Total,
+            // Raw DB values for cross-check
+            rawTotalAmounts: stateChallans.map((sc) => ({
+                id: sc.id,
+                challanNo: sc.challanNo,
+                totalAmountLakhs: sc.totalAmount,
+                convertedRupees: sc.totalAmount != null
+                    ? parseFloat((sc.totalAmount * 100000).toFixed(2))
+                    : null,
+            })),
         });
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 2: Expenditure
-        // Date=voucherDate, VoucherNo=voucherNo, counterfoil=empty,
-        // Classification=remarks, Disbursement Cash=empty,
-        // ChequeNo=chequeNo, Treasury PLA=grossAmount,
-        // Treasury Classification=minorHead
         // ════════════════════════════════════════════════════════
+        let crETotal = 0;
         expenditures.forEach((e) => {
             const row = createEmptyRow();
-
             row.id = `E-CR-${e.id}`;
-
             row.disbursementDate = e.voucherDate
                 ? e.voucherDate.toISOString().slice(0, 10)
                 : null;
             row.voucherNo = e.voucherNo ?? null;
-            row.disbursementCounterfoilNo = null;         // empty
+            row.disbursementCounterfoilNo = null;
             row.disbursementDetails = e.remarks ?? null;
-            row.disbursementCashAmount = null;          // empty
+            row.disbursementCashAmount = null;
             row.chequeNo = e.chequeNo ?? e.chequeBookNo ?? null;
             row.plaColumnPayment = e.grossAmount
                 ? parseFloat(e.grossAmount.toString())
                 : null;
             row.treasuryClassification = e.minorHead ?? null;
-
+            crETotal += row.plaColumnPayment ?? 0;
             rows.push(row);
+        });
+        logger.info(`[CASHBOOK] CR Condition 2 — Expenditure`, {
+            rowsAdded: expenditures.length,
+            totalPlaPayment: crETotal,
         });
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 3: ChallanFromBill (Cash types)
-        // One row per entry
-        // Date=voucharDate, VoucherNo=challanNo (voucharDate field?),
-        // counterfoil=empty, Classification=amountType,
-        // Disbursement Cash=amount (CGST,SGST... types only),
-        // ChequeNo=chequeNo, PLA=empty,
-        // Treasury Classification=majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        challanFromBills
-            .filter((cfb) => CASH_AMOUNT_TYPES.includes(cfb.amountType))
-            .forEach((cfb) => {
-                const row = createEmptyRow();
-
-                row.id = `CFB-CR-${cfb.id}`;
-
-                row.disbursementDate = cfb.voucharDate
-                    ? cfb.voucharDate.toISOString().slice(0, 10)
-                    : null;
-                // Per spec: VoucherNo = voucharDate field value
-                row.voucherNo = cfb.challanNo ?? null;
-                row.disbursementCounterfoilNo = null;
-                row.disbursementDetails = cfb.amountType ?? null;
-                row.disbursementCashAmount = cfb.amount
-                    ? parseFloat(cfb.amount.toString())
-                    : null;
-                row.chequeNo = cfb.chequeNo ?? null;
-                row.plaColumnPayment = null;
-                row.treasuryClassification = buildClassification(
-                    cfb.majorHead, cfb.subMajor, cfb.minorHead
-                );
-
-                rows.push(row);
-            });
+        let crCfbTotal = 0;
+        cfbCashRows.forEach((cfb) => {
+            const row = createEmptyRow();
+            row.id = `CFB-CR-${cfb.id}`;
+            row.disbursementDate = cfb.voucharDate
+                ? cfb.voucharDate.toISOString().slice(0, 10)
+                : null;
+            row.voucherNo = cfb.challanNo ?? null;
+            row.disbursementCounterfoilNo = null;
+            row.disbursementDetails = cfb.amountType ?? null;
+            row.disbursementCashAmount = cfb.amount
+                ? parseFloat(cfb.amount.toString())
+                : null;
+            row.chequeNo = cfb.chequeNo ?? null;
+            row.plaColumnPayment = null;
+            row.treasuryClassification = buildClassification(
+                cfb.majorHead, cfb.subMajor, cfb.minorHead
+            );
+            crCfbTotal += row.disbursementCashAmount ?? 0;
+            rows.push(row);
+        });
+        logger.info(`[CASHBOOK] CR Condition 3 — ChallanFromBill (Cash types)`, {
+            rowsAdded: cfbCashRows.length,
+            totalCashDisbursement: crCfbTotal,
+        });
 
         // ════════════════════════════════════════════════════════
-        // SORT all rows by date (receipt date or disbursement date)
+        // SORT all rows by date
         // ════════════════════════════════════════════════════════
         rows.sort((a, b) => {
             const dateA = a.receiptDate || a.disbursementDate || "";
@@ -429,7 +482,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // ASSIGN running item numbers on DR side (receipt rows only)
+        // ASSIGN running item numbers on DR side
         // ════════════════════════════════════════════════════════
         let itemCounter = 1;
         rows.forEach((row) => {
@@ -439,10 +492,39 @@ export const getCashbookRowsByFy = async (year, sector) => {
             }
         });
 
-        logger.info(`Cashbook generated`, {
+        // ── Final summary ────────────────────────────────────────
+        const drRows = rows.filter((r) => r.receiptDate);
+        const crRows = rows.filter((r) => r.disbursementDate);
+
+        logger.info(`[CASHBOOK] Final summary`, {
             totalRows: rows.length,
-            drRows: rows.filter((r) => r.receiptDate).length,
-            crRows: rows.filter((r) => r.disbursementDate).length,
+            drRows: drRows.length,
+            crRows: crRows.length,
+            // DR column totals
+            drCashTotal: drRows.reduce((s, r) => s + (r.receiptCashAmount ?? 0), 0),
+            drPlaTotal: drRows.reduce((s, r) => s + (r.receiptPlaColumn ?? 0), 0),
+            // CR column totals
+            crCashTotal: crRows.reduce((s, r) => s + (r.disbursementCashAmount ?? 0), 0),
+            crPlaTotal: crRows.reduce((s, r) => s + (r.plaColumnPayment ?? 0), 0),
+            // Per-source DR PLA breakdown
+            drPlaBreakdown: {
+                challanNoCounterfoil: c2Total,
+                challanFromBillPla: c3aTotal,
+                challanWithCounterfoil: c4DrTotal,
+                challanTwo: c5Total,
+                stateChallan: c6Total,
+            },
+            // Per-source DR Cash breakdown
+            drCashBreakdown: {
+                cashReceipt: c1Total,
+                challanFromBillCash: c3bTotal,
+            },
+            // Per-source CR breakdown
+            crBreakdown: {
+                expenditure: crETotal,
+                challanWithCounterfoil: c4CrTotal,
+                challanFromBillCash: crCfbTotal,
+            },
         });
 
         return rows;
@@ -455,13 +537,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
     }
 };
 
-
-
-
-// ─────────────────────────────────────────────────────────────
-// Save cashbook summary to cashbookInformations table
-// Keep only the latest entry per sector (deactivate old ones)
-// ─────────────────────────────────────────────────────────────
 
 export const saveCashbookSummary = async ({
     sector,
@@ -476,16 +551,11 @@ export const saveCashbookSummary = async ({
     try {
         logger.info(`Saving cashbook summary for sector: ${sector}, year: ${year}`);
 
-        // Step 1 — deactivate all previous entries for this sector
         await prisma.cashbookInformations.updateMany({
-            where: {
-                sector: sector ?? undefined,
-                isActive: true,
-            },
+            where: { sector: sector ?? undefined, isActive: true },
             data: { isActive: false },
         });
 
-        // Step 2 — insert the new active entry
         const newEntry = await prisma.cashbookInformations.create({
             data: {
                 sector: sector ?? null,
@@ -501,7 +571,6 @@ export const saveCashbookSummary = async ({
         });
 
         logger.info(`Cashbook summary saved — id: ${newEntry.id}`);
-
         return newEntry;
     } catch (error) {
         logger.error(`Error saving cashbook summary: ${error.message}`);

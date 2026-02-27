@@ -1,4 +1,3 @@
-
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
@@ -7,8 +6,6 @@ import logger from "../../utils/logger.js";
 // Two columns: previous FY + current FY
 // ─────────────────────────────────────────────────────────────
 
-// Helper: parse FY string → { startYear, endYear }
-// e.g. "2025-2026" → { startYear: 2025, endYear: 2026 }
 const parseFY = (financialYear) => {
     if (!financialYear) return { startYear: null, endYear: null };
     const parts = financialYear.split("-");
@@ -18,9 +15,6 @@ const parseFY = (financialYear) => {
     };
 };
 
-// Helper: get date range for a financial year
-// FY runs April 1 (startYear) to March 31 (endYear)
-// Returns null if years are missing — callers skip filter when null
 const getFYDateRange = (startYear, endYear) => {
     if (!startYear || !endYear) return null;
     return {
@@ -29,7 +23,6 @@ const getFYDateRange = (startYear, endYear) => {
     };
 };
 
-// Helper: safely convert Decimal/null to number
 const safeNum = (val) => Number(val ?? 0);
 
 // ─────────────────────────────────────────────────────────────
@@ -37,11 +30,13 @@ const safeNum = (val) => Number(val ?? 0);
 // ─────────────────────────────────────────────────────────────
 
 // 1. Total Revenue Receipts
-// challan (all amounts) + challanFromBill (specific receipt types)
+// challan + challanFromBill (specific types) + stateChallan (STATE/CONSOLIDATED)
 const getTotalRevenueReceipts = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
+    const includeStateChallans =
+        !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-    const [challans, cfbRows] = await Promise.all([
+    const [challans, cfbRows, stateChallanRows] = await Promise.all([
         prisma.challan.findMany({
             where: {
                 isActive: true,
@@ -62,12 +57,34 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
             },
             select: { amount: true },
         }),
+
+        // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
+        // No isActive field on model — filter by sector = "STATE"
+        includeStateChallans
+            ? prisma.stateChallan.findMany({
+                where: {
+                    sector: "STATE",
+                    ...(dateRange ? { challanDate: dateRange } : {}),
+                },
+                select: { totalAmount: true },
+            })
+            : Promise.resolve([]),
     ]);
 
     const challanTotal = challans.reduce((sum, r) => sum + safeNum(r.amount), 0);
     const cfbTotal = cfbRows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 
-    return challanTotal + cfbTotal;
+    // totalAmount stored in lakhs → multiply by 100000
+    const stateChallanTotal = stateChallanRows.reduce(
+        (sum, r) =>
+            sum +
+            (r.totalAmount != null
+                ? parseFloat((r.totalAmount * 100000).toFixed(2))
+                : 0),
+        0
+    );
+
+    return challanTotal + cfbTotal + stateChallanTotal;
 };
 
 // 2. Total Expenditure on Revenue Account
@@ -88,8 +105,6 @@ const getTotalRevenueExpenditure = async (sector, dateRange) => {
 };
 
 // 3. Total Capital Receipts
-// From challan where majorHead is in capital range (4000-5999)
-// Update range as per your actual capital head codes
 const getTotalCapitalReceipts = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -123,7 +138,7 @@ const getTotalCapitalExpenditure = async (sector, dateRange) => {
     return rows.reduce((sum, r) => sum + safeNum(r.grossAmount), 0);
 };
 
-// 5. Loan Received from State Govt (challanTwo → loansReceivedGovt)
+// 5. Loan Received from State Govt
 const getLoanFromStateGovt = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -139,7 +154,7 @@ const getLoanFromStateGovt = async (sector, dateRange) => {
     return rows.reduce((sum, r) => sum + safeNum(r.loansReceivedGovt), 0);
 };
 
-// 6. Loan Received from Other Sources (challanTwo → loansReceivedOther)
+// 6. Loan Received from Other Sources
 const getLoanFromOtherSources = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -155,7 +170,7 @@ const getLoanFromOtherSources = async (sector, dateRange) => {
     return rows.reduce((sum, r) => sum + safeNum(r.loansReceivedOther), 0);
 };
 
-// 7. Recoveries of Loans (carLoanRecovery + houseLoanRecovery)
+// 7. Recoveries of Loans
 const getRecoveriesOfLoans = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -210,7 +225,7 @@ const getLoanRepayOther = async (sector, dateRange) => {
     return rows.reduce((sum, r) => sum + safeNum(r.loanRepayOther), 0);
 };
 
-// 13. Disbursement of Loans (loansAdvances)
+// 13. Disbursement of Loans
 const getDisbursementOfLoans = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -309,7 +324,7 @@ const getOtherRecoveries = async (sector, dateRange) => {
     );
 };
 
-// 26. Security Deposits Refunded (securityDeposit + earnestMoney)
+// 26. Security Deposits Refunded
 const getSecurityDepositsRefunded = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -331,8 +346,7 @@ const getSecurityDepositsRefunded = async (sector, dateRange) => {
     );
 };
 
-// 31. Opening Cash Balance (from OpeningBalance table)
-// Only April (month=4) of the given FY start year
+// 31. Opening Cash Balance
 const getOpeningCashBalance = async (sector, startYear) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -340,7 +354,6 @@ const getOpeningCashBalance = async (sector, startYear) => {
         where: {
             isActive: true,
             month: 4,
-            // Only filter by year if startYear is a valid number
             ...(startYear ? { year: startYear } : {}),
             ...(!isConsolidated ? { sector } : {}),
         },
@@ -351,7 +364,6 @@ const getOpeningCashBalance = async (sector, startYear) => {
 };
 
 // 34. Closing Cash Balance
-// CashReceipt (rupeesInCash) minus challan where counterfoilNo is not null/empty/0
 const getClosingCashBalance = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -364,8 +376,6 @@ const getClosingCashBalance = async (sector, dateRange) => {
             },
             select: { rupeesInCash: true },
         }),
-
-        // Challans with a valid counterfoilNo = treasury challans
         prisma.challan.findMany({
             where: {
                 isActive: true,
@@ -391,7 +401,6 @@ const getClosingCashBalance = async (sector, dateRange) => {
 
 // ─────────────────────────────────────────────────────────────
 // BUILD COLUMN HELPER
-// Computes all derived values for one FY column
 // ─────────────────────────────────────────────────────────────
 
 const buildColumn = ({
@@ -424,16 +433,12 @@ const buildColumn = ({
     const capitalSurplus = capitalDiff >= 0 ? capitalDiff : 0;
 
     // ── Part I: Debt ─────────────────────────────────────────
-    const recoveriesAdvances = 0;           // 8. hardcoded zero
-    const disbursementAdvances = 0;         // 14. hardcoded zero
+    const recoveriesAdvances = 0;
+    const disbursementAdvances = 0;
 
-    // 9. Total Recoveries of Loans and Advances
     const totalRecoveriesLoansAdvances = recoveriesLoans + recoveriesAdvances;
-
-    // 15. Total Disbursement of Loans and Advances
     const totalDisbursementLoansAdvances = disbursementLoans + disbursementAdvances;
 
-    // 10. Total Receipt Part-I
     const totalReceiptPart1 =
         revenueReceipts +
         capitalReceipts +
@@ -441,7 +446,6 @@ const buildColumn = ({
         loanOtherSources +
         totalRecoveriesLoansAdvances;
 
-    // 16. Total Disbursement Part-I
     const totalDisbursementPart1 =
         revenueExpenditure +
         capitalExpenditure +
@@ -450,85 +454,67 @@ const buildColumn = ({
         totalDisbursementLoansAdvances;
 
     // ── Part II: Deposit Fund ────────────────────────────────
-    const fundsReceivedDeposits = 0;        // 18. hardcoded zero
-    const expenditureAgainstDeposits = 0;   // 24. hardcoded zero
-    const otherDeposits = 0;                // 27. hardcoded zero
+    const fundsReceivedDeposits = 0;
+    const expenditureAgainstDeposits = 0;
+    const otherDeposits = 0;
 
-    // 22. Total Receipt Part-II
     const totalReceiptPart2 =
         fundsReceivedDeposits +
         taxesDeducted +
         securityDeducted +
         otherRecoveries;
 
-    // 29. Total Disbursement Part-II
     const totalDisbursementPart2 =
         expenditureAgainstDeposits +
-        taxesDeducted +         // 25. same value as 19
+        taxesDeducted +
         securityRefunded +
         otherDeposits;
 
     // ── Grand Totals ─────────────────────────────────────────
-    // 23. Total Receipts
     const totalReceipts = totalReceiptPart1 + totalReceiptPart2;
-
-    // 30. Total Disbursements
     const totalDisbursements = totalDisbursementPart1 + totalDisbursementPart2;
 
     // ── Balances ─────────────────────────────────────────────
-    // 32. Treasury Balance (Receipt Side) = carried from previous year
     const treasuryBalanceReceiptSide = prevTreasuryBalance;
-
-    // 35. Treasury Balance (Disbursement Side)
     const treasuryBalanceDisbursementSide =
         (totalReceipts - totalDisbursements) + prevTreasuryBalance;
 
-    // 33. Grand Total (Receipt Side)
     const grandTotalReceipt =
         totalReceipts + openingCashBalance + treasuryBalanceReceiptSide;
-
-    // 36. Grand Total (Disbursement Side)
     const grandTotalDisbursement =
         totalDisbursements + closingCashBalance + treasuryBalanceDisbursementSide;
 
     return {
-        // Part I Revenue
         revenueReceipts,
         revenueExpenditure,
         revenueDeficit,
         revenueSurplus,
-        // Part I Capital
         capitalReceipts,
         capitalExpenditure,
         capitalDeficit,
         capitalSurplus,
-        // Part I Debt Receipt
         loanStateGovt,
         loanOtherSources,
         recoveriesLoans,
         recoveriesAdvances,
         totalRecoveriesLoansAdvances,
         totalReceiptPart1,
-        // Part I Debt Disbursement
         loanRepayGovt,
         loanRepayOther,
         disbursementLoans,
         disbursementAdvances,
         totalDisbursementLoansAdvances,
         totalDisbursementPart1,
-        // Part II Receipt
         fundsReceivedDeposits,
         taxesDeducted,
         securityDeducted,
         otherRecoveries,
         totalReceiptPart2,
-        // Part II Disbursement
         expenditureAgainstDeposits,
-        taxesDeductedDisbursement: taxesDeducted,   // same as 19
+        taxesDeductedDisbursement: taxesDeducted,
         securityRefunded,
         otherDeposits,
         totalDisbursementPart2,
-        // Totals & Balances
         totalReceipts,
         totalDisbursements,
         openingCashBalance,
@@ -550,13 +536,11 @@ export const getStatement1Data = async (sector, financialYear) => {
             `Fetching Statement 1 for sector: ${sector ?? "ALL"}, FY: ${financialYear ?? "ALL"}`
         );
 
-        // ── Parse current FY only ────────────────────────────
         const { startYear, endYear } = parseFY(financialYear);
         const currentDateRange = getFYDateRange(startYear, endYear);
 
-        // ── Fetch only CURRENT FY data ───────────────────────
         const [
-            currRevenueReceipts,
+            currRevenueReceipts,        // ← includes stateChallanTotal now
             currRevenueExpenditure,
             currCapitalReceipts,
             currCapitalExpenditure,
@@ -591,8 +575,6 @@ export const getStatement1Data = async (sector, financialYear) => {
             getClosingCashBalance(sector, currentDateRange),
         ]);
 
-        // ── Previous FY column — all zeros, no DB query needed ──
-        // You don't have previous year data in the system yet
         const prevColumn = buildColumn({
             revenueReceipts: 0,
             revenueExpenditure: 0,
@@ -613,8 +595,6 @@ export const getStatement1Data = async (sector, financialYear) => {
             prevTreasuryBalance: 0,
         });
 
-        // ── Current FY column ────────────────────────────────
-        // prevTreasuryBalance = 0 since no previous year data exists
         const currColumn = buildColumn({
             revenueReceipts: currRevenueReceipts,
             revenueExpenditure: currRevenueExpenditure,
@@ -632,13 +612,12 @@ export const getStatement1Data = async (sector, financialYear) => {
             securityRefunded: currSecurityRefunded,
             openingCashBalance: currOpeningCashBalance,
             closingCashBalance: currClosingCashBalance,
-            prevTreasuryBalance: 0, // no previous year treasury to carry forward
+            prevTreasuryBalance: 0,
         });
 
         const fmt = (n) => Number(n ?? 0).toFixed(2);
         const pair = (key) => [fmt(prevColumn[key]), fmt(currColumn[key])];
 
-        // Previous FY label derived from current FY
         const prevStartYear = startYear ? startYear - 1 : null;
         const prevEndYear = endYear ? endYear - 1 : null;
 
@@ -653,43 +632,36 @@ export const getStatement1Data = async (sector, financialYear) => {
                     ? `${prevStartYear}-${prevEndYear}`
                     : "Previous Year",
             },
-            // Part I Revenue
             revenueReceipts: pair("revenueReceipts"),
             revenueExpenditure: pair("revenueExpenditure"),
             revenueDeficit: pair("revenueDeficit"),
             revenueSurplus: pair("revenueSurplus"),
-            // Part I Capital
             capitalReceipts: pair("capitalReceipts"),
             capitalExpenditure: pair("capitalExpenditure"),
             capitalDeficit: pair("capitalDeficit"),
             capitalSurplus: pair("capitalSurplus"),
-            // Part I Debt Receipt
             loanStateGovt: pair("loanStateGovt"),
             loanOtherSources: pair("loanOtherSources"),
             recoveriesLoans: pair("recoveriesLoans"),
             recoveriesAdvances: pair("recoveriesAdvances"),
             totalRecoveriesLoansAdvances: pair("totalRecoveriesLoansAdvances"),
             totalReceiptPart1: pair("totalReceiptPart1"),
-            // Part I Debt Disbursement
             loanRepayGovt: pair("loanRepayGovt"),
             loanRepayOther: pair("loanRepayOther"),
             disbursementLoans: pair("disbursementLoans"),
             disbursementAdvances: pair("disbursementAdvances"),
             totalDisbursementLoansAdvances: pair("totalDisbursementLoansAdvances"),
             totalDisbursementPart1: pair("totalDisbursementPart1"),
-            // Part II Receipt
             fundsReceivedDeposits: pair("fundsReceivedDeposits"),
             taxesDeducted: pair("taxesDeducted"),
             securityDeducted: pair("securityDeducted"),
             otherRecoveries: pair("otherRecoveries"),
             totalReceiptPart2: pair("totalReceiptPart2"),
-            // Part II Disbursement
             expenditureAgainstDeposits: pair("expenditureAgainstDeposits"),
             taxesDeductedDisbursement: pair("taxesDeductedDisbursement"),
             securityRefunded: pair("securityRefunded"),
             otherDeposits: pair("otherDeposits"),
             totalDisbursementPart2: pair("totalDisbursementPart2"),
-            // Totals & Balances
             totalReceipts: pair("totalReceipts"),
             totalDisbursements: pair("totalDisbursements"),
             openingCashBalance: pair("openingCashBalance"),
@@ -704,4 +676,3 @@ export const getStatement1Data = async (sector, financialYear) => {
         throw error;
     }
 };
-

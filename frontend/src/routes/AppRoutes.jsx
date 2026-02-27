@@ -76,7 +76,7 @@ const AppRoutes = createBrowserRouter([
           {
             element: <RequireAuth allowedRoles={["ADMIN"]} />,
             children: [
-              { path: "accountant", element: <Accountant /> },
+              // { path: "accountant", element: <Accountant /> },
               { path: "department", element: <Department /> },
               { path: "division", element: <Division /> },
               { path: "cashier", element: <Cashier /> },

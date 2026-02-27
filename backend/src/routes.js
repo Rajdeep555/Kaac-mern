@@ -21,6 +21,7 @@ import formOneRoutes from "./modules/formOne/formOne.route.js"
 import challanBillRoutes from "./modules/challanBill/challanBill.route.js"
 import formRoutes from "./modules/forms/forms.route.js"
 import statementsRoutes from "./modules/statements/statements.route.js"
+import stateChallanRoutes from "./modules/stateChallan/stateChallan.route.js"
 
 const router = express.Router();
 
@@ -46,6 +47,7 @@ router.use("/v1/formOne", formOneRoutes);
 router.use("/v1/challanFromBill", challanBillRoutes);
 router.use("/v1/forms", formRoutes)
 router.use("/v1/statements", statementsRoutes);
+router.use("/v1/state-challan", stateChallanRoutes)
 
 // router.all(/.*/, (req, res) => {
 //     res.status(404).json({
