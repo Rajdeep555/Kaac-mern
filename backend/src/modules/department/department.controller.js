@@ -2,7 +2,7 @@ import logger from "../../utils/logger.js";
 import { createDepartmentSchema } from "./department.schema.js"
 import { createDepartment, getAllDepartment } from "./department.service.js";
 
-export const create = async (data) => {
+export const create = async (req, res) => {
     try {
         const data = createDepartmentSchema.safeParse(req.body);
 

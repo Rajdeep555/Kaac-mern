@@ -39,21 +39,9 @@ const Expenditure = () => {
   const navigate = useNavigate();
   const isEditMode = Boolean(id);
 
-  // NEW STATE: Track when data is fully loaded
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isExpenditureLoading, setIsExpenditureLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  /* ================= BASIC DATA ================= */
-  const { departments } = useDepartments({ type: "COUNCIL" });
-  const { ddos } = useDdo();
-  const { planNonPlan } = usePlanNonPlan();
-  const financialYearOptions = getFinancialYears(2023).map((fy) => ({
-    label: fy,
-    value: fy,
-  }));
-  const { objectHead } = useObjectHead();
-  const { grantOptions } = useGrants();
 
   /* ================= FORM ================= */
   const { register, handleSubmit, watch, setValue, reset } = useForm({
@@ -152,6 +140,18 @@ const Expenditure = () => {
   const detailHead = watch("detailHead");
   const loansAdvances = watch("loansAdvances");
 
+  /* ================= BASIC DATA ================= */
+  // ✅ CHANGED: sector drives the department list dynamically
+  const { departments } = useDepartments({ type: sector || "" });
+  const { ddos } = useDdo();
+  const { planNonPlan } = usePlanNonPlan();
+  const financialYearOptions = getFinancialYears(2023).map((fy) => ({
+    label: fy,
+    value: fy,
+  }));
+  const { objectHead } = useObjectHead();
+  const { grantOptions } = useGrants();
+
   /* ================= HEAD HIERARCHY ================= */
   const {
     loading,
@@ -177,9 +177,8 @@ const Expenditure = () => {
         setIsExpenditureLoading(true);
         try {
           const response = await getExpenditureById(id);
-          const data = response.data.data; // FIXED: unwrap the nested data
+          const data = response.data.data;
 
-          // Helper to format ISO date → "YYYY-MM-DD" for <input type="date">
           const toDateInput = (isoStr) => {
             if (!isoStr) return "";
             try {
@@ -191,19 +190,15 @@ const Expenditure = () => {
 
           const flatData = {
             ...data,
-
-            // Flatten department/ddo objects → just the ID string
             department: String(data.departmentId ?? data.department?.id ?? ""),
             ddo: String(data.ddoId ?? data.ddo?.id ?? ""),
-
-            // Format ISO dates → "YYYY-MM-DD" for date inputs
             voucherDate: toDateInput(data.voucherDate),
             requisitionDate: toDateInput(data.requisitionDate),
             chequeIssueDate: toDateInput(data.chequeIssueDate),
             treasuryDate: toDateInput(data.treasuryDate),
           };
 
-          console.log("FLAT DATA FOR RESET:", flatData); // Should now show all real values
+          console.log("FLAT DATA FOR RESET:", flatData);
           reset(flatData);
           setIsDataLoaded(true);
         } catch (error) {
@@ -217,7 +212,6 @@ const Expenditure = () => {
 
       loadExpenditure();
     } else {
-      // For create mode, data is "loaded" immediately
       setIsDataLoaded(true);
     }
   }, [id, isEditMode, navigate, reset]);
@@ -226,6 +220,9 @@ const Expenditure = () => {
   useEffect(() => {
     if (!sector || !isDataLoaded || isEditMode) return;
 
+    // ✅ ADDED: reset department and ddo when sector changes
+    setValue("department", "");
+    setValue("ddo", "");
     setValue("majorHead", "");
     setValue("subMajorHead", "");
     setValue("minorHead", "");
@@ -517,9 +514,7 @@ const Expenditure = () => {
 
   /* ================= GET VOUCHER NO (CREATE MODE ONLY) ================= */
   useEffect(() => {
-    if (isEditMode || !sector || !isDataLoaded) {
-      return;
-    }
+    if (isEditMode || !sector || !isDataLoaded) return;
 
     const fetchNextVoucherNo = async () => {
       setIsExpenditureLoading(true);
@@ -558,17 +553,14 @@ const Expenditure = () => {
 
     const amount = Number(loansAdvances);
     if (!amount || amount <= 0) {
-      setValue("loanType", "", {
-        shouldDirty: false,
-        shouldValidate: false,
-      });
+      setValue("loanType", "", { shouldDirty: false, shouldValidate: false });
     }
   }, [loansAdvances, isDataLoaded]);
 
   /* ================= TRANSFORM DATA FOR BACKEND ================= */
   const transformDataForBackend = (data) => {
     const toNumber = (val) => {
-      if (val === "" || val === null || val === undefined) return 0; // ✅ 0 instead of null (Zod decimalField expects number)
+      if (val === "" || val === null || val === undefined) return 0;
       const num = Number(val);
       return isNaN(num) ? 0 : num;
     };
@@ -583,23 +575,16 @@ const Expenditure = () => {
     };
 
     return {
-      /* ================= BASIC ================= */
       sector: data.sector,
       voucherNo: data.voucherNo,
       voucherDate: toISODate(data.voucherDate),
       requisitionNo: data.requisitionNo || null,
       requisitionDate: toISODate(data.requisitionDate),
       grantNo: data.grantNo || null,
-
-      // ✅ FIXED: Both sent as Number — Zod schema transforms them
       departmentId: data.department ? Number(data.department) : null,
       ddoId: data.ddo ? Number(data.ddo) : null,
-
       workName: data.workName || null,
       expenditureType: data.expenditureType,
-
-      /* ================= HEADS ================= */
-      // ✅ FIXED: empty string instead of null — Zod expects string
       majorHead: data.majorHead || "",
       subMajorHead: data.subMajorHead || "",
       minorHead: data.minorHead || "",
@@ -607,14 +592,10 @@ const Expenditure = () => {
       subSubHead: data.subSubHead || "",
       detailHead: data.detailHead || "",
       subDetailHead: data.subDetailHead || "",
-
-      /* ================= CLASSIFICATION ================= */
       salaryType: data.salaryType,
       planType: data.planType,
       financialYear: data.financialYear,
       objectHead: data.objectHead || null,
-
-      /* ================= AMOUNT BREAKUP ================= */
       payOfficers: toNumber(data.payOfficers),
       payEstablishment: toNumber(data.payEstablishment),
       allowanceHonorary: toNumber(data.allowanceHonorary),
@@ -628,10 +609,7 @@ const Expenditure = () => {
       securityDeposit: toNumber(data.securityDeposit),
       earnestMoney: toNumber(data.earnestMoney),
       transferPayment: toNumber(data.transferPayment),
-
       grossAmount: toNumber(data.grossAmount),
-
-      /* ================= DEDUCTIONS ================= */
       cgst: toNumber(data.cgst),
       sgst: toNumber(data.sgst),
       igst: toNumber(data.igst),
@@ -655,22 +633,16 @@ const Expenditure = () => {
       vat: toNumber(data.vat),
       advanceRecovery: toNumber(data.advanceRecovery),
       otherDeductions: toNumber(data.otherDeductions),
-
-      /* ================= CALCULATED TOTALS ================= */
       grossDeduction: toNumber(data.grossDeduction),
       cpfPayable: toNumber(data.cpfPayable),
       netDeduction: toNumber(data.netDeduction),
       netAmount: toNumber(data.netAmount),
       amountPayable: toNumber(data.amountPayable),
       amountInWords: data.amountInWords || "",
-
-      /* ================= REMARKS ================= */
       remarks:
         typeof data.remarks === "string" && data.remarks.trim() !== ""
           ? data.remarks.trim()
           : null,
-
-      /* ================= CHEQUE / TREASURY ================= */
       chequeBookNo: data.chequeBookNo || null,
       chequeNo: data.chequeNo || null,
       chequeIssueDate: toISODate(data.chequeIssueDate),
@@ -686,9 +658,7 @@ const Expenditure = () => {
 
     try {
       const payload = transformDataForBackend(data);
-
-      // Log the payload for debugging
-      // console.log(" SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
+      console.log("SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
 
       let response;
       if (isEditMode) {
@@ -699,16 +669,14 @@ const Expenditure = () => {
         toast.success("Expenditure created successfully!");
       }
 
-      // console.log("Response:", response.data);
       if (!isEditMode) {
-        reset(); // ✅ Clears all fields back to defaultValuesa
+        reset();
       }
 
       navigate("/expenditures");
     } catch (error) {
       console.error("Failed to submit expenditure", error);
 
-      // Log detailed error information
       if (error.response) {
         console.error("Error Details:", {
           status: error.response.status,
@@ -725,9 +693,8 @@ const Expenditure = () => {
 
       toast.error(errorMessage);
 
-      // Log Zod validation errors in detail
       if (error.response?.data?.issues) {
-        console.error("🔍 Validation Errors:", error.response.data.issues);
+        console.error("Validation Errors:", error.response.data.issues);
         error.response.data.issues.forEach((issue) => {
           console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
         });
@@ -744,14 +711,13 @@ const Expenditure = () => {
           <Breadcrumbs
             items={[
               { label: "Dashboard", path: "/" },
-              { label: "Expenditures", path: "/expenditures" }, // ✅ Fixed path
+              { label: "Expenditures", path: "/expenditures" },
               {
                 label: isEditMode ? "Edit Expenditure" : "Create Expenditure",
                 path: "/expenditure",
               },
             ]}
           />
-
           <div>
             <TableButton
               onClick={() => navigate("/generated-expenditure")}
@@ -780,7 +746,6 @@ const Expenditure = () => {
           isExpenditureLoading={isExpenditureLoading}
         />
 
-        {/* Work/Scheme Section */}
         <InputField
           label="Name Of The Work / Scheme"
           name="workName"
@@ -802,7 +767,6 @@ const Expenditure = () => {
           ]}
         />
 
-        {/* Head Hierarchy */}
         <HeadHierarchySection
           register={register}
           loading={loading}
@@ -823,7 +787,6 @@ const Expenditure = () => {
           subDetailHeads={subDetailHeads}
         />
 
-        {/* Classification */}
         <SelectField
           label="Salary / Non Salary"
           name="salaryType"
@@ -858,31 +821,25 @@ const Expenditure = () => {
           options={[...objectHead]}
         />
 
-        {/* Amount Breakup */}
         <AmountBreakupSection
           register={register}
           loansAdvances={loansAdvances}
         />
 
-        {/* Deductions */}
         <DeductionsSection register={register} />
 
-        {/* Remarks */}
         <TextAreaField
           label="Narration / Remarks"
           name="remarks"
           register={register}
         />
 
-        {/* Cheque & Treasury Details */}
         <InputField
           label="Cheque Book No"
           name="chequeBookNo"
           register={register}
         />
-
         <InputField label="Cheque No" name="chequeNo" register={register} />
-
         <DateField
           label="Cheque Issue Date"
           name="chequeIssueDate"
@@ -893,7 +850,11 @@ const Expenditure = () => {
           label="Treasury Name"
           name="treasuryName"
           register={register}
-          options={[]}
+          options={[
+            { value: "01", label: "01-Diphu" },
+            { value: "02", label: "02-Hamren" },
+            { value: "03", label: "03-Bokajan" },
+          ]}
           removable
         />
 
@@ -902,7 +863,6 @@ const Expenditure = () => {
           name="treasuryVoucherNo"
           register={register}
         />
-
         <DateField
           label="Treasury Date"
           name="treasuryDate"

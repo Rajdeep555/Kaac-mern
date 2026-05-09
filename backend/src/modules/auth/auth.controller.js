@@ -33,3 +33,21 @@ export const login = async (req, res) => {
         // })
     }
 }
+
+// ── ADD THIS ──
+export const refresh = async (req, res) => {
+    try {
+        // req.user is set by authMiddleware — contains userId
+        const result = await refreshTokenService(req.user.userId);
+
+        return res.status(200).json({
+            success: true,
+            ...result
+        });
+    } catch (error) {
+        return res.status(401).json({
+            success: false,
+            message: error.message || "Token refresh failed"
+        });
+    }
+};

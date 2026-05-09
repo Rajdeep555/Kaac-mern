@@ -3,15 +3,15 @@ import DataTable from "../../components/DataTable/DataTable";
 
 const GeneratedStateChallans = () => {
   const challans = [
-    {
-      id: 1,
-      challanNo: "1234",
-      challanDate: "20-12-2025",
-      codes: "200-102-2211-3880",
-      ddo: "DDO",
-      treasuryChallanNo: "1220-1D",
-      totalAmount: "99100",
-    },
+    // {
+    //   id: 1,
+    //   challanNo: "1234",
+    //   challanDate: "20-12-2025",
+    //   codes: "200-102-2211-3880",
+    //   ddo: "DDO",
+    //   treasuryChallanNo: "1220-1D",
+    //   totalAmount: "99100",
+    // },
   ];
   const columns = [
     { key: "challanNo", label: "Challan No" },
@@ -51,6 +51,5 @@ const GeneratedStateChallans = () => {
     </>
   );
 };
-
 
 export default GeneratedStateChallans;

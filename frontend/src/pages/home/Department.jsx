@@ -1,155 +1,64 @@
-import React, { useState } from 'react'
-import DataTable from '../../components/DataTable/DataTable';
-import TableButton from '../../components/ui/TableButton';
-import FormOne from '../../components/Forms/FormOne';
+import React, { useState } from "react";
+import DataTable from "../../components/DataTable/DataTable";
+import TableButton from "../../components/ui/TableButton";
+import FormOne from "../../components/Forms/FormOne";
+import { useAllDepartments } from "../../hooks/useAllDepartments";
+import { createDepartment } from "../../api/department.api";
 
 const Department = () => {
-  const cashiers = [
-    {
-      id: 1,
-      name: "Rajdeep",
-      email: "rajdeep@mail.com",
-      phone: "9876543210",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 2,
-      name: "Aman",
-      email: "aman@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "inactive",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-    {
-      id: 3,
-      name: "Kangkan",
-      email: "kng@mail.com",
-      phone: "9123456789",
-      code: "123",
-      ddo: "12-D",
-      status: "active",
-    },
-  ];
+  const { departments, loading, error } = useAllDepartments(); // ← use hook
 
   const columns = [
     { key: "name", label: "Name" },
     { key: "code", label: "Code" },
     { key: "sector", label: "Sector" },
-    { key: "phone", label: "Phone" },
     {
-      key: "status",
+      key: "isActive",
       label: "Status",
       render: (value) => (
         <span
-          className={`px-2 py-1 rounded text-sm font-medium ${value === "active"
-              ? "bg-green-100 text-green-700"
-              : "bg-red-100 text-red-700"
-            }`}>
-          {value}
+          className={`px-2 py-1 rounded text-sm font-medium ${
+            value ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+          }`}>
+          {value ? "active" : "inactive"}
         </span>
       ),
     },
   ];
 
-  const cashierFormFields = [
+  const departmentFormFields = [
     { name: "name", label: "Name", type: "text", placeholder: "Enter name" },
     { name: "code", label: "Code", type: "text", placeholder: "Enter Code" },
-    { name: "sector", label: "Sector", type: "text", placeholder: "Enter Sector" },
+    {
+      name: "sector",
+      label: "Sector",
+      type: "text",
+      placeholder: "Enter Sector",
+    },
   ];
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
   return (
     <>
       <div className={`${isModalOpen ? "hidden" : "block"} p-6 space-y-6`}>
-        {/* Page Heading */}
         <h1 className="font-unbounded text-3xl font-normal">
           Department Management
         </h1>
 
-        {/*  Table */}
+        {error && (
+          <p className="text-red-600 text-sm">Failed to load departments.</p>
+        )}
+
         <DataTable
-          data={cashiers}
+          data={departments} // ← real data
           columns={columns}
-          searchableKeys={["name", "email", "phone"]}
-          statusKey="status"
+          searchableKeys={["name", "code", "sector"]}
+          statusKey="isActive" // ← matches Prisma field name
           pageSize={10}
+          loading={loading} // ← pass loading if DataTable supports it
           actionSlot={
             <TableButton
               name="Add New Department"
@@ -158,10 +67,11 @@ const Department = () => {
           }
         />
       </div>
+
       {isModalOpen && (
         <FormOne
           isOpen={isModalOpen}
-          fields={cashierFormFields}
+          fields={departmentFormFields}
           onClose={() => {
             setFormError("");
             setIsModalOpen(false);
@@ -173,15 +83,11 @@ const Department = () => {
             setSaving(true);
             setFormError("");
             try {
-              const res = await createCashier(data);
+              const res = await createDepartment(data);
               console.log("backend res", res.data);
               setIsModalOpen(false);
             } catch (error) {
               setFormError(error?.response?.data?.message || error.message);
-              console.error(
-                "Create cashier failed:",
-                error?.response?.data || error.message
-              );
             } finally {
               setSaving(false);
             }
@@ -189,7 +95,7 @@ const Department = () => {
         />
       )}
     </>
-  )
-}
+  );
+};
 
-export default Department
+export default Department;

@@ -25,7 +25,7 @@ export const loginUser = async ({ email, password }) => {
             role: user.role,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "1h" }
+        { expiresIn: "30m" }
     );
     return {
         token,
@@ -37,3 +37,24 @@ export const loginUser = async ({ email, password }) => {
         }
     }
 }
+
+
+
+export const refreshTokenService = async (userId) => {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user || !user.isActive) {
+        throw new Error("User not found or inactive");
+    }
+
+    const token = jwt.sign(
+        { userId: user.id, role: user.role },
+        process.env.JWT_SECRET,
+        { expiresIn: "30m" }
+    );
+
+    return {
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+    };
+};

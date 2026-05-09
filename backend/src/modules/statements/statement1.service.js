@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
@@ -105,18 +106,36 @@ const getTotalRevenueExpenditure = async (sector, dateRange) => {
 };
 
 // 3. Total Capital Receipts
+// const getTotalCapitalReceipts = async (sector, dateRange) => {
+//     const isConsolidated = !sector || sector === "CONSOLIDATED";
+
+//     const rows = await prisma.challan.findMany({
+//         where: {
+//             isActive: true,
+//             majorHead: { gte: "4000", lte: "5999" },
+//             ...(!isConsolidated ? { challanType: sector } : {}),
+//             ...(dateRange ? { challanDate: dateRange } : {}),
+//         },
+//         select: { amount: true },
+//     });
+
+//     return rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
+// };
+
 const getTotalCapitalReceipts = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
-    const rows = await prisma.challan.findMany({
-        where: {
-            isActive: true,
-            majorHead: { gte: "4000", lte: "5999" },
-            ...(!isConsolidated ? { challanType: sector } : {}),
-            ...(dateRange ? { challanDate: dateRange } : {}),
-        },
-        select: { amount: true },
-    });
+    const rows = await prisma.$queryRaw`
+        SELECT amount FROM "Challan"
+        WHERE "isActive" = true
+        AND CAST("majorHead" AS INTEGER) BETWEEN 4000 AND 5999
+        ${!isConsolidated
+            ? Prisma.sql`AND "challanType" = ${sector}::"ChallanType"`
+            : Prisma.empty}
+        ${dateRange
+            ? Prisma.sql`AND "challanDate" >= ${dateRange.gte} AND "challanDate" <= ${dateRange.lte}`
+            : Prisma.empty}
+    `;
 
     return rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 };

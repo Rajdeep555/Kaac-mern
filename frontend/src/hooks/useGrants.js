@@ -23,7 +23,7 @@ export const useGrants = () => {
 
                 setGrantOptions(
                     list.map((grant) => ({
-                        label: grant.grantName || grant.name || `Grant ${grant.id}`,
+                        label: `${grant.code || grant.id} - ${grant.name || grant.grantName}`,
                         value: grant.id,
                     }))
                 );
