@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-const NotFound = () => {
+const Unauthorized = () => {
   const navigate = useNavigate();
 
   return (
@@ -17,16 +17,28 @@ const NotFound = () => {
           maxWidth: "420px",
           width: "100%",
         }}>
-        {/* 404 big number */}
-        <h1
-          className="font-bold mb-1"
-          style={{ fontSize: "72px", color: "#0f2744", lineHeight: 1 }}>
-          404
-        </h1>
+        {/* Icon */}
+        <div
+          className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+          style={{ background: "#fff7ed", border: "2px solid #fde68a" }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="#c9a84c" strokeWidth="1.5" />
+            <line
+              x1="12"
+              y1="7"
+              x2="12"
+              y2="13"
+              stroke="#c9a84c"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <circle cx="12" cy="16.5" r="1" fill="#c9a84c" />
+          </svg>
+        </div>
 
         {/* Tricolor accent bar */}
         <div
-          className="w-16 h-1 rounded-full my-4"
+          className="w-16 h-1 rounded-full mb-5"
           style={{
             background:
               "linear-gradient(90deg, #ff9933 33.33%, #ffffff 33.33%, #ffffff 66.66%, #138808 66.66%)",
@@ -38,23 +50,23 @@ const NotFound = () => {
         <p
           className="text-xs font-bold tracking-widest uppercase mb-2"
           style={{ color: "#c9a84c" }}>
-          Page Not Found
+          Access Restricted
         </p>
-        <h2 className="text-xl font-bold mb-2" style={{ color: "#0f2744" }}>
-          Oops! Wrong Turn
-        </h2>
+        <h1 className="text-xl font-bold mb-2" style={{ color: "#0f2744" }}>
+          Unauthorized Access
+        </h1>
         <p className="text-sm mb-1" style={{ color: "#6b7280" }}>
-          The page you are looking for doesn't exist or has been moved.
+          You don't have permission to access this page.
         </p>
         <p className="text-xs mb-8" style={{ color: "#9ca3af" }}>
-          Check the URL or navigate back to the dashboard.
+          Please contact your administrator if you believe this is a mistake.
         </p>
 
         {/* Buttons */}
         <div className="flex gap-3 w-full">
           <button
             onClick={() => navigate(-1)}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-semibold"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-semibold transition-all"
             style={{
               borderColor: "#e5e7eb",
               background: "#f9fafb",
@@ -82,14 +94,14 @@ const NotFound = () => {
           </button>
 
           <button
-            onClick={() => navigate("/")}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold"
+            onClick={() => navigate("/login")}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all"
             style={{ background: "#0f2744", color: "#fff" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#1a3a5c")}
             onMouseLeave={(e) =>
               (e.currentTarget.style.background = "#0f2744")
             }>
-            Dashboard
+            Login
             <svg
               width="14"
               height="14"
@@ -112,4 +124,4 @@ const NotFound = () => {
   );
 };
 
-export default NotFound;
+export default Unauthorized;

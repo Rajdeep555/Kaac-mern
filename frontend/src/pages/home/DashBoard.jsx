@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import DashboardBox from "../../components/ui/DashboardBox";
 import { useAuth } from "../../context/AuthContext";
 import { capitalizeFullName } from "../../utils/string.js";
@@ -11,11 +12,22 @@ import {
 import { MdOutlineAccountBalance, MdOutlineAssignment } from "react-icons/md";
 import { FiArrowRight } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
+import {
+  getFinancialYear,
+  formatLastSync,
+} from "../../utils/adminFrontendData.js";
+import { usePersonnelStats } from "../../hooks/usePersonnelStats.js";
 
 const DashBoard = () => {
   const greetings = useGreeting();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const { stats, loading, error } = usePersonnelStats();
+
+  useEffect(() => {
+    setLastSyncedAt(new Date());
+  }, []);
 
   // Today's date formatted
   const today = new Date().toLocaleDateString("en-IN", {
@@ -28,7 +40,7 @@ const DashBoard = () => {
   const personnelData = [
     {
       title: "Cashier",
-      count: 99,
+      count: loading ? "..." : stats.cashier,
       paragraph: "Active this month",
       icon: "💼",
       trend: "up",
@@ -36,7 +48,7 @@ const DashBoard = () => {
     },
     {
       title: "DDO",
-      count: 12,
+      count: loading ? "..." : stats.ddo,
       paragraph: "Active this month",
       icon: "📂",
       trend: "down",
@@ -44,7 +56,7 @@ const DashBoard = () => {
     },
     {
       title: "Department",
-      count: 45,
+      count: loading ? "..." : stats.department,
       paragraph: "Registered depts.",
       icon: "🏛️",
       trend: "up",
@@ -52,7 +64,7 @@ const DashBoard = () => {
     },
     {
       title: "Division",
-      count: 1200,
+      count: loading ? "..." : stats.division,
       paragraph: "Total divisions",
       icon: "📊",
       trend: "up",
@@ -257,13 +269,13 @@ const DashBoard = () => {
           },
           {
             label: "Financial Year",
-            value: "2024–25",
+            value: getFinancialYear(), // ✅ dynamic
             color: "#1a3a5c",
             dot: "#c9a84c",
           },
           {
             label: "Last Sync",
-            value: "Today, 11:30 AM",
+            value: formatLastSync(lastSyncedAt), // ✅ dynamic
             color: "#374151",
             dot: "#93b8d8",
           },
@@ -337,7 +349,6 @@ const DashBoard = () => {
             borderColor: "#e5e7eb",
             boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
           }}>
-          {/* Header */}
           <div
             className="px-4 py-3 border-b flex items-center justify-between"
             style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}>
@@ -357,13 +368,11 @@ const DashBoard = () => {
             </span>
           </div>
 
-          {/* Activity list */}
           <div
             className="flex flex-col divide-y"
             style={{ borderColor: "#f3f4f6" }}>
             {recentActivities.map((act, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3">
-                {/* Type dot */}
                 <div
                   className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ background: typeColors[act.type] || "#374151" }}
@@ -398,7 +407,6 @@ const DashBoard = () => {
             width: "240px",
             flexShrink: 0,
           }}>
-          {/* Header */}
           <div
             className="px-4 py-3 border-b"
             style={{ borderColor: "#e5e7eb", background: "#0f2744" }}>
@@ -413,7 +421,6 @@ const DashBoard = () => {
             </div>
           </div>
 
-          {/* Links */}
           <div className="flex flex-col p-3 gap-2">
             {quickLinks.map((link) => (
               <button

@@ -36,19 +36,17 @@ import EditExpenditure from "../pages/cashier/expenditure/EditExpenditure";
 import CashReceipt from "../pages/cashier/CashReceipt";
 import GeneratedCashReceipt from "../pages/cashier/GeneratedCashReceipt";
 import ChallanOfRecoveryFromBills from "../pages/cashier/ChallanOfRecoveryFromBills";
+import Unauthorized from "../components/ui/Unauthorized";
+import NotFound from "../pages/not-found/NotFound";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
   { path: "/login", element: <Login /> },
   {
     path: "/unauthorized",
-    element: (
-      <div className="p-6 text-center">
-        <h1 className="text-2xl font-bold">Unauthorized Access</h1>
-        <p>You don't have permission to access this page.</p>
-      </div>
-    ),
+    element: <Unauthorized />,
   },
+  { path: "*", element: <NotFound /> },
 
   {
     element: <RequireAuth />,
