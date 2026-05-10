@@ -11,17 +11,24 @@ import { http } from "../api/apiClient";
 
 const AuthContext = createContext(null);
 const STORAGE_KEY = "app_auth";
-const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 min → logout if idle
-const REFRESH_THRESHOLD = 5 * 60 * 1000; // refresh token 5 min before expiry
+const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 min
+const REFRESH_THRESHOLD = 5 * 60 * 1000; // refresh 5 min before expiry
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const inactivityTimer = useRef(null); // logout timer
-  const refreshTimer = useRef(null); // token refresh timer
+  const inactivityTimer = useRef(null);
+  const refreshTimer = useRef(null);
   const isAuthedRef = useRef(false);
+  const isLoggingOutRef = useRef(false);
+  const isLoggingInRef = useRef(false);
+  const tokenRef = useRef(null); // ← tracks latest token for scheduleRefresh
+  const clearSessionRef = useRef(null);
+  const resetInactivityRef = useRef(null);
+  const silentRefreshRef = useRef(null);
+  const scheduleRefreshRef = useRef(null);
 
   const isAuthed = !!token;
 
@@ -29,8 +36,16 @@ export function AuthProvider({ children }) {
     isAuthedRef.current = isAuthed;
   }, [isAuthed]);
 
+  // Keep tokenRef in sync
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
   // ── Clear Session ──
   const clearSession = useCallback(() => {
+    isLoggingOutRef.current = true;
+    isLoggingInRef.current = false;
+    delete http.defaults.headers.common.Authorization;
     localStorage.removeItem(STORAGE_KEY);
     setToken(null);
     setUser(null);
@@ -38,47 +53,85 @@ export function AuthProvider({ children }) {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     inactivityTimer.current = null;
     refreshTimer.current = null;
+    setTimeout(() => {
+      isLoggingOutRef.current = false;
+    }, 200);
   }, []);
+
+  useEffect(() => {
+    clearSessionRef.current = clearSession;
+  }, [clearSession]);
 
   // ── Set Session ──
   const setSession = useCallback(({ token: t, user: u }) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: t, user: u }));
+    http.defaults.headers.common.Authorization = `Bearer ${t}`;
     setToken(t);
     setUser(u);
   }, []);
 
-  // ── Silently refresh the token ──
+  // ── Schedule token refresh based on actual token expiry ──
+  const scheduleRefresh = useCallback((overrideToken) => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+
+    const tok = overrideToken || tokenRef.current;
+    if (!tok) return;
+
+    let delay = INACTIVITY_LIMIT - REFRESH_THRESHOLD; // fallback: 25 min
+    try {
+      const payload = JSON.parse(atob(tok.split(".")[1]));
+      const msUntilExpiry = payload.exp * 1000 - Date.now();
+      delay = Math.max(msUntilExpiry - REFRESH_THRESHOLD, 0);
+    } catch {
+      // malformed token — use fallback delay
+    }
+
+    refreshTimer.current = setTimeout(() => {
+      silentRefreshRef.current?.();
+    }, delay);
+  }, []);
+
+  useEffect(() => {
+    scheduleRefreshRef.current = scheduleRefresh;
+  }, [scheduleRefresh]);
+
+  // ── Silent refresh ──
   const silentRefresh = useCallback(async () => {
     if (!isAuthedRef.current) return;
     try {
       const res = await http.post("/auth/refresh");
       const { token: newToken, user: newUser } = res.data;
       setSession({ token: newToken, user: newUser });
-      scheduleRefresh(); // schedule next refresh
+      scheduleRefreshRef.current?.(newToken); // pass new token explicitly
     } catch {
-      clearSession(); // refresh failed → logout
+      clearSessionRef.current?.();
     }
-  }, []);
+  }, [setSession]);
 
-  // ── Schedule token refresh 5 min before 30min expiry = at 25min ──
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      silentRefresh();
-    }, INACTIVITY_LIMIT - REFRESH_THRESHOLD); // fires at 25 min
+  useEffect(() => {
+    silentRefreshRef.current = silentRefresh;
   }, [silentRefresh]);
 
-  // ── Reset inactivity timer on user activity ──
+  // ── Reset inactivity timer ──
+  // Also resets the refresh schedule so active users never get logged out
   const resetInactivityTimer = useCallback(() => {
     if (!isAuthedRef.current) return;
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     inactivityTimer.current = setTimeout(() => {
-      clearSession(); // idle for 30 min → logout
+      clearSessionRef.current?.();
     }, INACTIVITY_LIMIT);
-  }, [clearSession]);
+
+    // ← KEY FIX: reschedule refresh on every activity so token stays fresh
+    scheduleRefreshRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    resetInactivityRef.current = resetInactivityTimer;
+  }, [resetInactivityTimer]);
 
   // ── Attach activity listeners ONCE ──
   useEffect(() => {
+    const handleActivity = () => resetInactivityRef.current?.();
     const activityEvents = [
       "mousemove",
       "mousedown",
@@ -88,17 +141,17 @@ export function AuthProvider({ children }) {
       "click",
     ];
     activityEvents.forEach((e) =>
-      window.addEventListener(e, resetInactivityTimer, { passive: true }),
+      window.addEventListener(e, handleActivity, { passive: true }),
     );
     return () => {
       activityEvents.forEach((e) =>
-        window.removeEventListener(e, resetInactivityTimer),
+        window.removeEventListener(e, handleActivity),
       );
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     };
-  }, []); // attach once
+  }, []);
 
-  // ── Start both timers when user logs in, stop on logout ──
+  // ── Start/stop timers on auth state change ──
   useEffect(() => {
     if (isAuthed) {
       resetInactivityTimer();
@@ -117,15 +170,17 @@ export function AuthProvider({ children }) {
         setAuthLoading(false);
         return;
       }
-
       try {
         const parsed = JSON.parse(raw);
         const savedToken = parsed?.token;
         if (!savedToken) throw new Error("No token");
 
-        setToken(savedToken);
-        http.defaults.headers.common.Authorization = `Bearer ${savedToken}`;
+        // ← KEY FIX: reject already-expired tokens immediately
+        const payload = JSON.parse(atob(savedToken.split(".")[1]));
+        if (payload.exp * 1000 < Date.now()) throw new Error("Token expired");
 
+        http.defaults.headers.common.Authorization = `Bearer ${savedToken}`;
+        setToken(savedToken);
         const res = await http.get("/auth/me");
         setUser(res.data.user);
       } catch {
@@ -151,20 +206,36 @@ export function AuthProvider({ children }) {
     const interceptor = http.interceptors.response.use(
       (res) => res,
       (error) => {
-        if (error.response?.status === 401) clearSession();
+        const is401 = error.response?.status === 401;
+        const isLoginEndpoint = error.config?.url?.includes("/auth/login");
+        if (
+          is401 &&
+          !isLoggingOutRef.current &&
+          !isLoggingInRef.current &&
+          !isLoginEndpoint
+        ) {
+          clearSessionRef.current?.();
+        }
         return Promise.reject(error);
       },
     );
     return () => http.interceptors.response.eject(interceptor);
-  }, [clearSession]);
+  }, []);
 
   // ── Login ──
   const login = useCallback(
     async ({ email, password }) => {
-      const res = await http.post("/auth/login", { email, password });
-      const { token, user } = res.data;
-      setSession({ token, user });
-      return res.data;
+      isLoggingInRef.current = true;
+      isLoggingOutRef.current = false;
+      delete http.defaults.headers.common.Authorization;
+      try {
+        const res = await http.post("/auth/login", { email, password });
+        const { token, user } = res.data;
+        setSession({ token, user });
+        return res.data;
+      } finally {
+        isLoggingInRef.current = false;
+      }
     },
     [setSession],
   );

@@ -104,6 +104,7 @@ const AppRoutes = createBrowserRouter([
               { path: "challan/:id", element: <Challan /> },
               { path: "generated-challan", element: <GeneratedChallans /> },
               { path: "state-challan", element: <StateChallan /> },
+              { path: "/state-challan/:id", element: <StateChallan /> },
               {
                 path: "generated-state-challan",
                 element: <GeneratedStateChallans />,

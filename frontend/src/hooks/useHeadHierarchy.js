@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { getHeadHierarchy } from "../api/head.api.js";
 
-export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept isEditMode
+export const useHeadHierarchy = (sector, isEditMode = false) => {
     const [loading, setLoading] = useState(false);
-
     const [majorHeads, setMajorHeads] = useState([]);
     const [subMajors, setSubMajors] = useState([]);
     const [minors, setMinors] = useState([]);
@@ -14,20 +13,18 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
 
     /* ================= MAJOR ================= */
     useEffect(() => {
-        if (!sector || isEditMode) return; // ✅ Skip in edit mode
+        if (!sector || isEditMode) return;
 
         const fetchMajorHeads = async () => {
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({ sector, level: "MAJOR" });
-
                 setMajorHeads(
                     res.data.data.map((h) => ({
                         label: `${h.majorHeadCode} - ${h.majorHead}`,
                         value: h.majorHeadCode,
                     }))
                 );
-
                 setSubMajors([]);
                 setMinors([]);
                 setSubHeads([]);
@@ -42,28 +39,54 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
         };
 
         fetchMajorHeads();
-    }, [sector, isEditMode]); // ✅ Add isEditMode to deps
+    }, [sector, isEditMode]);
+
+    // ── Also fetch major heads in edit mode when sector becomes available ──
+    useEffect(() => {
+        if (!sector || !isEditMode) return;
+
+        const fetchMajorHeads = async () => {
+            try {
+                setLoading(true);
+                const res = await getHeadHierarchy({ sector, level: "MAJOR" });
+                setMajorHeads(
+                    res.data.data.map((h) => ({
+                        label: `${h.majorHeadCode} - ${h.majorHead}`,
+                        value: h.majorHeadCode,
+                    }))
+                );
+            } catch (err) {
+                console.error("Major head error (edit):", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchMajorHeads();
+    }, [sector, isEditMode]);
 
     /* ================= SUB MAJOR ================= */
+    // sectorOverride lets edit-mode cascade pass sector directly
+    // instead of relying on the closed-over sector (which may still be "")
     const fetchSubMajors = useCallback(
-        async (majorHeadCode) => {
-            if (majorHeadCode === "") return;
+        async (majorHeadCode, sectorOverride) => {
+            if (!majorHeadCode) return;
+            const activeSector = sectorOverride || sector;
+            if (!activeSector) return;
 
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({
-                    sector,
+                    sector: activeSector,
                     level: "SUB_MAJOR",
                     majorHeadCode,
                 });
-
                 setSubMajors(
                     res.data.data.map((h) => ({
                         label: `${h.subMajorCode} - ${h.subMajor}`,
                         value: h.subMajorCode,
                     }))
                 );
-
                 setMinors([]);
                 setSubHeads([]);
                 setSubSubHeads([]);
@@ -80,25 +103,25 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
 
     /* ================= MINOR ================= */
     const fetchMinors = useCallback(
-        async ({ majorHeadCode, subMajorCode }) => {
-            if (subMajorCode === "") return;
+        async ({ majorHeadCode, subMajorCode, sectorOverride }) => {
+            if (!subMajorCode) return;
+            const activeSector = sectorOverride || sector;
+            if (!activeSector) return;
 
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({
-                    sector,
+                    sector: activeSector,
                     level: "MINOR",
                     majorHeadCode,
                     subMajorCode,
                 });
-
                 setMinors(
                     res.data.data.map((h) => ({
                         label: `${h.minorHeadCode} - ${h.minorHead}`,
                         value: h.minorHeadCode,
                     }))
                 );
-
                 setSubHeads([]);
                 setSubSubHeads([]);
                 setDetailHeads([]);
@@ -114,26 +137,26 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
 
     /* ================= SUB HEAD ================= */
     const fetchSubHeads = useCallback(
-        async ({ majorHeadCode, subMajorCode, minorHeadCode }) => {
-            if (minorHeadCode === "") return;
+        async ({ majorHeadCode, subMajorCode, minorHeadCode, sectorOverride }) => {
+            if (!minorHeadCode) return;
+            const activeSector = sectorOverride || sector;
+            if (!activeSector) return;
 
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({
-                    sector,
+                    sector: activeSector,
                     level: "SUB_HEAD",
                     majorHeadCode,
                     subMajorCode,
                     minorHeadCode,
                 });
-
                 setSubHeads(
                     res.data.data.map((h) => ({
                         label: `${h.subHeadCode} - ${h.subHead}`,
                         value: h.subHeadCode,
                     }))
                 );
-
                 setSubSubHeads([]);
                 setDetailHeads([]);
                 setSubDetailHeads([]);
@@ -148,27 +171,27 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
 
     /* ================= SUB SUB HEAD ================= */
     const fetchSubSubHeads = useCallback(
-        async ({ majorHeadCode, subMajorCode, minorHeadCode, subHeadCode }) => {
-            if (subHeadCode === "") return;
+        async ({ majorHeadCode, subMajorCode, minorHeadCode, subHeadCode, sectorOverride }) => {
+            if (!subHeadCode) return;
+            const activeSector = sectorOverride || sector;
+            if (!activeSector) return;
 
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({
-                    sector,
+                    sector: activeSector,
                     level: "SUB_SUB_HEAD",
                     majorHeadCode,
                     subMajorCode,
                     minorHeadCode,
                     subHeadCode,
                 });
-
                 setSubSubHeads(
                     res.data.data.map((h) => ({
                         label: `${h.subSubHeadCode} - ${h.subSubHead}`,
                         value: h.subSubHeadCode,
                     }))
                 );
-
                 setDetailHeads([]);
                 setSubDetailHeads([]);
             } catch (err) {
@@ -182,13 +205,15 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
 
     /* ================= DETAIL ================= */
     const fetchDetailHeads = useCallback(
-        async ({ majorHeadCode, subMajorCode, minorHeadCode, subHeadCode, subSubHeadCode }) => {
-            if (subSubHeadCode === "") return;
+        async ({ majorHeadCode, subMajorCode, minorHeadCode, subHeadCode, subSubHeadCode, sectorOverride }) => {
+            if (!subSubHeadCode) return;
+            const activeSector = sectorOverride || sector;
+            if (!activeSector) return;
 
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({
-                    sector,
+                    sector: activeSector,
                     level: "DETAIL",
                     majorHeadCode,
                     subMajorCode,
@@ -196,14 +221,12 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
                     subHeadCode,
                     subSubHeadCode,
                 });
-
                 setDetailHeads(
                     res.data.data.map((h) => ({
                         label: `${h.detailHeadCode} - ${h.detailHead}`,
                         value: h.detailHeadCode,
                     }))
                 );
-
                 setSubDetailHeads([]);
             } catch (err) {
                 console.error("Detail error:", err);
@@ -216,20 +239,15 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
 
     /* ================= SUB DETAIL ================= */
     const fetchSubDetailHeads = useCallback(
-        async ({
-            majorHeadCode,
-            subMajorCode,
-            minorHeadCode,
-            subHeadCode,
-            subSubHeadCode,
-            detailHeadCode,
-        }) => {
-            if (detailHeadCode === "") return;
+        async ({ majorHeadCode, subMajorCode, minorHeadCode, subHeadCode, subSubHeadCode, detailHeadCode, sectorOverride }) => {
+            if (!detailHeadCode) return;
+            const activeSector = sectorOverride || sector;
+            if (!activeSector) return;
 
             try {
                 setLoading(true);
                 const res = await getHeadHierarchy({
-                    sector,
+                    sector: activeSector,
                     level: "SUB_DETAIL",
                     majorHeadCode,
                     subMajorCode,
@@ -238,7 +256,6 @@ export const useHeadHierarchy = (sector, isEditMode = false) => { // ✅ Accept 
                     subSubHeadCode,
                     detailHeadCode,
                 });
-
                 setSubDetailHeads(
                     res.data.data.map((h) => ({
                         label: `${h.subDetailHeadCode} - ${h.subDetailHead}`,

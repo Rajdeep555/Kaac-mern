@@ -8,7 +8,14 @@ const Logout = () => {
 
   useEffect(() => {
     logout();
-    navigate("/login", { replace: true });
+    setTimeout(() => {
+      // Pass a unique timestamp in state so React Router
+      // generates a new location.key → forces Login to remount
+      navigate("/login", {
+        replace: true,
+        state: { fresh: Date.now() },
+      });
+    }, 50);
   }, []);
 
   return null;

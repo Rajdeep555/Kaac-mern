@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { FiMail, FiLock, FiEye, FiEyeOff, FiAlertCircle } from "react-icons/fi";
@@ -7,7 +7,7 @@ import logo from "../../assets/logo.jpg";
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, isAuthed } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,9 +17,18 @@ const Login = () => {
 
   const from = location.state?.from?.pathname || "/";
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthed) navigate(from, { replace: true });
+  }, [isAuthed]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (loading) return;
+    // If loading is somehow stuck, reset and bail — user can click again
+    if (loading) {
+      setLoading(false);
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -41,14 +50,13 @@ const Login = () => {
     const month = now.getMonth();
     const startYear = month >= 3 ? year : year - 1;
     const endYear = startYear + 1;
-
-    return `${startYear} – ${String(endYear).slice(2)}`; // e.g. "2025 – 26"
+    return `${startYear} – ${String(endYear).slice(2)}`;
   };
+
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center relative overflow-hidden"
       style={{ background: "#f0f2f5", fontFamily: "'Georgia', serif" }}>
-      {/* ── Subtle background grid pattern ── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -57,8 +65,6 @@ const Login = () => {
           backgroundSize: "32px 32px",
         }}
       />
-
-      {/* ── Decorative corner shapes ── */}
       <div
         className="absolute top-0 left-0 w-64 h-64 pointer-events-none"
         style={{
@@ -74,7 +80,6 @@ const Login = () => {
         }}
       />
 
-      {/* ── Main Card ── */}
       <div
         className="relative flex overflow-hidden rounded-lg w-full"
         style={{
@@ -90,7 +95,6 @@ const Login = () => {
             background:
               "linear-gradient(160deg, #0f2744 0%, #1a3a5c 55%, #1e4976 100%)",
           }}>
-          {/* Tricolor stripe */}
           <div
             className="absolute top-0 left-0 h-1.5"
             style={{
@@ -100,7 +104,6 @@ const Login = () => {
             }}
           />
 
-          {/* Top: Emblem + Org name */}
           <div className="flex flex-col items-center gap-4 mt-4">
             <div
               className="w-24 h-24 rounded-full flex items-center justify-center overflow-hidden"
@@ -108,33 +111,8 @@ const Login = () => {
                 border: "2px solid #c9a84c",
                 background: "rgba(201,168,76,0.12)",
               }}>
-              {/* <svg width="48" height="48" viewBox="0 0 30 30" fill="none">
-                <circle
-                  cx="15"
-                  cy="15"
-                  r="12"
-                  stroke="#c9a84c"
-                  strokeWidth="1.5"
-                  fill="none"
-                />
-                <circle cx="15" cy="15" r="3" fill="#c9a84c" />
-                {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map(
-                  (deg, i) => (
-                    <line
-                      key={i}
-                      x1="15"
-                      y1="15"
-                      x2={15 + 9 * Math.cos(((deg - 90) * Math.PI) / 180)}
-                      y2={15 + 9 * Math.sin(((deg - 90) * Math.PI) / 180)}
-                      stroke="#c9a84c"
-                      strokeWidth="1"
-                    />
-                  ),
-                )}
-              </svg> */}
               <img src={logo} alt="KAAC" className="w-24 h-24 object-contain" />
             </div>
-
             <div className="text-center">
               <p
                 className="text-xs font-bold tracking-widest uppercase mb-1"
@@ -152,7 +130,6 @@ const Login = () => {
             </div>
           </div>
 
-          {/* Middle: Tagline */}
           <div className="flex flex-col gap-3">
             <div
               className="h-px w-full"
@@ -170,7 +147,6 @@ const Login = () => {
             />
           </div>
 
-          {/* Bottom: Info badges */}
           <div className="flex flex-col gap-2">
             {[
               { dot: "#22c55e", label: "System Status", value: "Operational" },
@@ -200,7 +176,6 @@ const Login = () => {
             ))}
           </div>
 
-          {/* Bottom tricolor */}
           <div
             className="absolute bottom-0 left-0 h-1"
             style={{
@@ -215,7 +190,6 @@ const Login = () => {
         <div
           className="flex flex-col justify-center px-12 py-10 flex-1"
           style={{ background: "#ffffff" }}>
-          {/* Header */}
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-3">
               <div
@@ -236,7 +210,6 @@ const Login = () => {
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             {/* Email */}
             <div className="flex flex-col gap-1.5">
@@ -388,7 +361,6 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Disclaimer */}
           <div className="mt-8 pt-5" style={{ borderTop: "1px solid #e5e7eb" }}>
             <p
               className="text-xs text-center leading-relaxed"
@@ -400,13 +372,6 @@ const Login = () => {
           </div>
         </div>
       </div>
-
-      {/* ── Bottom watermark ── */}
-      {/* <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-        <p className="text-xs" style={{ color: "rgba(15,39,68,0.35)" }}>
-          © Government Financial Management System — Official Use Only
-        </p>
-      </div> */}
     </div>
   );
 };

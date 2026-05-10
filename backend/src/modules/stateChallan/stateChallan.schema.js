@@ -35,6 +35,7 @@ export const stateChallanSchema = z.object({
     treasuryChallanNo: z.string().optional(),
 });
 
+// ── FIX: id is number because controller passes parseInt() ──
 export const updateStateChallanSchema = stateChallanSchema.partial().extend({
-    id: z.string().min(1, "ID is required"),
+    id: z.number().int().positive("ID must be a positive integer"),
 });

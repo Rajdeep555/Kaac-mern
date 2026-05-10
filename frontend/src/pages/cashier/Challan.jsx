@@ -412,7 +412,7 @@ const Challan = () => {
       if (isEditMode) {
         await updateChallan(id, payload);
         showToast("Challan Updated Successfully!", "success");
-        navigate("generated-challan");
+        navigate("/");
       } else {
         await createChallan(payload);
         showToast("Challan created successfully!", "success");

@@ -7,17 +7,24 @@ import {
     deleteStateChallan,
 } from "../api/stateChallan.api.js";
 
+let _cache = null;
+
 export const useStateChallan = () => {
-    const [challans, setChallans] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [challans, setChallans] = useState(_cache || []);
+    const [loading, setLoading] = useState(!_cache);
     const [error, setError] = useState(null);
 
-    const fetchAll = async () => {
+    const fetchAll = async (force = false) => {
+        if (_cache && !force) {
+            setChallans(_cache);
+            return;
+        }
         try {
             setLoading(true);
             setError(null);
             const res = await getAllStateChallan();
-            setChallans(res.data.data);
+            _cache = res.data.data;
+            setChallans(_cache);
         } catch (err) {
             setError(err?.response?.data?.message || "Failed to fetch challans");
         } finally {
@@ -33,6 +40,7 @@ export const useStateChallan = () => {
             return res.data.data;
         } catch (err) {
             setError(err?.response?.data?.message || "Failed to fetch challan");
+            throw err;
         } finally {
             setLoading(false);
         }
@@ -43,6 +51,7 @@ export const useStateChallan = () => {
             setLoading(true);
             setError(null);
             const res = await createStateChallan(data);
+            _cache = null;
             setChallans((prev) => [res.data.data, ...prev]);
             return res.data.data;
         } catch (err) {
@@ -57,9 +66,40 @@ export const useStateChallan = () => {
         try {
             setLoading(true);
             setError(null);
-            const res = await updateStateChallan(id, data);
+
+            // ── FIX: Only send fields the schema knows — strip everything else ──
+            const payload = {
+                challanNo: data.challanNo,
+                challanDate: data.challanDate,
+                stateNo: data.stateNo,
+                from: data.from,
+                to: data.to,
+                subject: data.subject,
+                sector: data.sector,
+                ddo: data.ddo,
+                divisionCode: data.divisionCode,
+                majorHead: data.majorHead,
+                subMajorHead: data.subMajorHead,
+                minorHead: data.minorHead,
+                subHead: data.subHead,
+                subSubHead: data.subSubHead,
+                detailHead: data.detailHead,
+                subDetailHead: data.subDetailHead,
+                purpose: data.purpose,
+                remarks: data.remarks,
+                totalAmount: data.totalAmount,
+                amountInWords: data.amountInWords,
+                focNo: data.focNo,
+                sanctionLetterNo: data.sanctionLetterNo,
+                sanctionLetterDate: data.sanctionLetterDate,
+                treasuryCode: data.treasuryCode,
+                treasuryChallanNo: data.treasuryChallanNo,
+            };
+
+            const res = await updateStateChallan(parseInt(id, 10), payload);
+            _cache = null;
             setChallans((prev) =>
-                prev.map((c) => (c.id === id ? res.data.data : c))
+                prev.map((c) => (c.id === parseInt(id, 10) ? res.data.data : c))
             );
             return res.data.data;
         } catch (err) {
@@ -75,7 +115,8 @@ export const useStateChallan = () => {
             setLoading(true);
             setError(null);
             await deleteStateChallan(id);
-            setChallans((prev) => prev.filter((c) => c.id !== id));
+            _cache = null;
+            setChallans((prev) => prev.filter((c) => c.id !== parseInt(id, 10)));
         } catch (err) {
             setError(err?.response?.data?.message || "Failed to delete challan");
             throw err;

@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const http = axios.create({
-    baseURL: "http://13.50.113.43:3000/api/v1/",
+    baseURL: "http://localhost:3000/api/v1/",
 });
 
 const STORAGE_KEY = "app_auth";
