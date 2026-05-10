@@ -8,10 +8,10 @@ const PORT = env.PORT;
 async function startServer() {
     try {
         await prisma.$connect();
-        logger.info("Database connected");
+        // logger.info("Database connected");
 
         app.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`);
+            // logger.info(`Server running on port ${PORT}`);
         })
     } catch (error) {
         logger.error("Failed to start server", error);

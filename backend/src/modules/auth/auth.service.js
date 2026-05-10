@@ -25,7 +25,7 @@ export const loginUser = async ({ email, password }) => {
             role: user.role,
         },
         process.env.JWT_SECRET,
-        { expiresIn: "30m" }
+        { expiresIn: "3h" }
     );
     return {
         token,

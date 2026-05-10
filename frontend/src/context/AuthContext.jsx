@@ -11,7 +11,7 @@ import { http } from "../api/apiClient";
 
 const AuthContext = createContext(null);
 const STORAGE_KEY = "app_auth";
-const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 min
+const INACTIVITY_LIMIT = 180 * 60 * 1000; // 30 min
 const REFRESH_THRESHOLD = 5 * 60 * 1000; // refresh 5 min before expiry
 
 export function AuthProvider({ children }) {
