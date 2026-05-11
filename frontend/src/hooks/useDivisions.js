@@ -11,27 +11,17 @@ export const useDivisions = () => {
         const fetchDivisions = async () => {
             setLoading(true);
             setError(null);
-
             try {
                 const res = await getDivisions();
-                // console.log("div" + res?.data?.divisions)
+                const list = Array.isArray(res?.data?.divisions) ? res.data.divisions : [];
 
-                const list = Array.isArray(res?.data?.divisions)
-                    ? res.data.divisions
-                    : [];
-
-                // ✅ RAW DATA (for table)
                 setDivisions(list);
-
-                // ✅ OPTIONS (for select)
                 setDivisionOptions(
                     list.map((division) => ({
                         label: `${division.divisionCode} - ${division.divisionName}`,
                         value: division.id,
                     }))
                 );
-
-                // console.log(divisionOptions)
             } catch (err) {
                 console.error("Failed to fetch divisions", err);
                 setError(err);
@@ -41,14 +31,8 @@ export const useDivisions = () => {
                 setLoading(false);
             }
         };
-
         fetchDivisions();
     }, []);
 
-    return {
-        divisions,
-        divisionOptions,
-        loading,
-        error,
-    };
+    return { divisions, setDivisions, divisionOptions, loading, error };
 };

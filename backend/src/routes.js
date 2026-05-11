@@ -31,7 +31,7 @@ router.use("/v1/users", userRoutes);
 router.use("/v1/division", divisonRoutes);
 router.use("/v1/ddo", ddoRoutes);
 router.use("/v1/cashier", cashierRoutes);
-router.use("/v1/expenditureType", expenditureTypeRoutes);
+router.use("/v1/expenditure-type", expenditureTypeRoutes);
 router.use("/v1/planNonPlan", planNonPlanRoutes);
 router.use("/v1/department", departmentRoutes)
 router.use("/v1/heads", headRoutes);

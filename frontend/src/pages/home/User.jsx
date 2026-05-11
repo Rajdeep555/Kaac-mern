@@ -2,136 +2,116 @@ import { useEffect, useState, useCallback } from "react";
 import DataTable from "../../components/DataTable/DataTable.jsx";
 import TableButton from "../../components/ui/TableButton.jsx";
 import FormOne from "../../components/Forms/FormOne.jsx";
+import AlertModal from "../../components/ui/AlertModal.jsx";
 import { Loader } from "../../components/ui/Loader.jsx";
 import { showToast } from "../../utils/toast.js";
 import { AiFillEdit } from "react-icons/ai";
 import { MdDelete, MdRestore } from "react-icons/md";
-import AlertModal from "../../components/ui/AlertModal.jsx";
-import { createDDO, deleteDDO, getDDOs, updateDDO } from "../../api/ddo.api.js";
-import { getDivisions } from "../../api/division.api.js";
+import {
+  getUsers,
+  createUser,
+  updateUser,
+  toggleUserStatus,
+} from "../../api/user.api.js";
 
-const DDO = () => {
-  const [ddos, setDDOs] = useState([]);
+const User = () => {
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [editingDDO, setEditingDDO] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
   const [alertModal, setAlertModal] = useState({
     open: false,
     title: "",
     message: "",
     onConfirm: null,
-    ddoId: null,
+    userId: null,
     isActive: null,
   });
-  const [divisionOptions, setDivisionOptions] = useState([]);
 
   useEffect(() => {
-    fetchDDOs();
-    fetchFormMasters();
+    fetchUsers();
   }, []);
 
-  const fetchDDOs = async () => {
+  const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await getDDOs();
-      setDDOs(res.data.ddos);
+      const res = await getUsers();
+      setUsers(res.data.users);
     } catch (error) {
-      console.error("Error fetching ddos:", error);
-      showToast("Failed to load DDOs", "error");
+      console.error("Error fetching users:", error);
+      showToast("Failed to load users", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchFormMasters = async () => {
-    try {
-      const [divisionRes] = await Promise.all([getDivisions()]);
-      setDivisionOptions(
-        divisionRes.data.divisions.map((d) => ({
-          label: `${d.divisionCode} - ${d.divisionName}`,
-          value: d.id,
-        })),
-      );
-    } catch (error) {
-      console.error("Error fetching form masters:", error);
-      showToast("Failed to load form data", "error");
-    }
-  };
-
-  const handleDeleteOrReactivate = useCallback(async (ddoId, isActive) => {
-    setActionLoading((prev) => ({ ...prev, [ddoId]: true }));
-    try {
-      await deleteDDO(ddoId);
-
-      // ✅ Toggle isActive in local state immediately
-      setDDOs((prev) =>
-        prev.map((ddo) =>
-          ddo.id === ddoId ? { ...ddo, isActive: !isActive } : ddo,
-        ),
-      );
-
-      showToast(isActive ? "DDO deactivated!" : "DDO reactivated!", "success");
-      setAlertModal((prev) => ({ ...prev, open: false, onConfirm: null }));
-    } catch (error) {
-      console.error("Delete/reactivate error:", error);
-      showToast("Operation failed", "error");
-    } finally {
-      setActionLoading((prev) => ({ ...prev, [ddoId]: false }));
-    }
-  }, []);
-
-  const handleEdit = (ddo) => {
-    setEditingDDO(ddo);
+  const handleEdit = (user) => {
+    // ✅ Don't pre-fill password for security
+    setEditingUser({ ...user, password: "" });
     setFormError("");
     setIsModalOpen(true);
   };
 
-  const openAlertModal = (ddoId, isActive) => {
+  const openAlertModal = (userId, isActive) => {
     setAlertModal({
       open: true,
-      title: isActive ? "Deactivate DDO?" : "Reactivate DDO?",
+      title: isActive ? "Deactivate User?" : "Reactivate User?",
       message: isActive
-        ? "This DDO will be marked as inactive and hidden from the active list."
-        : "This DDO will be marked as active again.",
-      onConfirm: () => handleDeleteOrReactivate(ddoId, isActive),
-      ddoId,
+        ? "This user will be marked as inactive and cannot log in."
+        : "This user will be reactivated and can log in again.",
+      onConfirm: () => handleToggleStatus(userId, isActive),
+      userId,
       isActive,
     });
   };
 
+  const handleToggleStatus = useCallback(async (userId, isActive) => {
+    setActionLoading((prev) => ({ ...prev, [userId]: true }));
+    try {
+      await toggleUserStatus(userId);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, isActive: !isActive } : u)),
+      );
+      showToast(
+        isActive ? "User deactivated!" : "User reactivated!",
+        "success",
+      );
+      setAlertModal((prev) => ({ ...prev, open: false }));
+    } catch (error) {
+      showToast("Operation failed", "error");
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [userId]: false }));
+    }
+  }, []);
+
   const handleSubmit = async (formData) => {
     setSaving(true);
     setFormError("");
-
-    // ✅ FIX: Guard divisionId — Number(undefined) = NaN which fails Zod validation
-    const payload = {
-      ...formData,
-      ...(formData.divisionId
-        ? { divisionId: Number(formData.divisionId) }
-        : {}),
-    };
-
     try {
+      // ✅ Strip empty password on update
+      const payload = { ...formData };
+      if (editingUser && !payload.password) {
+        delete payload.password;
+      }
+
       let res;
-      if (editingDDO) {
-        res = await updateDDO(editingDDO.id, payload);
-        // ✅ FIX: res.data.ddo (singular), not res.data.ddos
-        setDDOs((prev) =>
-          prev.map((ddo) => (ddo.id === editingDDO.id ? res.data.ddo : ddo)),
+      if (editingUser) {
+        res = await updateUser(editingUser.id, payload);
+        setUsers((prev) =>
+          prev.map((u) => (u.id === editingUser.id ? res.data.user : u)),
         );
-        showToast("DDO updated successfully!", "success");
+        showToast("User updated successfully!", "success");
       } else {
-        res = await createDDO(payload);
-        // ✅ FIX: res.data.ddo (singular), consistent with backend response
-        setDDOs((prev) => [...prev, res.data.ddo]);
-        showToast("DDO added successfully!", "success");
+        res = await createUser(payload);
+        setUsers((prev) => [...prev, res.data.user]);
+        showToast("User created successfully!", "success");
       }
 
       setIsModalOpen(false);
-      setEditingDDO(null);
+      setEditingUser(null);
     } catch (error) {
       const errorMsg =
         error?.response?.data?.message || error.message || "Operation failed";
@@ -143,10 +123,22 @@ const DDO = () => {
   };
 
   const columns = [
-    { key: "ddoName", label: "Name" },
-    { key: "ddoEmail", label: "Email" },
-    { key: "ddoPhone", label: "Phone" },
-    { key: "ddoCode", label: "Code" },
+    { key: "name", label: "Name" },
+    { key: "email", label: "Email" },
+    {
+      key: "role",
+      label: "Role",
+      render: (value) => (
+        <span
+          className={`px-2 py-1 rounded text-xs font-medium ${
+            value === "ADMIN"
+              ? "bg-purple-100 text-purple-700"
+              : "bg-blue-100 text-blue-700"
+          }`}>
+          {value}
+        </span>
+      ),
+    },
     {
       key: "isActive",
       label: "Status",
@@ -165,7 +157,6 @@ const DDO = () => {
       render: (_, row) => {
         const isLoading = actionLoading[row.id];
         const isActive = row.isActive;
-
         return (
           <div className="flex gap-2">
             <button
@@ -175,7 +166,6 @@ const DDO = () => {
               title="Edit">
               <AiFillEdit className="w-4 h-4" />
             </button>
-
             <button
               onClick={() => openAlertModal(row.id, isActive)}
               disabled={isLoading}
@@ -199,68 +189,65 @@ const DDO = () => {
     },
   ];
 
-  // ✅ Moved inside component body so editingDDO state is always current
-  const ddoFormFields = [
+  const userFormFields = [
     {
-      name: "ddoName",
+      name: "name",
       label: "Name",
       type: "text",
       placeholder: "Enter name",
       required: true,
     },
     {
-      name: "ddoEmail",
+      name: "email",
       label: "Email",
       type: "email",
       placeholder: "Enter email",
+      required: true,
     },
     {
-      name: "ddoPhone",
-      label: "Phone",
-      type: "text",
-      placeholder: "Enter phone",
+      name: "password",
+      label: editingUser ? "New Password (leave blank to keep)" : "Password",
+      type: "password",
+      placeholder: editingUser
+        ? "Leave blank to keep current"
+        : "Enter password",
+      required: !editingUser, // ✅ required only on create
     },
     {
-      name: "ddoCode",
-      label: "Code",
-      type: "text",
-      placeholder: "Enter code",
-      required: !editingDDO,
-      // ✅ Disable ddoCode when editing — code should not change
-      disabled: !!editingDDO,
-    },
-    {
-      name: "divisionId",
-      label: "Division",
+      name: "role",
+      label: "Role",
       type: "select",
-      options: divisionOptions,
-      placeholder: "Select Division",
+      placeholder: "Select role",
+      required: true,
+      options: [
+        { label: "Cashier", value: "CASHIER" },
+        { label: "Admin", value: "ADMIN" },
+      ],
     },
   ];
 
   return (
     <>
       <div className={`${isModalOpen ? "hidden" : "block"} p-6 space-y-6`}>
-        <h1 className="font-unbounded text-3xl font-normal">DDO Management</h1>
+        <h1 className="font-unbounded text-3xl font-normal">User Management</h1>
 
         {loading ? (
           <Loader />
         ) : (
           <DataTable
-            data={ddos}
+            data={users}
             columns={columns}
-            // ✅ FIX: searchableKeys use actual field names that exist in data
-            searchableKeys={["ddoName", "ddoEmail", "ddoPhone", "ddoCode"]}
+            searchableKeys={["name", "email", "role"]}
             statusKey="isActive"
             pageSize={10}
             loading={loading}
-            downloadFileName="ddo"
-            printTitle="DDO Report"
+            downloadFileName="users"
+            printTitle="User Report"
             actionSlot={
               <TableButton
-                name="Add New DDO"
+                name="Add New User"
                 onClick={() => {
-                  setEditingDDO(null);
+                  setEditingUser(null);
                   setFormError("");
                   setIsModalOpen(true);
                 }}
@@ -273,14 +260,14 @@ const DDO = () => {
       {isModalOpen && (
         <FormOne
           isOpen={isModalOpen}
-          fields={ddoFormFields}
-          initialValues={editingDDO}
+          fields={userFormFields}
+          initialValues={editingUser}
           onClose={() => {
             setFormError("");
             setIsModalOpen(false);
-            setEditingDDO(null);
+            setEditingUser(null);
           }}
-          title={editingDDO ? "Edit DDO" : "Add New DDO"}
+          title={editingUser ? "Edit User" : "Add New User"}
           loading={saving}
           error={formError}
           onSubmit={handleSubmit}
@@ -294,10 +281,10 @@ const DDO = () => {
         title={alertModal.title}
         message={alertModal.message}
         confirmText={alertModal.isActive ? "Deactivate" : "Reactivate"}
-        loading={actionLoading[alertModal.ddoId]}
+        loading={actionLoading[alertModal.userId]}
       />
     </>
   );
 };
 
-export default DDO;
+export default User;

@@ -8,120 +8,115 @@ import { showToast } from "../../utils/toast.js";
 import { AiFillEdit } from "react-icons/ai";
 import { MdDelete, MdRestore } from "react-icons/md";
 import {
-  createPlanNonPlan,
-  getAllPlanNonPlan,
-  updatePlanNonPlan,
-  deletePlanNonPlan,
-} from "../../api/planNonPlan.api.js";
+  getExpenditureTypes,
+  createExpenditureType,
+  updateExpenditureType,
+  toggleExpenditureTypeStatus,
+} from "../../api/expenditureType.api.js";
 
-const Plan_Non_Plan = () => {
-  const [planNonPlan, setPlanNonPlan] = useState([]);
+const ExpenditureType = () => {
+  const [expenditureTypes, setExpenditureTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [editingPlanNonPlan, setEditingPlanNonPlan] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const [alertModal, setAlertModal] = useState({
     open: false,
     title: "",
     message: "",
     onConfirm: null,
-    id: null,
-    isActive: false,
+    itemId: null,
+    isActive: null,
   });
 
   useEffect(() => {
-    fetchPlanNonPlan();
+    fetchExpenditureTypes();
   }, []);
 
-  const fetchPlanNonPlan = async () => {
+  const fetchExpenditureTypes = async () => {
     try {
       setLoading(true);
-      const res = await getAllPlanNonPlan();
-      setPlanNonPlan(res.data.planNonPlans);
+      const res = await getExpenditureTypes();
+      setExpenditureTypes(res.data.expenditureTypes);
     } catch (error) {
-      console.error("Error fetching Plan/Non-Plan:", error);
-      showToast("Failed to load Plan / Non-Plan", "error");
+      console.error("Error fetching expenditure types:", error);
+      showToast("Failed to load expenditure types", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteOrReactivate = useCallback(async (id, isActive) => {
-    setActionLoading((prev) => ({ ...prev, [id]: true }));
+  const handleEdit = (item) => {
+    setEditingItem(item);
+    setFormError("");
+    setIsModalOpen(true);
+  };
+
+  const openAlertModal = (itemId, isActive) => {
+    setAlertModal({
+      open: true,
+      title: isActive
+        ? "Deactivate Expenditure Type?"
+        : "Reactivate Expenditure Type?",
+      message: isActive
+        ? "This expenditure type will be marked as inactive."
+        : "This expenditure type will be marked as active again.",
+      onConfirm: () => handleToggleStatus(itemId, isActive),
+      itemId,
+      isActive,
+    });
+  };
+
+  const handleToggleStatus = useCallback(async (itemId, isActive) => {
+    setActionLoading((prev) => ({ ...prev, [itemId]: true }));
     try {
-      await deletePlanNonPlan(id);
-      setPlanNonPlan((prev) =>
+      await toggleExpenditureTypeStatus(itemId);
+      setExpenditureTypes((prev) =>
         prev.map((item) =>
-          item.id === id ? { ...item, isActive: !isActive } : item,
+          item.id === itemId ? { ...item, isActive: !isActive } : item,
         ),
       );
       showToast(
-        isActive ? "Deactivated successfully!" : "Reactivated successfully!",
+        isActive
+          ? "Expenditure type deactivated!"
+          : "Expenditure type reactivated!",
         "success",
       );
       setAlertModal((prev) => ({ ...prev, open: false }));
     } catch (error) {
       showToast("Operation failed", "error");
     } finally {
-      setActionLoading((prev) => ({ ...prev, [id]: false }));
+      setActionLoading((prev) => ({ ...prev, [itemId]: false }));
     }
   }, []);
-
-  const handleEdit = (row) => {
-    setEditingPlanNonPlan(row);
-    setFormError("");
-    setIsModalOpen(true);
-  };
-
-  const openAlertModal = (id, isActive) => {
-    setAlertModal({
-      open: true,
-      title: isActive ? "Deactivate Plan?" : "Reactivate Plan?",
-      message: isActive
-        ? "This plan will be marked inactive."
-        : "This plan will be reactivated.",
-      onConfirm: () => handleDeleteOrReactivate(id, isActive),
-      id,
-      isActive,
-    });
-  };
 
   const handleSubmit = async (formData) => {
     setSaving(true);
     setFormError("");
     try {
-      const payload = {
-        name: formData.name,
-        // ✅ keep original sector when editing, use form value when creating
-        sector: editingPlanNonPlan
-          ? editingPlanNonPlan.sector
-          : formData.sector,
-      };
-
       let res;
-      if (editingPlanNonPlan) {
-        res = await updatePlanNonPlan(editingPlanNonPlan.id, payload);
-        setPlanNonPlan((prev) =>
-          prev.map((p) =>
-            p.id === editingPlanNonPlan.id ? res.data.planNonPlan : p,
+      if (editingItem) {
+        res = await updateExpenditureType(editingItem.id, formData);
+        setExpenditureTypes((prev) =>
+          prev.map((item) =>
+            item.id === editingItem.id ? res.data.expenditureType : item,
           ),
         );
-        showToast("Updated successfully!", "success");
+        showToast("Expenditure type updated successfully!", "success");
       } else {
-        res = await createPlanNonPlan(payload);
-        setPlanNonPlan((prev) => [...prev, res.data.planNonPlan]);
-        showToast("Added successfully!", "success");
+        res = await createExpenditureType(formData);
+        setExpenditureTypes((prev) => [...prev, res.data.expenditureType]);
+        showToast("Expenditure type added successfully!", "success");
       }
-
       setIsModalOpen(false);
-      setEditingPlanNonPlan(null);
+      setEditingItem(null);
     } catch (error) {
-      const msg =
+      const errorMsg =
         error?.response?.data?.message || error.message || "Operation failed";
-      setFormError(msg);
-      showToast(msg, "error");
+      setFormError(errorMsg);
+      showToast(errorMsg, "error");
     } finally {
       setSaving(false);
     }
@@ -183,9 +178,9 @@ const Plan_Non_Plan = () => {
   const formFields = [
     {
       name: "name",
-      label: "Plan / Non-Plan Name",
+      label: "Name",
       type: "text",
-      placeholder: "Enter name",
+      placeholder: "Enter expenditure type name",
       required: true,
     },
     {
@@ -193,7 +188,6 @@ const Plan_Non_Plan = () => {
       label: "Sector",
       type: "select",
       placeholder: "Select sector",
-      disabled: !!editingPlanNonPlan, // ✅ lock sector during edit
       options: [
         { label: "Council", value: "COUNCIL" },
         { label: "State", value: "STATE" },
@@ -204,24 +198,27 @@ const Plan_Non_Plan = () => {
   return (
     <>
       <div className={`${isModalOpen ? "hidden" : "block"} p-6 space-y-6`}>
-        <h1 className="font-unbounded text-3xl">Plan / Non-Plan Management</h1>
+        <h1 className="font-unbounded text-3xl font-normal">
+          Expenditure Type Management
+        </h1>
 
         {loading ? (
           <Loader />
         ) : (
           <DataTable
-            data={planNonPlan}
+            data={expenditureTypes}
             columns={columns}
             searchableKeys={["name", "sector"]}
             statusKey="isActive"
             pageSize={10}
-            downloadFileName="plan-non-plan"
-            printTitle="Plan / Non-Plan Report"
+            loading={loading}
+            downloadFileName="expenditure-types"
+            printTitle="Expenditure Type Report"
             actionSlot={
               <TableButton
-                name="Add New Plan"
+                name="Add New Type"
                 onClick={() => {
-                  setEditingPlanNonPlan(null);
+                  setEditingItem(null);
                   setFormError("");
                   setIsModalOpen(true);
                 }}
@@ -235,13 +232,15 @@ const Plan_Non_Plan = () => {
         <FormOne
           isOpen={isModalOpen}
           fields={formFields}
-          initialValues={editingPlanNonPlan}
+          initialValues={editingItem}
           onClose={() => {
             setFormError("");
             setIsModalOpen(false);
-            setEditingPlanNonPlan(null);
+            setEditingItem(null);
           }}
-          title={editingPlanNonPlan ? "Edit Plan / Non-Plan" : "Add New Plan"}
+          title={
+            editingItem ? "Edit Expenditure Type" : "Add New Expenditure Type"
+          }
           loading={saving}
           error={formError}
           onSubmit={handleSubmit}
@@ -255,10 +254,10 @@ const Plan_Non_Plan = () => {
         title={alertModal.title}
         message={alertModal.message}
         confirmText={alertModal.isActive ? "Deactivate" : "Reactivate"}
-        loading={actionLoading[alertModal.id]}
+        loading={actionLoading[alertModal.itemId]}
       />
     </>
   );
 };
 
-export default Plan_Non_Plan;
+export default ExpenditureType;

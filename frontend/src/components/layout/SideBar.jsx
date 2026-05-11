@@ -27,8 +27,8 @@ export const menuItems = [
   {
     id: nanoid(),
     type: "link",
-    label: "Cashier",
-    to: "/cashier",
+    label: "Users",
+    to: "/user",
     icon: <SiCashapp />,
     roles: ["ADMIN"],
   },
@@ -414,13 +414,13 @@ const Sidebar = () => {
             <FiSettings size={13} />
             <span>Settings</span>
           </button>
-          <button
+          {/* <button
             onClick={() => alert("Don't click otherwise You Logout!")}
             className="flex items-center gap-1.5 text-xs transition-colors duration-150 cursor-pointer"
             style={{ color: "#f87171" }}>
             <FiLogOut size={13} />
             <span>Logout</span>
-          </button>
+          </button> */}
         </div>
       </div>
 

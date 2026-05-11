@@ -1,8 +1,10 @@
+// src/hooks/usePlanNonPlan.js
 import { useEffect, useState } from "react";
-import { getAllPlanNonPlan } from "../api/planNonPlan.api";
+import { getAllPlanNonPlan } from "../api/planNonPlan.api.js";
 
 export const usePlanNonPlan = () => {
-    const [planNonPlan, setPlanNonPlan] = useState([]);
+    const [planNonPlan, setPlanNonPlan] = useState([]); // options for selects
+    const [rawPlanNonPlan, setRawPlanNonPlan] = useState([]); // raw data for admin (optional)
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -13,13 +15,16 @@ export const usePlanNonPlan = () => {
 
             try {
                 const res = await getAllPlanNonPlan();
-
                 const list = res.data.planNonPlans || [];
 
-                const options = list.map((item) => ({
-                    label: item.name,
-                    value: item.id,
-                }));
+                setRawPlanNonPlan(list);
+
+                const options = list
+                    .filter((item) => item.isActive !== false)
+                    .map((item) => ({
+                        label: item.name,
+                        value: item.id,
+                    }));
 
                 setPlanNonPlan(options);
             } catch (error) {
@@ -33,5 +38,5 @@ export const usePlanNonPlan = () => {
         fetchPlanNonPlan();
     }, []);
 
-    return { planNonPlan, loading, error };
+    return { planNonPlan, rawPlanNonPlan, loading, error };
 };

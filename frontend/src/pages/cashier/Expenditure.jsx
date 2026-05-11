@@ -149,7 +149,7 @@ const Expenditure = () => {
     label: fy,
     value: fy,
   }));
-  const { objectHead } = useObjectHead();
+  const { objectHeadOptions } = useObjectHead();
   const { grantOptions } = useGrants();
 
   /* ================= HEAD HIERARCHY ================= */
@@ -818,7 +818,7 @@ const Expenditure = () => {
           label="Object Head"
           name="objectHead"
           register={register}
-          options={[...objectHead]}
+          options={objectHeadOptions}
         />
 
         <AmountBreakupSection

@@ -3,41 +3,45 @@ import prisma from "../../config/database.js";
 export const createPlanNonPlan = async (data) => {
     const { name, sector } = data;
 
-    if (!name || !sector) {
-        throw new Error("Name and sector are required");
-    }
-
     const existingPlanNonPlan = await prisma.planNonPlan.findFirst({
-        where: {
-            name,
-            sector,
-            isActive: true,
-        },
+        where: { name, sector, isActive: true },
     });
-
-    if (existingPlanNonPlan) {
-        throw new Error("Plan / Non-Plan already exists");
-    }
+    if (existingPlanNonPlan) throw new Error("Plan / Non-Plan already exists");
 
     return prisma.planNonPlan.create({
-        data: {
-            name,
-            sector,
-            isActive: true,
-        },
+        data: { name, sector, isActive: true }
     });
 };
 
 export const getAllPlanNonPlans = async () => {
     return prisma.planNonPlan.findMany({
-        select: {
-            id: true,
-            name: true,
-            sector: true,
-            isActive: true,
+        select: { id: true, name: true, sector: true, isActive: true },
+        orderBy: { createdAt: "desc" }
+    });
+};
+
+// ✅ NEW
+export const updatePlanNonPlan = async (id, data) => {
+    return prisma.planNonPlan.update({
+        where: { id: Number(id) },
+        data: {
+            name: data.name,
+            ...(data.sector ? { sector: data.sector } : {}),
         },
-        orderBy: {
-            createdAt: "desc",
-        },
+        select: { id: true, name: true, sector: true, isActive: true }
+    });
+};
+
+// ✅ NEW
+export const togglePlanNonPlanStatus = async (id) => {
+    const existing = await prisma.planNonPlan.findUnique({
+        where: { id: Number(id) }
+    });
+    if (!existing) throw new Error("Plan / Non-Plan not found");
+
+    return prisma.planNonPlan.update({
+        where: { id: Number(id) },
+        data: { isActive: !existing.isActive },
+        select: { id: true, name: true, sector: true, isActive: true }
     });
 };

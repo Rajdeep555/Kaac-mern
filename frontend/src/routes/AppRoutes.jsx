@@ -10,7 +10,7 @@ import Council from "../pages/home/Council";
 import DDO from "../pages/home/DDO";
 import Department from "../pages/home/Department";
 import Division from "../pages/home/Division";
-import Expenditure_Type from "../pages/home/Expenditure_Type";
+import ExpenditureType from "../pages/home/ExpenditureType";
 import GenerateReports from "../pages/home/GenerateReports";
 import Object_Head from "../pages/home/Object_Head";
 import Plan_Non_Plan from "../pages/home/Plan_Non_Plan";
@@ -38,6 +38,7 @@ import GeneratedCashReceipt from "../pages/cashier/GeneratedCashReceipt";
 import ChallanOfRecoveryFromBills from "../pages/cashier/ChallanOfRecoveryFromBills";
 import Unauthorized from "../components/ui/Unauthorized";
 import NotFound from "../pages/not-found/NotFound";
+import User from "../pages/home/User";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -77,8 +78,8 @@ const AppRoutes = createBrowserRouter([
               // { path: "accountant", element: <Accountant /> },
               { path: "department", element: <Department /> },
               { path: "division", element: <Division /> },
-              { path: "cashier", element: <Cashier /> },
-              { path: "Expenditure", element: <Expenditure_Type /> },
+              { path: "user", element: <User /> },
+              { path: "Expenditure", element: <ExpenditureType /> },
               { path: "objecthead", element: <Object_Head /> },
               { path: "plan-non-plan", element: <Plan_Non_Plan /> },
               { path: "state", element: <State /> },

@@ -12,7 +12,7 @@ export const useAllDepartments = () => {
             setLoading(true);
             setError(null);
             try {
-                const res = await getAllChallanDepartments({}); // no type → backend returns all for ADMIN
+                const res = await getAllChallanDepartments({});
                 setDepartments(res.data);
             } catch (err) {
                 console.error("Failed to fetch departments", err);
@@ -24,5 +24,5 @@ export const useAllDepartments = () => {
         fetchDepartments();
     }, []);
 
-    return { departments, loading, error };
+    return { departments, setDepartments, loading, error };
 };
