@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Statement1 from "../../components/Statements/Statement1";
 import Statement2 from "../../components/Statements/Statement2";
@@ -8,7 +8,6 @@ import Statement5 from "../../components/Statements/Statement5";
 import Statement6 from "../../components/Statements/Statement6";
 import Statement7 from "../../components/Statements/Statement7";
 import SearchFunction from "../SearchFunction";
-import Button from "../../components/ui/Button";
 
 const SECTOR_LABELS = {
   council: "COUNCIL",
@@ -27,28 +26,86 @@ const STATEMENT_LABELS = {
 };
 
 const TrackStatements = () => {
-  const { sector } = useParams(); // ← pulls "council" / "state" / "consolidated"
+  const { sector } = useParams();
   const [activeStep, setActiveStep] = useState("1");
+  const [selectedFY, setSelectedFY] = useState(null); // ✅ FY filter state
 
-  // Normalize to uppercase enum — exactly like TrackForms
+  // ✅ Ref for targeted print
+  const statementAreaRef = useRef(null);
+
   const sectorType = sector
     ? SECTOR_LABELS[sector.toLowerCase()] || null
     : null;
 
   const array = ["1", "2", "3", "4", "5", "6", "7"];
 
-  // useMemo so sector doesn't cause unnecessary re-renders
+  // ✅ Handle FY filter
+  const handleFilter = useCallback((fy) => {
+    setSelectedFY(fy);
+  }, []);
+
+  // ✅ Print only the statement content div
+  const handlePrint = useCallback(() => {
+    if (!statementAreaRef.current) return;
+    const content = statementAreaRef.current.innerHTML;
+    const win = window.open("", "_blank", "width=900,height=700");
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Statement ${activeStep} — ${STATEMENT_LABELS[activeStep] || ""} ${sectorType ? `(${sectorType})` : ""}</title>
+          <style>
+            body { font-family: 'Georgia', serif; margin: 24px; color: #111; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; }
+            th { background: #f3f4f6; font-weight: 700; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>${content}</body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  }, [activeStep, sectorType]);
+
+  // ✅ Download statement metadata as CSV
+  const handleDownload = useCallback(
+    (fy) => {
+      const rows = [
+        ["Statement No", "Statement Name", "Sector", "Financial Year"],
+        [
+          activeStep,
+          STATEMENT_LABELS[activeStep] || "",
+          sectorType || "All",
+          fy || "Current",
+        ],
+      ];
+      const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Statement_${activeStep}_${sectorType || "ALL"}_${fy || "current"}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [activeStep, sectorType],
+  );
+
   const stepComponents = useMemo(
     () => ({
-      1: <Statement1 sector={sectorType} />,
-      2: <Statement2 sector={sectorType} />,
-      3: <Statement3 sector={sectorType} />,
-      4: <Statement4 sector={sectorType} />,
-      5: <Statement5 sector={sectorType} />,
-      6: <Statement6 sector={sectorType} />,
-      7: <Statement7 sector={sectorType} />, // ← sector now passed correctly
+      1: <Statement1 sector={sectorType} financialYear={selectedFY} />,
+      2: <Statement2 sector={sectorType} financialYear={selectedFY} />,
+      3: <Statement3 sector={sectorType} financialYear={selectedFY} />,
+      4: <Statement4 sector={sectorType} financialYear={selectedFY} />,
+      5: <Statement5 sector={sectorType} financialYear={selectedFY} />,
+      6: <Statement6 sector={sectorType} financialYear={selectedFY} />,
+      7: <Statement7 sector={sectorType} financialYear={selectedFY} />,
     }),
-    [sectorType], // re-renders only when sector changes
+    [sectorType, selectedFY], // ✅ re-renders when FY changes
   );
 
   return (
@@ -72,7 +129,6 @@ const TrackStatements = () => {
               "linear-gradient(90deg, #ff9933 33.33%, #ffffff 33.33%, #ffffff 66.66%, #138808 66.66%)",
           }}
         />
-
         <div
           style={{
             padding: "16px 32px 14px",
@@ -118,7 +174,6 @@ const TrackStatements = () => {
                 )}
               </svg>
             </div>
-
             <div>
               <p
                 style={{
@@ -150,7 +205,6 @@ const TrackStatements = () => {
             </div>
           </div>
 
-          {/* Sector Badge — dynamic like TrackForms */}
           <div
             style={{
               display: "flex",
@@ -218,7 +272,6 @@ const TrackStatements = () => {
                 }}>
                 Statements Module
               </p>
-              {/* Show current sector in header */}
               <p
                 style={{
                   margin: "1px 0 0",
@@ -266,8 +319,13 @@ const TrackStatements = () => {
             </>
           )}
         </div>
-        <div style={{ flex: 1, maxWidth: "420px", marginLeft: "32px" }}>
-          <SearchFunction />
+        {/* ✅ SearchFunction wired */}
+        <div style={{ flex: 1, maxWidth: "520px", marginLeft: "32px" }}>
+          <SearchFunction
+            onFilter={handleFilter}
+            onDownload={handleDownload}
+            onPrint={handlePrint}
+          />
         </div>
       </div>
 
@@ -301,6 +359,16 @@ const TrackStatements = () => {
                 }}>
                 Select a statement number below to view the corresponding
                 register
+                {selectedFY && (
+                  <span
+                    style={{
+                      marginLeft: "8px",
+                      color: "#14532d",
+                      fontWeight: "600",
+                    }}>
+                    — FY {selectedFY}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -350,6 +418,7 @@ const TrackStatements = () => {
                   color: "#9ca3af",
                 }}>
                 Currently Viewing — {sectorType ?? "All Sectors"}
+                {selectedFY ? ` — FY ${selectedFY}` : ""}
               </p>
             </div>
           </div>
@@ -383,7 +452,6 @@ const TrackStatements = () => {
             }}>
             Statement Index
           </p>
-
           <div
             style={{
               width: "100%",
@@ -403,7 +471,6 @@ const TrackStatements = () => {
               }}
             />
           </div>
-
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {array.map((row) => {
               const isActive = activeStep === row;
@@ -469,7 +536,6 @@ const TrackStatements = () => {
               );
             })}
           </div>
-
           <div
             style={{
               display: "flex",
@@ -527,7 +593,7 @@ const TrackStatements = () => {
           </div>
         </div>
 
-        {/* ── Statement Display Area ── */}
+        {/* ── Statement Display Area — ref for print ── */}
         <div
           style={{
             background: "#ffffff",
@@ -618,7 +684,8 @@ const TrackStatements = () => {
             </span>
           </div>
 
-          <div>{stepComponents[activeStep]}</div>
+          {/* ✅ ref attached here */}
+          <div ref={statementAreaRef}>{stepComponents[activeStep]}</div>
         </div>
 
         {/* ── Footer Action Bar ── */}
@@ -640,24 +707,6 @@ const TrackStatements = () => {
           </p>
         </div>
       </div>
-
-      {/* ── Bottom Footer ──
-      <div
-        style={{
-          background: "#0f2744",
-          borderTop: "3px solid #c9a84c",
-          padding: "14px 32px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}>
-        <p style={{ margin: 0, fontSize: "11px", color: "#93b8d8" }}>
-          © KAAC Financial Management System. All rights reserved.
-        </p>
-        <p style={{ margin: 0, fontSize: "11px", color: "#93b8d8" }}>
-          Official Use Only — Confidential
-        </p>
-      </div> */}
     </div>
   );
 };

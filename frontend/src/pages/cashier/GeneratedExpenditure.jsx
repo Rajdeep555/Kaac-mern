@@ -7,7 +7,6 @@ import { useCashierExpenditures } from "../../hooks/useCashierExpenditures.js";
 const GeneratedExpenditure = () => {
   const navigate = useNavigate();
 
-  // Example: COUNCIL + both treasury / non-treasury
   const { data: expenditures, loading } = useCashierExpenditures({
     sector: ["COUNCIL", "STATE"],
   });
@@ -34,16 +33,23 @@ const GeneratedExpenditure = () => {
     { key: "grossAmount", label: "Gross Amount" },
     { key: "netAmount", label: "Net Amount" },
 
-    // ✅ ACTIONS COLUMN
+    // ✅ ACTIONS COLUMN — View + Edit
     {
       key: "actions",
       label: "Actions",
       render: (_, row) => (
-        <button
-          className="text-blue-600 hover:underline"
-          onClick={() => navigate(`/expenditures/${row.id}`)}>
-          Edit
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            className="text-blue-600 hover:underline"
+            onClick={() => navigate(`/expenditures/${row.id}/view`)}>
+            View
+          </button>
+          <button
+            className="text-gray-500 hover:underline"
+            onClick={() => navigate(`/expenditures/${row.id}`)}>
+            Edit
+          </button>
+        </div>
       ),
     },
   ];

@@ -39,6 +39,7 @@ import ChallanOfRecoveryFromBills from "../pages/cashier/ChallanOfRecoveryFromBi
 import Unauthorized from "../components/ui/Unauthorized";
 import NotFound from "../pages/not-found/NotFound";
 import User from "../pages/home/User";
+import ExpenditureDetailPage from "../pages/cashier/ExpenditureDetailPage";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -112,6 +113,10 @@ const AppRoutes = createBrowserRouter([
               },
               { path: "expenditures", element: <Expenditure /> },
               { path: "expenditures/:id", element: <Expenditure /> },
+              {
+                path: "expenditures/:id/view",
+                element: <ExpenditureDetailPage />,
+              },
               {
                 path: "generated-expenditure",
                 element: <GeneratedExpenditure />,

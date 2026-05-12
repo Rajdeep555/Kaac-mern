@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { toast } from "react-hot-toast";
 
 import Breadcrumbs from "../../components/ui/Breadcrumbs";
 import FormWrapper from "../../components/Forms/FormWrapper";
@@ -8,6 +7,7 @@ import InputField from "../../components/Forms/InputField";
 import SelectField from "../../components/Forms/SelectField";
 import TextAreaField from "../../components/Forms/TextAreaField";
 import DateField from "../../components/Forms/DateField";
+import AlertModal from "../../components/ui/AlertModal"; // ✅ NEW
 
 import { rupeesToWords } from "../../utils/rupeesToWords";
 import { formatIndianNumber } from "../../utils/formatIndianCurrency";
@@ -32,7 +32,25 @@ import AmountBreakupSection from "../../components/Expenditure/AmountBreakupSect
 import DeductionsSection from "../../components/Expenditure/DeductionsSection.jsx";
 import { useGrants } from "../../hooks/useGrants.js";
 import TableButton from "../../components/ui/TableButton.jsx";
-import { useAuth } from "../../context/AuthContext.jsx";
+
+// ✅ Indian FY helper (April–March)
+const getFinancialYearFromDate = (dateStr) => {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null;
+  const month = date.getMonth();
+  const year = date.getFullYear();
+  const fyStart = month >= 3 ? year : year - 1;
+  return `${fyStart}-${fyStart + 1}`;
+};
+
+// ✅ Default alert state — reused to reset
+const DEFAULT_ALERT = {
+  isOpen: false,
+  title: "",
+  message: "",
+  isSuccess: true,
+};
 
 const Expenditure = () => {
   const { id } = useParams();
@@ -42,6 +60,18 @@ const Expenditure = () => {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isExpenditureLoading, setIsExpenditureLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [savedDepartmentId, setSavedDepartmentId] = useState(null);
+  const [savedDdoId, setSavedDdoId] = useState(null);
+
+  // ✅ NEW: Alert modal state
+  const [alertModal, setAlertModal] = useState(DEFAULT_ALERT);
+
+  // ✅ NEW: Close handler — navigates away only on success
+  const closeAlert = () => {
+    const wasSuccess = alertModal.isSuccess;
+    setAlertModal(DEFAULT_ALERT);
+    if (wasSuccess) navigate("/expenditures");
+  };
 
   /* ================= FORM ================= */
   const { register, handleSubmit, watch, setValue, reset } = useForm({
@@ -50,7 +80,6 @@ const Expenditure = () => {
       department: "",
       ddo: "",
       division: "",
-
       majorHead: "",
       subMajorHead: "",
       minorHead: "",
@@ -58,7 +87,6 @@ const Expenditure = () => {
       subSubHead: "",
       detailHead: "",
       subDetailHead: "",
-
       voucherNo: "",
       voucherDate: "",
       requisitionNo: "",
@@ -66,61 +94,60 @@ const Expenditure = () => {
       grantNo: "",
       workName: "",
       expenditureType: "",
-
       salaryType: "SALARY",
       planType: "",
       financialYear: "",
       objectHead: "",
 
-      payOfficers: "",
-      payEstablishment: "",
-      allowanceHonorary: "",
-      contingencies: "",
-      grantsInAid: "",
-      works: "",
-      loansAdvances: "",
+      payOfficers: 0,
+      payEstablishment: 0,
+      allowanceHonorary: 0,
+      contingencies: 0,
+      grantsInAid: 0,
+      works: 0,
+      loansAdvances: 0,
       loanType: "",
-      loanRepayGovt: "",
-      loanRepayOther: "",
-      securityDeposit: "",
-      earnestMoney: "",
-      transferPayment: "",
+      loanRepayGovt: 0,
+      loanRepayOther: 0,
+      securityDeposit: 0,
+      earnestMoney: 0,
+      transferPayment: 0,
 
-      grossAmount: "",
+      grossAmount: 0,
 
-      cgst: "",
-      sgst: "",
-      igst: "",
-      earnestMoneyDeduction: "",
-      ptax: "",
-      itax: "",
-      carLoanRecovery: "",
-      houseLoanRecovery: "",
-      cpfCouncil: "",
-      cpfContribution: "",
-      cpfRecovery: "",
-      houseRent: "",
-      securityDepositsDeduction: "",
-      forestRoyalty: "",
-      monopoly: "",
-      mcForestRoyalty: "",
-      mdrrf: "",
-      dmft: "",
-      labourCess: "",
-      itForestRoyalty: "",
-      vat: "",
-      advanceRecovery: "",
-      otherDeductions: "",
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+      earnestMoneyDeduction: 0,
+      ptax: 0,
+      itax: 0,
+      carLoanRecovery: 0,
+      houseLoanRecovery: 0,
+      cpfCouncil: 0,
+      cpfContribution: 0,
+      cpfRecovery: 0,
+      houseRent: 0,
+      securityDepositsDeduction: 0,
+      forestRoyalty: 0,
+      monopoly: 0,
+      mcForestRoyalty: 0,
+      mdrrf: 0,
+      dmft: 0,
+      labourCess: 0,
+      itForestRoyalty: 0,
+      vat: 0,
+      advanceRecovery: 0,
+      otherDeductions: 0,
 
-      grossDeduction: "",
-      cpfPayable: "",
-      netDeduction: "",
-      netAmount: "",
-      amountPayable: "",
+      // computed — keep 0
+      grossDeduction: 0,
+      cpfPayable: 0,
+      netDeduction: 0,
+      netAmount: 0,
+      amountPayable: 0,
+
       amountInWords: "",
-
       remarks: "",
-
       chequeBookNo: "",
       chequeNo: "",
       chequeIssueDate: "",
@@ -132,6 +159,7 @@ const Expenditure = () => {
 
   /* ================= WATCH ================= */
   const sector = watch("sector");
+  const voucherDate = watch("voucherDate");
   const majorHead = watch("majorHead");
   const subMajorHead = watch("subMajorHead");
   const minorHead = watch("minorHead");
@@ -139,10 +167,12 @@ const Expenditure = () => {
   const subSubHead = watch("subSubHead");
   const detailHead = watch("detailHead");
   const loansAdvances = watch("loansAdvances");
+  // console.log("voucherDate watch value:", voucherDate);
 
   /* ================= BASIC DATA ================= */
-  // ✅ CHANGED: sector drives the department list dynamically
-  const { departments } = useDepartments({ type: sector || "" });
+  const { departments, loading: depsLoading } = useDepartments({
+    type: sector || "",
+  });
   const { ddos } = useDdo();
   const { planNonPlan } = usePlanNonPlan();
   const financialYearOptions = getFinancialYears(2023).map((fy) => ({
@@ -188,39 +218,61 @@ const Expenditure = () => {
             }
           };
 
+          const deptId = String(data.departmentId ?? data.department?.id ?? "");
+          const ddoId = String(data.ddoId ?? data.ddo?.id ?? "");
+          setSavedDepartmentId(deptId);
+          setSavedDdoId(ddoId);
+
           const flatData = {
             ...data,
-            department: String(data.departmentId ?? data.department?.id ?? ""),
-            ddo: String(data.ddoId ?? data.ddo?.id ?? ""),
+            department: deptId,
+            ddo: ddoId,
             voucherDate: toDateInput(data.voucherDate),
             requisitionDate: toDateInput(data.requisitionDate),
             chequeIssueDate: toDateInput(data.chequeIssueDate),
             treasuryDate: toDateInput(data.treasuryDate),
           };
 
-          console.log("FLAT DATA FOR RESET:", flatData);
           reset(flatData);
           setIsDataLoaded(true);
         } catch (error) {
           console.error("Failed to load expenditure", error);
-          toast.error("Failed to load expenditure data");
-          navigate("/expenditures");
+          setAlertModal({
+            isOpen: true,
+            title: "Failed to Load",
+            message:
+              "Could not load expenditure data. Redirecting back to list.",
+            isSuccess: false,
+          });
         } finally {
           setIsExpenditureLoading(false);
         }
       };
-
       loadExpenditure();
     } else {
       setIsDataLoaded(true);
     }
   }, [id, isEditMode, navigate, reset]);
 
+  /* ================= RE-APPLY DEPARTMENT AFTER DEPARTMENTS LOAD ================= */
+  useEffect(() => {
+    if (
+      !isEditMode ||
+      !savedDepartmentId ||
+      depsLoading ||
+      departments.length === 0
+    )
+      return;
+    const exists = departments.some(
+      (d) => String(d.value ?? d.id) === savedDepartmentId,
+    );
+    if (exists)
+      setValue("department", savedDepartmentId, { shouldDirty: false });
+  }, [departments, depsLoading, savedDepartmentId, isEditMode, setValue]);
+
   /* ================= RESET ALL ON SECTOR CHANGE ================= */
   useEffect(() => {
     if (!sector || !isDataLoaded || isEditMode) return;
-
-    // ✅ ADDED: reset department and ddo when sector changes
     setValue("department", "");
     setValue("ddo", "");
     setValue("majorHead", "");
@@ -232,12 +284,21 @@ const Expenditure = () => {
     setValue("subDetailHead", "");
   }, [sector, setValue, isDataLoaded, isEditMode]);
 
+  /* ================= AUTO FINANCIAL YEAR FROM VOUCHER DATE ================= */
+  useEffect(() => {
+    if (!isDataLoaded || !voucherDate) return;
+    const fy = getFinancialYearFromDate(voucherDate);
+    if (fy)
+      setValue("financialYear", fy, {
+        shouldDirty: false,
+        shouldValidate: false,
+      });
+  }, [voucherDate, isDataLoaded]);
+
   /* ================= MAJOR → SUB MAJOR ================= */
   useEffect(() => {
     if (!majorHead || !isDataLoaded || isEditMode) return;
-
     fetchSubMajors(majorHead);
-
     setValue("subMajorHead", "");
     setValue("minorHead", "");
     setValue("subHead", "");
@@ -249,12 +310,7 @@ const Expenditure = () => {
   /* ================= SUB MAJOR → MINOR ================= */
   useEffect(() => {
     if (!subMajorHead || !isDataLoaded || isEditMode) return;
-
-    fetchMinors({
-      majorHeadCode: majorHead,
-      subMajorCode: subMajorHead,
-    });
-
+    fetchMinors({ majorHeadCode: majorHead, subMajorCode: subMajorHead });
     setValue("minorHead", "");
     setValue("subHead", "");
     setValue("subSubHead", "");
@@ -265,13 +321,11 @@ const Expenditure = () => {
   /* ================= MINOR → SUB HEAD ================= */
   useEffect(() => {
     if (!minorHead || !isDataLoaded || isEditMode) return;
-
     fetchSubHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
       minorHeadCode: minorHead,
     });
-
     setValue("subHead", "");
     setValue("subSubHead", "");
     setValue("detailHead", "");
@@ -281,14 +335,12 @@ const Expenditure = () => {
   /* ================= SUB HEAD → SUB SUB HEAD ================= */
   useEffect(() => {
     if (subHead === "" || !isDataLoaded || isEditMode) return;
-
     fetchSubSubHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
       minorHeadCode: minorHead,
       subHeadCode: subHead,
     });
-
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
@@ -297,7 +349,6 @@ const Expenditure = () => {
   /* ================= SUB SUB HEAD → DETAIL ================= */
   useEffect(() => {
     if (subSubHead === "" || !isDataLoaded || isEditMode) return;
-
     fetchDetailHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
@@ -305,7 +356,6 @@ const Expenditure = () => {
       subHeadCode: subHead,
       subSubHeadCode: subSubHead,
     });
-
     setValue("detailHead", "");
     setValue("subDetailHead", "");
   }, [
@@ -321,7 +371,6 @@ const Expenditure = () => {
   /* ================= DETAIL → SUB DETAIL ================= */
   useEffect(() => {
     if (!detailHead || !isDataLoaded || isEditMode) return;
-
     fetchSubDetailHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
@@ -330,7 +379,6 @@ const Expenditure = () => {
       subSubHeadCode: subSubHead,
       detailHeadCode: detailHead,
     });
-
     setValue("subDetailHead", "");
   }, [
     detailHead,
@@ -346,7 +394,6 @@ const Expenditure = () => {
   /* ================= CALCULATE GROSS AMOUNT ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const gross =
       Number(watch("payOfficers") || 0) +
       Number(watch("payEstablishment") || 0) +
@@ -360,7 +407,6 @@ const Expenditure = () => {
       Number(watch("securityDeposit") || 0) +
       Number(watch("earnestMoney") || 0) +
       Number(watch("transferPayment") || 0);
-
     setValue("grossAmount", gross, {
       shouldDirty: false,
       shouldValidate: false,
@@ -384,7 +430,6 @@ const Expenditure = () => {
   /* ================= CALCULATE GROSS DEDUCTION ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const grossDeduction =
       Number(watch("cgst") || 0) +
       Number(watch("sgst") || 0) +
@@ -409,7 +454,6 @@ const Expenditure = () => {
       Number(watch("vat") || 0) +
       Number(watch("advanceRecovery") || 0) +
       Number(watch("otherDeductions") || 0);
-
     setValue("grossDeduction", grossDeduction, {
       shouldDirty: false,
       shouldValidate: false,
@@ -444,12 +488,10 @@ const Expenditure = () => {
   /* ================= CALCULATE CPF PAYABLE ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const cpfPayable =
       Number(watch("cpfCouncil") || 0) +
       Number(watch("cpfContribution") || 0) +
       Number(watch("cpfRecovery") || 0);
-
     setValue("cpfPayable", cpfPayable, {
       shouldDirty: false,
       shouldValidate: false,
@@ -464,10 +506,8 @@ const Expenditure = () => {
   /* ================= CALCULATE NET DEDUCTION ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const netDeduction =
       Number(watch("grossDeduction") || 0) - Number(watch("cpfPayable") || 0);
-
     setValue("netDeduction", netDeduction, {
       shouldDirty: false,
       shouldValidate: false,
@@ -477,10 +517,8 @@ const Expenditure = () => {
   /* ================= CALCULATE NET AMOUNT ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const netAmount =
       Number(watch("grossAmount") || 0) - Number(watch("netDeduction") || 0);
-
     setValue("netAmount", netAmount, {
       shouldDirty: false,
       shouldValidate: false,
@@ -494,9 +532,7 @@ const Expenditure = () => {
   /* ================= AMOUNT TO WORDS ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const payable = watch("amountPayable");
-
     if (!payable || payable === 0) {
       setValue("amountInWords", "", {
         shouldDirty: false,
@@ -504,9 +540,7 @@ const Expenditure = () => {
       });
       return;
     }
-
-    const words = rupeesToWords(payable);
-    setValue("amountInWords", words, {
+    setValue("amountInWords", rupeesToWords(payable), {
       shouldDirty: false,
       shouldValidate: false,
     });
@@ -515,7 +549,6 @@ const Expenditure = () => {
   /* ================= GET VOUCHER NO (CREATE MODE ONLY) ================= */
   useEffect(() => {
     if (isEditMode || !sector || !isDataLoaded) return;
-
     const fetchNextVoucherNo = async () => {
       setIsExpenditureLoading(true);
       try {
@@ -527,30 +560,22 @@ const Expenditure = () => {
       } catch (error) {
         console.error("Failed to fetch voucher number", error);
         setValue("voucherNo", "ERROR");
-        toast.error("Failed to generate voucher number");
+        setAlertModal({
+          isOpen: true,
+          title: "Voucher Error",
+          message: "Failed to generate voucher number. Please try again.",
+          isSuccess: false,
+        });
       } finally {
         setIsExpenditureLoading(false);
       }
     };
-
     fetchNextVoucherNo();
   }, [sector, isEditMode, isDataLoaded]);
-
-  /* ================= AUTO SELECT FINANCIAL YEAR ================= */
-  useEffect(() => {
-    if (isEditMode || !isDataLoaded) return;
-
-    const currentFY = getFinancialYears(2023)[0];
-    setValue("financialYear", currentFY, {
-      shouldDirty: false,
-      shouldValidate: false,
-    });
-  }, [isEditMode, isDataLoaded]);
 
   /* ================= RESET LOAN TYPE ================= */
   useEffect(() => {
     if (!isDataLoaded) return;
-
     const amount = Number(loansAdvances);
     if (!amount || amount <= 0) {
       setValue("loanType", "", { shouldDirty: false, shouldValidate: false });
@@ -564,16 +589,14 @@ const Expenditure = () => {
       const num = Number(val);
       return isNaN(num) ? 0 : num;
     };
-
     const toISODate = (dateStr) => {
       if (!dateStr) return null;
       try {
         return new Date(dateStr).toISOString();
-      } catch (e) {
+      } catch {
         return null;
       }
     };
-
     return {
       sector: data.sector,
       voucherNo: data.voucherNo,
@@ -655,33 +678,32 @@ const Expenditure = () => {
   /* ================= SUBMIT ================= */
   const onSubmit = async (data) => {
     setIsSubmitting(true);
-
     try {
       const payload = transformDataForBackend(data);
       console.log("SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
 
-      let response;
       if (isEditMode) {
-        response = await updateExpenditure(id, payload);
-        toast.success("Expenditure updated successfully!");
+        await updateExpenditure(id, payload);
       } else {
-        response = await createExpenditure(payload);
-        toast.success("Expenditure created successfully!");
-      }
-
-      if (!isEditMode) {
+        await createExpenditure(payload);
         reset();
       }
 
-      navigate("/expenditures");
+      // ✅ Success alert — closeAlert() will navigate after user clicks OK
+      setAlertModal({
+        isOpen: true,
+        title: "✅ Success",
+        message: isEditMode
+          ? "Expenditure has been updated successfully."
+          : "New expenditure has been created successfully.",
+        isSuccess: true,
+      });
     } catch (error) {
       console.error("Failed to submit expenditure", error);
-
       if (error.response) {
         console.error("Error Details:", {
           status: error.response.status,
           data: error.response.data,
-          headers: error.response.headers,
         });
       }
 
@@ -691,10 +713,15 @@ const Expenditure = () => {
         error.response?.data?.issues?.[0]?.message ||
         `Failed to ${isEditMode ? "update" : "create"} expenditure`;
 
-      toast.error(errorMessage);
+      // ✅ Error alert — closeAlert() just closes, stays on page
+      setAlertModal({
+        isOpen: true,
+        title: "❌ Error",
+        message: errorMessage,
+        isSuccess: false,
+      });
 
       if (error.response?.data?.issues) {
-        console.error("Validation Errors:", error.response.data.issues);
         error.response.data.issues.forEach((issue) => {
           console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
         });
@@ -726,7 +753,6 @@ const Expenditure = () => {
             />
           </div>
         </div>
-
         <h1 className="font-unbounded">
           {isEditMode
             ? "Edit Expenditure Details :"
@@ -741,6 +767,7 @@ const Expenditure = () => {
         <BasicDetailsSection
           register={register}
           departments={departments}
+          depsLoading={depsLoading}
           ddos={ddos}
           grants={grantOptions}
           isExpenditureLoading={isExpenditureLoading}
@@ -796,14 +823,12 @@ const Expenditure = () => {
             { label: "Non Salary", value: "NON_SALARY" },
           ]}
         />
-
         <SelectField
           label="Plan / Non-Plan"
           name="planType"
           register={register}
           options={[{ label: "Select PlanNonPlan", value: "" }, ...planNonPlan]}
         />
-
         <SelectField
           label="Financial Year"
           name="financialYear"
@@ -813,7 +838,6 @@ const Expenditure = () => {
             ...financialYearOptions,
           ]}
         />
-
         <SelectField
           label="Object Head"
           name="objectHead"
@@ -825,7 +849,6 @@ const Expenditure = () => {
           register={register}
           loansAdvances={loansAdvances}
         />
-
         <DeductionsSection register={register} />
 
         <TextAreaField
@@ -833,7 +856,6 @@ const Expenditure = () => {
           name="remarks"
           register={register}
         />
-
         <InputField
           label="Cheque Book No"
           name="chequeBookNo"
@@ -857,7 +879,6 @@ const Expenditure = () => {
           ]}
           removable
         />
-
         <InputField
           label="Treasury Voucher No"
           name="treasuryVoucherNo"
@@ -869,6 +890,17 @@ const Expenditure = () => {
           register={register}
         />
       </FormWrapper>
+
+      {/* ✅ Alert Modal — success navigates away, error stays on page */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        onConfirm={closeAlert}
+        title={alertModal.title}
+        message={alertModal.message}
+        confirmText="OK"
+        cancelText=""
+      />
     </div>
   );
 };

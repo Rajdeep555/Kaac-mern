@@ -1,31 +1,199 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useGreeting } from "../../hooks/useGreeting";
 import { useAuth } from "../../context/AuthContext";
 import { capitalizeFullName } from "../../utils/string";
 import { CashierDashboardCard } from "../../components/ui/CashierDashboardCard";
-import FilterOptionButton from "../../components/ui/FilterOptionButton";
-import DateRangePill from "../../components/ui/DateRangePill";
 import { RiMoneyRupeeCircleLine, RiFileList3Line } from "react-icons/ri";
 import { FiArrowRight } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
+import { getAllChallans } from "../../api/challan.api.js";
+import { useCashierExpenditures } from "../../hooks/useCashierExpenditures.js";
+import { useStateChallan } from "../../hooks/useStateChallan.js";
 
+// ─── Recent Transactions helpers ────────────────────────────────
+const RECENT_TX_KEY = "cashier_recent_transactions";
+const MAX_RECENT = 6;
+
+export const pushRecentTransaction = (tx) => {
+  try {
+    const existing = JSON.parse(sessionStorage.getItem(RECENT_TX_KEY) || "[]");
+    const updated = [tx, ...existing].slice(0, MAX_RECENT);
+    sessionStorage.setItem(RECENT_TX_KEY, JSON.stringify(updated));
+  } catch {}
+};
+
+export const clearRecentTransactions = () => {
+  try {
+    sessionStorage.removeItem(RECENT_TX_KEY);
+  } catch {}
+};
+
+const loadRecentTransactions = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(RECENT_TX_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+// ─── Stat Card skeleton ──────────────────────────────────────────
+const CardSkeleton = () => (
+  <div
+    className="col-span-3 rounded-lg border p-4 animate-pulse"
+    style={{ background: "#fff", borderColor: "#e5e7eb" }}>
+    <div className="h-3 w-24 rounded mb-3" style={{ background: "#e5e7eb" }} />
+    <div className="h-7 w-16 rounded mb-2" style={{ background: "#f3f4f6" }} />
+    <div className="h-2 w-20 rounded" style={{ background: "#f3f4f6" }} />
+  </div>
+);
+
+// ─── Type dot colour ─────────────────────────────────────────────
+const typeColor = { challan: "#1a3a5c", expenditure: "#14532d" };
+
+const formatTime = (isoStr) => {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0)
+      return d.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    if (diffDays === 1) return "Yesterday";
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  } catch {
+    return "";
+  }
+};
+
+// ────────────────────────────────────────────────────────────────
 const CashierDashboard = () => {
   const greetings = useGreeting();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [filter, setFilter] = useState("Day");
-  const [dateRange, setDateRange] = useState({ from: "", to: "" });
+  // ── Council Challan ──────────────────────────────────────────
+  const [councilChallanCount, setCouncilChallanCount] = useState(null);
+  const [councilChallanLoading, setCouncilChallanLoading] = useState(true);
 
-  const handleFilterClick = (item) => {
-    setFilter(item);
-    setDateRange({ from: "", to: "" });
-  };
+  useEffect(() => {
+    const fetchCouncilChallans = async () => {
+      try {
+        setCouncilChallanLoading(true);
 
-  const handleDateChange = (range) => {
-    setDateRange(range);
-    if (range.from && range.to) setFilter(null);
-  };
+        const res = await getAllChallans({
+          isActive: true,
+          limit: 10000,
+        });
+
+        const data = res.data?.data || res.data || [];
+        const arr = Array.isArray(data) ? data : [];
+
+        // Client-side fallback filter
+        const activeCount = arr.filter(
+          (c) => c.isActive === true || c.isActive === 1,
+        ).length;
+
+        setCouncilChallanCount(activeCount);
+      } catch (err) {
+        console.error("Failed to fetch council challans", err);
+        setCouncilChallanCount(0);
+      } finally {
+        setCouncilChallanLoading(false);
+      }
+    };
+    fetchCouncilChallans();
+  }, []);
+
+  // ── State Challan ────────────────────────────────────────────
+  const { challans: stateChallans, loading: stateChallanLoading } =
+    useStateChallan();
+  const stateChallanCount = stateChallans.length;
+
+  // ── Expenditures ─────────────────────────────────────────────
+
+  const { data: councilExpenditures, loading: councilExpLoading } =
+    useCashierExpenditures({
+      sector: "COUNCIL",
+    });
+  const { data: stateExpenditures, loading: stateExpLoading } =
+    useCashierExpenditures({
+      sector: "STATE",
+    });
+  const councilExpCount = councilExpenditures.length;
+  const stateExpCount = stateExpenditures.length;
+
+  // ── Recent Transactions (sessionStorage) ─────────────────────
+  const [recentTransactions, setRecentTransactions] = useState([]);
+
+  useEffect(() => {
+    setRecentTransactions(loadRecentTransactions());
+  }, []);
+
+  // Auto-populate from fetched data on first load if sessionStorage is empty
+  useEffect(() => {
+    const existing = loadRecentTransactions();
+    if (existing.length > 0) return; // already has data
+
+    const txs = [];
+
+    // Pick latest 2 council challans
+    // (API returns array — no date available here so we just take first 2)
+    // We'll build placeholders if you don't have date fields from the list API.
+    // Expenditures have voucherNo and voucherDate
+    if (councilExpenditures.length > 0) {
+      councilExpenditures.slice(0, 2).forEach((e) => {
+        txs.push({
+          label: `Council Expenditure V#${e.voucherNo || e.id}`,
+          amount:
+            e.netAmount != null
+              ? `₹${Number(e.netAmount).toLocaleString("en-IN")}`
+              : "-",
+          time: e.voucherDate || new Date().toISOString(),
+          type: "expenditure",
+        });
+      });
+    }
+
+    if (stateExpenditures.length > 0) {
+      stateExpenditures.slice(0, 2).forEach((e) => {
+        txs.push({
+          label: `State Expenditure V#${e.voucherNo || e.id}`,
+          amount:
+            e.netAmount != null
+              ? `₹${Number(e.netAmount).toLocaleString("en-IN")}`
+              : "-",
+          time: e.voucherDate || new Date().toISOString(),
+          type: "expenditure",
+        });
+      });
+    }
+
+    if (stateChallans.length > 0) {
+      stateChallans.slice(0, 2).forEach((c) => {
+        txs.push({
+          label: `State Challan #${c.challanNo || c.id}`,
+          amount:
+            c.totalAmount != null
+              ? `₹${Number(c.totalAmount).toLocaleString("en-IN")}`
+              : "-",
+          time: c.challanDate || new Date().toISOString(),
+          type: "challan",
+        });
+      });
+    }
+
+    if (txs.length > 0) {
+      const sorted = txs
+        .sort((a, b) => new Date(b.time) - new Date(a.time))
+        .slice(0, MAX_RECENT);
+      sessionStorage.setItem(RECENT_TX_KEY, JSON.stringify(sorted));
+      setRecentTransactions(sorted);
+    }
+  }, [councilExpenditures, stateExpenditures, stateChallans]);
 
   const today = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
@@ -34,34 +202,11 @@ const CashierDashboard = () => {
     year: "numeric",
   });
 
-  const recentTransactions = [
-    {
-      label: "Council Challan #CH-2241",
-      amount: "₹14,500",
-      time: "10:32 AM",
-      type: "challan",
-    },
-    {
-      label: "State Expenditure V#SE-991",
-      amount: "₹8,200",
-      time: "09:55 AM",
-      type: "expenditure",
-    },
-    {
-      label: "Council Expenditure V#CE-114",
-      amount: "₹3,750",
-      time: "Yesterday",
-      type: "expenditure",
-    },
-    {
-      label: "State Challan #SC-882",
-      amount: "₹22,000",
-      time: "Yesterday",
-      type: "challan",
-    },
-  ];
-
-  const typeColor = { challan: "#1a3a5c", expenditure: "#14532d" };
+  const allLoading =
+    councilChallanLoading ||
+    stateChallanLoading ||
+    councilExpLoading ||
+    stateExpLoading;
 
   return (
     <div
@@ -136,63 +281,67 @@ const CashierDashboard = () => {
         </div>
       </div>
 
-      {/* ── Filter Bar ── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-1 h-4 rounded-full"
-            style={{ background: "#c9a84c" }}
-          />
-          <p
-            className="text-xs font-bold uppercase tracking-wider"
-            style={{ color: "#0f2744" }}>
-            Activity Summary
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {["Day", "Week", "Month", "Year"].map((item) => (
-            <FilterOptionButton
-              key={item}
-              title={item}
-              selected={filter === item}
-              onClick={() => handleFilterClick(item)}
-            />
-          ))}
-          <DateRangePill
-            value={dateRange}
-            onChange={handleDateChange}
-            active={!filter && dateRange.from && dateRange.to}
-          />
-        </div>
+      {/* ── Section Label ── */}
+      <div className="flex items-center gap-2">
+        <div
+          className="w-1 h-4 rounded-full"
+          style={{ background: "#c9a84c" }}
+        />
+        <p
+          className="text-xs font-bold uppercase tracking-wider"
+          style={{ color: "#0f2744" }}>
+          Activity Summary
+        </p>
+        {allLoading && (
+          <span className="text-xs ml-2" style={{ color: "#9ca3af" }}>
+            Loading…
+          </span>
+        )}
       </div>
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-12 gap-4">
-        <CashierDashboardCard
-          accent={true}
-          title="Council's Challan"
-          count="100"
-          paragraph="from yesterday"
-          difference={10 - 100}
-        />
-        <CashierDashboardCard
-          title="Council's Expenditure"
-          count="20"
-          paragraph="from yesterday"
-          difference={100 - 39}
-        />
-        <CashierDashboardCard
-          title="State's Challan"
-          count="12"
-          paragraph="from yesterday"
-          difference={200 - 39}
-        />
-        <CashierDashboardCard
-          title="State's Expenditure"
-          count="66"
-          paragraph="from yesterday"
-          difference={1 - 39}
-        />
+        {councilChallanLoading ? (
+          <CardSkeleton />
+        ) : (
+          <CashierDashboardCard
+            accent={true}
+            title="Council's Challan"
+            count={String(councilChallanCount ?? 0)}
+            paragraph="total active challans"
+            difference={councilChallanCount - 0}
+          />
+        )}
+        {councilExpLoading ? (
+          <CardSkeleton />
+        ) : (
+          <CashierDashboardCard
+            title="Council's Expenditure"
+            count={String(councilExpCount)}
+            paragraph="total expenditures"
+            difference={councilExpCount - 0}
+          />
+        )}
+        {stateChallanLoading ? (
+          <CardSkeleton />
+        ) : (
+          <CashierDashboardCard
+            title="State's Challan"
+            count={String(stateChallanCount)}
+            paragraph="total state challans"
+            difference={stateChallanCount - 0}
+          />
+        )}
+        {stateExpLoading ? (
+          <CardSkeleton />
+        ) : (
+          <CashierDashboardCard
+            title="State's Expenditure"
+            count={String(stateExpCount)}
+            paragraph="total expenditures"
+            difference={stateExpCount - 0}
+          />
+        )}
       </div>
 
       {/* ── Bottom Row ── */}
@@ -219,39 +368,77 @@ const CashierDashboard = () => {
                 Recent Transactions
               </p>
             </div>
-            <span className="text-xs" style={{ color: "#9ca3af" }}>
-              Today
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: "#9ca3af" }}>
+                This session
+              </span>
+              {recentTransactions.length > 0 && (
+                <button
+                  onClick={() => {
+                    clearRecentTransactions();
+                    setRecentTransactions([]);
+                  }}
+                  className="text-xs px-2 py-0.5 rounded transition-colors"
+                  style={{
+                    color: "#9ca3af",
+                    background: "#f3f4f6",
+                    border: "1px solid #e5e7eb",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = "#991b1b";
+                    e.currentTarget.style.borderColor = "rgba(153,27,27,0.3)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = "#9ca3af";
+                    e.currentTarget.style.borderColor = "#e5e7eb";
+                  }}>
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
-          <div
-            className="flex flex-col divide-y"
-            style={{ borderColor: "#f3f4f6" }}>
-            {recentTransactions.map((t, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <div
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ background: typeColor[t.type] }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-xs font-semibold truncate"
-                    style={{ color: "#111827" }}>
-                    {t.label}
-                  </p>
-                  <p
-                    className="text-xs"
-                    style={{ color: "#9ca3af", fontSize: "10px" }}>
-                    {t.time}
-                  </p>
+
+          {recentTransactions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-2">
+              <RiMoneyRupeeCircleLine size={28} style={{ color: "#d1d5db" }} />
+              <p className="text-xs font-semibold" style={{ color: "#9ca3af" }}>
+                No transactions this session
+              </p>
+              <p className="text-xs" style={{ color: "#d1d5db" }}>
+                Transactions appear here as you create challans and expenditures
+              </p>
+            </div>
+          ) : (
+            <div
+              className="flex flex-col divide-y"
+              style={{ borderColor: "#f3f4f6" }}>
+              {recentTransactions.map((t, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <div
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: typeColor[t.type] || "#6b7280" }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-xs font-semibold truncate"
+                      style={{ color: "#111827" }}>
+                      {t.label}
+                    </p>
+                    <p
+                      className="text-xs"
+                      style={{ color: "#9ca3af", fontSize: "10px" }}>
+                      {formatTime(t.time)}
+                    </p>
+                  </div>
+                  <span
+                    className="text-xs font-bold flex-shrink-0"
+                    style={{ color: "#0f2744" }}>
+                    {t.amount}
+                  </span>
                 </div>
-                <span
-                  className="text-xs font-bold flex-shrink-0"
-                  style={{ color: "#0f2744" }}>
-                  {t.amount}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quick Access */}

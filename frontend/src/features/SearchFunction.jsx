@@ -1,10 +1,8 @@
 import React, { useState } from "react";
-import { downloadTextFile } from "../utils/csvUtils";
-import { printPrintArea } from "../utils/printUtils";
 import { TbDownload } from "react-icons/tb";
 import { FiPrinter, FiFilter } from "react-icons/fi";
 
-// ── Financial year utility ──────────────────────────────────────────────────
+// ── Financial year utility ──────────────────────────────────────
 const getFinancialYear = (startYear) => {
   const endYear = startYear + 1;
   return {
@@ -16,13 +14,12 @@ const getFinancialYear = (startYear) => {
 const getCurrentFYStartYear = () => {
   const now = new Date();
   const year = now.getFullYear();
-  const month = now.getMonth(); // 0 = Jan, 3 = Apr
+  const month = now.getMonth();
   return month >= 3 ? year : year - 1;
 };
 
 const buildFYOptions = () => {
   const currentStart = getCurrentFYStartYear();
-  // Current year + past 3 years = 4 options total
   return [
     getFinancialYear(currentStart),
     getFinancialYear(currentStart - 1),
@@ -31,15 +28,17 @@ const buildFYOptions = () => {
   ];
 };
 
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
 
-const SearchFunction = () => {
+const SearchFunction = ({ onFilter, onDownload, onPrint }) => {
   const fyOptions = buildFYOptions();
   const [selectYear, setSelectYear] = useState(fyOptions[0].value);
   const [applied, setApplied] = useState(false);
 
   const handleApply = () => {
     setApplied(true);
+    // ✅ Lift selected FY up to parent so the form/statement can filter its data
+    if (onFilter) onFilter(selectYear);
     setTimeout(() => setApplied(false), 2000);
   };
 
@@ -77,8 +76,8 @@ const SearchFunction = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
-              const content = "Name,Code\nRajdeep,123";
-              downloadTextFile(content, "departments.csv");
+              // ✅ Call parent's download handler — parent knows what data to export
+              if (onDownload) onDownload(selectYear);
             }}
             className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded cursor-pointer transition-all duration-150"
             style={{
@@ -97,7 +96,10 @@ const SearchFunction = () => {
           </button>
 
           <button
-            onClick={printPrintArea}
+            onClick={() => {
+              // ✅ Call parent's print handler — parent triggers print on the correct div
+              if (onPrint) onPrint();
+            }}
             className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded cursor-pointer transition-all duration-150"
             style={{
               color: "#ffffff",
@@ -154,7 +156,6 @@ const SearchFunction = () => {
                 </option>
               ))}
             </select>
-            {/* Chevron icon */}
             <span
               className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
               style={{ color: "#6b7280" }}>

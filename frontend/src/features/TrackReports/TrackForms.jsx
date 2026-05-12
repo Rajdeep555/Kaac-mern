@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Form1 from "../../components/DisplayForms/Form1";
 import Form2 from "../../components/DisplayForms/Form2";
@@ -73,11 +73,14 @@ const TrackForms = () => {
   const { sector } = useParams();
   const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState("1");
+  const [selectedFY, setSelectedFY] = useState(null); // ✅ FY filter state
+
+  // ✅ Ref on the form display area for targeted print
+  const formAreaRef = useRef(null);
 
   const sectorType = sector
     ? SECTOR_LABELS[sector.toLowerCase()] || null
     : null;
-
   const sectorMeta = sectorType ? SECTOR_META[sectorType] : null;
 
   const array = [
@@ -100,28 +103,84 @@ const TrackForms = () => {
     "12",
   ];
 
+  // ✅ Handle FY filter from SearchFunction
+  const handleFilter = useCallback((fy) => {
+    setSelectedFY(fy);
+  }, []);
+
+  // ✅ Print only the form content div
+  const handlePrint = useCallback(() => {
+    if (!formAreaRef.current) return;
+    const content = formAreaRef.current.innerHTML;
+    const win = window.open("", "_blank", "width=900,height=700");
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Form ${activeStep} — ${FORM_LABELS[activeStep] || ""} ${sectorType ? `(${sectorType})` : ""}</title>
+          <style>
+            body { font-family: 'Georgia', serif; margin: 24px; color: #111; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; }
+            th { background: #f3f4f6; font-weight: 700; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>${content}</body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  }, [activeStep, sectorType]);
+
+  // ✅ Download form info as CSV (label + metadata)
+  const handleDownload = useCallback(
+    (fy) => {
+      const rows = [
+        ["Form No", "Form Name", "Sector", "Financial Year"],
+        [
+          activeStep,
+          FORM_LABELS[activeStep] || "",
+          sectorType || "All",
+          fy || "Current",
+        ],
+      ];
+      const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Form_${activeStep}_${sectorType || "ALL"}_${fy || "current"}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [activeStep, sectorType],
+  );
+
   const stepComponents = useMemo(
     () => ({
-      1: <Form1 sector={sectorType} />,
-      2: <Form2 sector={sectorType} />,
-      3: <Form3 sector={sectorType} />,
-      4: <Form4 sector={sectorType} />,
-      "5A": <Form5A sector={sectorType} />,
-      "5B": <Form5B sector={sectorType} />,
-      "5C": <Form5C sector={sectorType} />,
-      "5D": <Form5D sector={sectorType} />,
-      "5E": <Form5E sector={sectorType} />,
-      6: <Form6 sector={sectorType} />,
-      7: <Form7 sector={sectorType} />,
-      "7A": <Form7A sector={sectorType} />,
-      "7B": <Form7B sector={sectorType} />,
-      8: <Form8 sector={sectorType} />,
-      9: <Form9 sector={sectorType} />,
-      10: <Form10 sector={sectorType} />,
-      11: <Form11 sector={sectorType} />,
-      12: <Form12 sector={sectorType} />,
+      1: <Form1 sector={sectorType} financialYear={selectedFY} />,
+      2: <Form2 sector={sectorType} financialYear={selectedFY} />,
+      3: <Form3 sector={sectorType} financialYear={selectedFY} />,
+      4: <Form4 sector={sectorType} financialYear={selectedFY} />,
+      "5A": <Form5A sector={sectorType} financialYear={selectedFY} />,
+      "5B": <Form5B sector={sectorType} financialYear={selectedFY} />,
+      "5C": <Form5C sector={sectorType} financialYear={selectedFY} />,
+      "5D": <Form5D sector={sectorType} financialYear={selectedFY} />,
+      "5E": <Form5E sector={sectorType} financialYear={selectedFY} />,
+      6: <Form6 sector={sectorType} financialYear={selectedFY} />,
+      7: <Form7 sector={sectorType} financialYear={selectedFY} />,
+      "7A": <Form7A sector={sectorType} financialYear={selectedFY} />,
+      "7B": <Form7B sector={sectorType} financialYear={selectedFY} />,
+      8: <Form8 sector={sectorType} financialYear={selectedFY} />,
+      9: <Form9 sector={sectorType} financialYear={selectedFY} />,
+      10: <Form10 sector={sectorType} financialYear={selectedFY} />,
+      11: <Form11 sector={sectorType} financialYear={selectedFY} />,
+      12: <Form12 sector={sectorType} financialYear={selectedFY} />,
     }),
-    [sectorType],
+    [sectorType, selectedFY], // ✅ re-renders when FY changes
   );
 
   return (
@@ -139,7 +198,6 @@ const TrackForms = () => {
           borderBottom: "4px solid #c9a84c",
           padding: "0",
         }}>
-        {/* Thin Ashoka Stripe */}
         <div
           style={{
             height: "5px",
@@ -155,9 +213,7 @@ const TrackForms = () => {
             alignItems: "center",
             justifyContent: "space-between",
           }}>
-          {/* Left: Emblem + Title */}
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            {/* Emblem placeholder circle */}
             <div
               style={{
                 width: 52,
@@ -195,7 +251,6 @@ const TrackForms = () => {
                 )}
               </svg>
             </div>
-
             <div>
               <p
                 style={{
@@ -231,7 +286,6 @@ const TrackForms = () => {
             </div>
           </div>
 
-          {/* Right: Sector Badge */}
           {sectorMeta && (
             <div
               style={{
@@ -315,8 +369,13 @@ const TrackForms = () => {
             </>
           )}
         </div>
-        <div style={{ flex: 1, maxWidth: "420px", marginLeft: "32px" }}>
-          <SearchFunction />
+        {/* ✅ SearchFunction now wired with onFilter, onDownload, onPrint */}
+        <div style={{ flex: 1, maxWidth: "520px", marginLeft: "32px" }}>
+          <SearchFunction
+            onFilter={handleFilter}
+            onDownload={handleDownload}
+            onPrint={handlePrint}
+          />
         </div>
       </div>
 
@@ -351,6 +410,16 @@ const TrackForms = () => {
                   color: "#6b7280",
                 }}>
                 Select a form number below to view the corresponding register
+                {selectedFY && (
+                  <span
+                    style={{
+                      marginLeft: "8px",
+                      color: "#14532d",
+                      fontWeight: "600",
+                    }}>
+                    — FY {selectedFY}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -399,7 +468,7 @@ const TrackForms = () => {
                   fontSize: "11px",
                   color: "#9ca3af",
                 }}>
-                Currently Viewing
+                Currently Viewing{selectedFY ? ` — FY ${selectedFY}` : ""}
               </p>
             </div>
           </div>
@@ -455,7 +524,6 @@ const TrackForms = () => {
             />
           </div>
 
-          {/* Form Buttons Grid */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
             {array.map((row) => {
               const isActive = activeStep === row;
@@ -525,7 +593,6 @@ const TrackForms = () => {
             })}
           </div>
 
-          {/* Prev / Next navigation */}
           <div
             style={{
               display: "flex",
@@ -583,7 +650,7 @@ const TrackForms = () => {
           </div>
         </div>
 
-        {/* ── Form Display Area ── */}
+        {/* ── Form Display Area — wrapped in ref for print ── */}
         <div
           style={{
             background: "#ffffff",
@@ -592,7 +659,6 @@ const TrackForms = () => {
             overflow: "hidden",
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
           }}>
-          {/* Form header strip */}
           <div
             style={{
               background: "#0f2744",
@@ -676,8 +742,10 @@ const TrackForms = () => {
             )}
           </div>
 
-          {/* Actual form content */}
-          <div style={{ padding: "0" }}>{stepComponents[activeStep]}</div>
+          {/* ✅ ref attached here — only this div gets printed */}
+          <div ref={formAreaRef} style={{ padding: "0" }}>
+            {stepComponents[activeStep]}
+          </div>
         </div>
 
         {/* ── Footer Action Bar ── */}
@@ -697,7 +765,6 @@ const TrackForms = () => {
             All records are official government documents. Unauthorized access
             is prohibited.
           </p>
-          {/* <Button /> */}
         </div>
       </div>
 
