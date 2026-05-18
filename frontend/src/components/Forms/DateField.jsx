@@ -1,3 +1,40 @@
+// const DateField = ({
+//   label,
+//   name,
+//   value,
+//   onChange,
+//   futureDate = false,
+//   readonly = false,
+//   min,
+//   max,
+//   register,
+// }) => {
+//   const today = new Date().toISOString().split("T")[0];
+
+//   return (
+//     <div className="flex flex-col gap-1">
+//       <label className="text-sm font-medium">{label}</label>
+
+//       <input
+//         type="date"
+//         name={name}
+//         disabled={readonly}
+//         min={min}
+//         max={futureDate ? undefined : today}
+//         {...(register ? register(name) : { value, onChange })}
+//         className={`border border-zinc-400 rounded px-3 py-2 outline-none
+//           ${
+//             readonly
+//               ? "bg-gray-300 cursor-not-allowed"
+//               : "focus:ring-1 focus:ring-blue-500"
+//           }`}
+//       />
+//     </div>
+//   );
+// };
+
+// export default DateField;
+
 const DateField = ({
   label,
   name,
@@ -6,6 +43,7 @@ const DateField = ({
   futureDate = false,
   readonly = false,
   min,
+  max,
   register,
 }) => {
   const today = new Date().toISOString().split("T")[0];
@@ -19,7 +57,7 @@ const DateField = ({
         name={name}
         disabled={readonly}
         min={min}
-        max={futureDate ? undefined : today}
+        max={max || (futureDate ? undefined : today)}
         {...(register ? register(name) : { value, onChange })}
         className={`border border-zinc-400 rounded px-3 py-2 outline-none
           ${

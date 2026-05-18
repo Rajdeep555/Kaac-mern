@@ -32,6 +32,7 @@ import AmountBreakupSection from "../../components/Expenditure/AmountBreakupSect
 import DeductionsSection from "../../components/Expenditure/DeductionsSection.jsx";
 import { useGrants } from "../../hooks/useGrants.js";
 import TableButton from "../../components/ui/TableButton.jsx";
+import { useExpenditureTypes } from "../../hooks/useExpenditureTypes.js";
 
 // ✅ Indian FY helper (April–March)
 const getFinancialYearFromDate = (dateStr) => {
@@ -175,10 +176,9 @@ const Expenditure = () => {
   });
   const { ddos } = useDdo();
   const { planNonPlan } = usePlanNonPlan();
-  const financialYearOptions = getFinancialYears(2023).map((fy) => ({
-    label: fy,
-    value: fy,
-  }));
+  const { expenditureTypeOptions } = useExpenditureTypes();
+  // console.log("expenditureTypeOptions:", expenditureTypeOptions);
+
   const { objectHeadOptions } = useObjectHead();
   const { grantOptions } = useGrants();
 
@@ -285,15 +285,15 @@ const Expenditure = () => {
   }, [sector, setValue, isDataLoaded, isEditMode]);
 
   /* ================= AUTO FINANCIAL YEAR FROM VOUCHER DATE ================= */
-  useEffect(() => {
-    if (!isDataLoaded || !voucherDate) return;
-    const fy = getFinancialYearFromDate(voucherDate);
-    if (fy)
-      setValue("financialYear", fy, {
-        shouldDirty: false,
-        shouldValidate: false,
-      });
-  }, [voucherDate, isDataLoaded]);
+  // useEffect(() => {
+  //   if (!isDataLoaded || !voucherDate) return;
+  //   const fy = getFinancialYearFromDate(voucherDate);
+  //   if (fy)
+  //     setValue("financialYear", fy, {
+  //       shouldDirty: false,
+  //       shouldValidate: false,
+  //     });
+  // }, [voucherDate, isDataLoaded]);
 
   /* ================= MAJOR → SUB MAJOR ================= */
   useEffect(() => {
@@ -769,6 +769,7 @@ const Expenditure = () => {
           departments={departments}
           depsLoading={depsLoading}
           ddos={ddos}
+          watch={watch}
           grants={grantOptions}
           isExpenditureLoading={isExpenditureLoading}
         />
@@ -783,15 +784,7 @@ const Expenditure = () => {
           label="Expenditure Type"
           name="expenditureType"
           register={register}
-          options={[
-            { label: "Select Type", value: "" },
-            { label: "Capital", value: "CAPITAL" },
-            { label: "Revenue", value: "REVENUE" },
-            {
-              label: "Deposit Bearing / Non Bearing Interest",
-              value: "DEPOSIT BEARING",
-            },
-          ]}
+          options={[{ label: "", value: "" }, ...expenditureTypeOptions]}
         />
 
         <HeadHierarchySection
@@ -829,15 +822,7 @@ const Expenditure = () => {
           register={register}
           options={[{ label: "Select PlanNonPlan", value: "" }, ...planNonPlan]}
         />
-        <SelectField
-          label="Financial Year"
-          name="financialYear"
-          register={register}
-          options={[
-            { label: "Select Financial Year", value: "" },
-            ...financialYearOptions,
-          ]}
-        />
+
         <SelectField
           label="Object Head"
           name="objectHead"

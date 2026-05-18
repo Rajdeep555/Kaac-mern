@@ -2,6 +2,28 @@
 import InputField from "../Forms/InputField";
 import SelectField from "../Forms/SelectField";
 import DateField from "../Forms/DateField";
+import { getFinancialYears } from "../../hooks/useFinancialYear";
+
+const financialYearOptions = getFinancialYears(2023).map((fy) => ({
+  label: fy,
+  value: fy,
+}));
+
+const monthOptions = [
+  { label: "Select Month", value: "" },
+  { label: "January", value: "01" },
+  { label: "February", value: "02" },
+  { label: "March", value: "03" },
+  { label: "April", value: "04" },
+  { label: "May", value: "05" },
+  { label: "June", value: "06" },
+  { label: "July", value: "07" },
+  { label: "August", value: "08" },
+  { label: "September", value: "09" },
+  { label: "October", value: "10" },
+  { label: "November", value: "11" },
+  { label: "December", value: "12" },
+];
 
 const BasicDetailsSection = ({
   register,
@@ -9,7 +31,28 @@ const BasicDetailsSection = ({
   ddos,
   grants,
   isExpenditureLoading,
+  watch,
 }) => {
+  const financialYear = watch("financialYear");
+  const selectedMonth = watch("month");
+
+  let minDate = "";
+  let maxDate = "";
+
+  if (financialYear && selectedMonth) {
+    const [startYear, endYear] = financialYear.split("-");
+
+    // Jan-Mar belongs to endYear
+    const year =
+      Number(selectedMonth) >= 1 && Number(selectedMonth) <= 3
+        ? endYear
+        : startYear;
+
+    const lastDay = new Date(year, selectedMonth, 0).getDate();
+
+    minDate = `${year}-${selectedMonth}-01`;
+    maxDate = `${year}-${selectedMonth}-${lastDay}`;
+  }
   return (
     <>
       <SelectField
@@ -33,7 +76,28 @@ const BasicDetailsSection = ({
         placeholder={isExpenditureLoading ? "fetching..." : ""}
       />
 
-      <DateField label="Date" name="voucherDate" register={register} />
+      <SelectField
+        label="Financial Year"
+        name="financialYear"
+        register={register}
+        options={[
+          { label: "Select Financial Year", value: "" },
+          ...financialYearOptions,
+        ]}
+      />
+      <SelectField
+        label="Month"
+        name="month"
+        register={register}
+        options={monthOptions}
+      />
+      <DateField
+        label="Date"
+        name="voucherDate"
+        register={register}
+        min={minDate}
+        max={maxDate}
+      />
 
       <InputField
         label="Requisition No"
@@ -45,6 +109,8 @@ const BasicDetailsSection = ({
         label="Requisition Date"
         name="requisitionDate"
         register={register}
+        min={minDate}
+        max={maxDate}
       />
 
       <SelectField

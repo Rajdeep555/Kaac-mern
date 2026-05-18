@@ -13,10 +13,7 @@ export const useExpenditureTypes = () => {
             try {
                 const res = await getExpenditureTypes();
                 const list = res.data.expenditureTypes ?? [];
-
-                // ✅ Map to select options, only active ones
                 setExpenditureTypeOptions([
-                    { label: "Select Type", value: "" },
                     ...list
                         .filter((et) => et.isActive)
                         .map((et) => ({
