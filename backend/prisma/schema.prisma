@@ -189,8 +189,9 @@ model Challan {
   ddoId               Int
   majorHead           String
   subMajorHead        String
-  subSubMajorHead     String
   minorHead           String
+  subHead             String
+  subSubHead          String
   detailHead          String
   treasuryCode        String?
   treasuryChallanNo   String?

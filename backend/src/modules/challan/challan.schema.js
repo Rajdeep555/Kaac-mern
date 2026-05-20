@@ -17,8 +17,10 @@ export const createChallanSchema = z.object({
 
     majorHead: z.string().min(1),
     subMajorHead: z.string().min(1),
-    subSubMajorHead: z.string().min(1),
     minorHead: z.string().min(1),
+    subHead: z.string().optional(),
+
+    subSubHead: z.string().optional(),
     detailHead: z.string().min(1),
 
     treasuryCode: z.string().optional(),

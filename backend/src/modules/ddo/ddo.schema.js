@@ -1,14 +1,41 @@
 import { z } from "zod";
 
 export const createDDOSchema = z.object({
-    ddoName: z.string().min(2, "DDO Name must be at least 2 characters"),
-    ddoEmail: z.email().optional(),            // ✅ Zod 4 top-level (or keep z.string().email())
-    ddoCode: z.string().min(2, "DDO Code must be at least 2 characters").toUpperCase(),
-    ddoPhone: z.string().min(10).max(10).optional(),
+    ddoName: z
+        .string()
+        .min(
+            2,
+            "DDO Name must be at least 2 characters",
+        ),
+    ddoEmail: z
+        .string()
+        .email("Invalid email")
+        .optional()
+        .or(z.literal(""))
+        .nullable(),
+
+    ddoCode: z
+        .string()
+        .min(
+            2,
+            "DDO Code must be at least 2 characters",
+        )
+        .transform((val) => val.toUpperCase()),
+    ddoPhone: z
+        .string()
+        .min(10, "Phone must be 10 digits")
+        .max(10, "Phone must be 10 digits")
+        .optional()
+        .or(z.literal(""))
+        .nullable(),
+
     ddoPassword: z.string().optional(),
+
     isActive: z.boolean().optional(),
+
     divisionId: z.coerce.number(),
-    division: z.string().optional()
+
+    division: z.string().optional(),
 });
 
 export const updateDDOSchema = z.object({

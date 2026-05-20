@@ -25,8 +25,9 @@ export const createChallan = async (data) => {
 
                 majorHead: data.majorHead,
                 subMajorHead: data.subMajorHead,
-                subSubMajorHead: data.subSubMajorHead,
                 minorHead: data.minorHead,
+                subHead: data.subHead,
+                subSubHead: data.subSubHead,
                 detailHead: data.detailHead,
 
                 treasuryCode: data.treasuryCode,
@@ -84,8 +85,9 @@ export const updateChallan = async (id, data, userId, role) => {
                 ddoId: data.ddoId,
                 majorHead: data.majorHead,
                 subMajorHead: data.subMajorHead,
-                subSubMajorHead: data.subSubMajorHead,
                 minorHead: data.minorHead,
+                subHead: data.subHead,
+                subSubHead: data.subSubHead,
                 detailHead: data.detailHead,
                 treasuryCode: data.treasuryCode,
                 treasuryChallanNo: data.treasuryChallanNo,

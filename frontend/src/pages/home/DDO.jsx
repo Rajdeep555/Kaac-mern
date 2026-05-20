@@ -144,8 +144,6 @@ const DDO = () => {
 
   const columns = [
     { key: "ddoName", label: "Name" },
-    { key: "ddoEmail", label: "Email" },
-    { key: "ddoPhone", label: "Phone" },
     { key: "ddoCode", label: "Code" },
     {
       key: "isActive",
@@ -226,7 +224,6 @@ const DDO = () => {
       type: "text",
       placeholder: "Enter code",
       required: !editingDDO,
-      // ✅ Disable ddoCode when editing — code should not change
       disabled: !!editingDDO,
     },
     {
@@ -250,9 +247,9 @@ const DDO = () => {
             data={ddos}
             columns={columns}
             // ✅ FIX: searchableKeys use actual field names that exist in data
-            searchableKeys={["ddoName", "ddoEmail", "ddoPhone", "ddoCode"]}
+            searchableKeys={["ddoName", "ddoCode"]}
             statusKey="isActive"
-            pageSize={10}
+            pageSize={50}
             loading={loading}
             downloadFileName="ddo"
             printTitle="DDO Report"

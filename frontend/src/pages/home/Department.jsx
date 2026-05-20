@@ -176,8 +176,12 @@ const Department = () => {
     {
       name: "sector",
       label: "Sector",
-      type: "text",
-      placeholder: "Enter sector",
+      type: "select",
+      placeholder: "Select sector",
+      options: [
+        { label: "Council", value: "COUNCIL" },
+        { label: "State", value: "STATE" },
+      ],
     },
   ];
 
@@ -197,7 +201,7 @@ const Department = () => {
           columns={columns}
           searchableKeys={["name", "code", "sector"]}
           statusKey="isActive"
-          pageSize={10}
+          pageSize={40}
           loading={loading}
           downloadFileName="departments"
           printTitle="Department Report"

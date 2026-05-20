@@ -14,8 +14,8 @@ export const createDDO = async (data) => {
         data: {
             ddoName: data.ddoName,
             ddoCode: data.ddoCode,
-            ddoEmail: data.ddoEmail,
-            ddoPhone: data.ddoPhone,
+            ddoEmail: data.ddoEmail || null,
+            ddoPhone: data.ddoPhone || null,
             ddoPassword: data.ddoPassword,
             isActive: data.isActive,
             divisionId: data.divisionId
@@ -34,7 +34,7 @@ export const getAllDDOs = async () => {
             ddoEmail: true,
             isActive: true,
         },
-        orderBy: { ddoName: "asc" }
+        orderBy: { ddoCode: "desc" }
     });
 };
 
