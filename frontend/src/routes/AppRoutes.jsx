@@ -40,6 +40,7 @@ import Unauthorized from "../components/ui/Unauthorized";
 import NotFound from "../pages/not-found/NotFound";
 import User from "../pages/home/User";
 import ExpenditureDetailPage from "../pages/cashier/ExpenditureDetailPage";
+import ChallanHead from "../pages/home/ChallanHead";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -85,6 +86,7 @@ const AppRoutes = createBrowserRouter([
               { path: "plan-non-plan", element: <Plan_Non_Plan /> },
               { path: "state", element: <State /> },
               { path: "council", element: <Council /> },
+              { path: "challan-head", element: <ChallanHead /> },
               { path: "ddo", element: <DDO /> },
               { path: "generate-reports", element: <GenerateReports /> },
               { path: "state-recipt-report", element: <State_Recipt_Report /> },

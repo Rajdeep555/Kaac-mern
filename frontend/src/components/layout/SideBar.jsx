@@ -83,6 +83,12 @@ export const menuItems = [
         to: "/state",
         icon: <MdSupervisorAccount />,
       },
+      {
+        id: nanoid(),
+        label: "Challan Head",
+        to: "/challan-head",
+        icon: <MdSupervisorAccount />,
+      },
     ],
   },
   {
@@ -272,7 +278,7 @@ const Sidebar = () => {
             <p
               className="text-xs font-bold tracking-widest uppercase"
               style={{ color: "#c9a84c" }}>
-              Govt. of India
+              KAAC, Diphu
             </p>
             <p className="text-white font-bold text-sm leading-tight">
               Financial System

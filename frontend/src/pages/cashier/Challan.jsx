@@ -23,8 +23,15 @@ import { showToast } from "../../utils/toast.js";
 import { getAllChallanHead } from "../../api/challanHead.api.js";
 import { useNavigate, useParams } from "react-router-dom";
 
+// ─── UI Label → DB field mapping ──────────────────────────────────────────────
+// Major Head      → majorHeadCode
+// Sub Major Head  → subMajorCode      (parent: majorHeadCode)
+// Minor Head      → minorHeadCode     (parent: subMajorCode)
+// Sub Head        → subHeadCode       (parent: minorHeadCode)
+// Sub Sub Head    → subSubHeadCode    (parent: subHeadCode)
+// Detail Head     → detailHeadCode    (parent: subSubHeadCode)  ← NEW
+
 // ─── Standalone readonly display input (NOT registered with RHF) ──────────────
-// Used to show pre-filled head labels in edit mode without RHF interference.
 const LockedInput = ({ label, value }) => (
   <div className="flex flex-col gap-1">
     <label className="text-sm font-medium">{label}</label>
@@ -48,26 +55,25 @@ const Challan = () => {
   const [heads, setHeads] = useState([]);
   const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(!isEditMode);
 
-  const [majorOptions, setMajorOptions] = useState([]);
-  const [subMajorOptions, setSubMajorOptions] = useState([]);
-  const [subSubMajorOptions, setSubSubMajorOptions] = useState([]);
-  const [minorOptions, setMinorOptions] = useState([]);
-  const [detailOptions, setDetailOptions] = useState([]);
+  // One state per dropdown level
+  const [majorOptions, setMajorOptions] = useState([]); // Level 1
+  const [subMajorOptions, setSubMajorOptions] = useState([]); // Level 2
+  const [minorOptions, setMinorOptions] = useState([]); // Level 3
+  const [subHeadOptions, setSubHeadOptions] = useState([]); // Level 4
+  const [subSubHeadOptions, setSubSubHeadOptions] = useState([]); // Level 5
+  const [detailOptions, setDetailOptions] = useState([]); // Level 6 ← NEW
 
-  // Tracks if the user has manually changed Major Head while in edit mode.
   const majorHeadChangedByUser = useRef(false);
   const [headFieldsUnlocked, setHeadFieldsUnlocked] = useState(false);
-
-  // Tracks whether the selectedMajor effect is running for the first time
   const isFirstMajorRender = useRef(true);
 
-  // Raw DB codes stored separately so LockedInput can show labels
-  // even before `heads` is loaded (falls back to raw code, then label once loaded)
+  // Raw DB codes kept separately for LockedInput display in edit mode
   const [editCodes, setEditCodes] = useState({
-    subMajorHead: "",
-    subSubMajorHead: "",
-    minorHead: "",
-    detailHead: "",
+    subMajorCode: "",
+    minorHeadCode: "",
+    subHeadCode: "",
+    subSubHeadCode: "",
+    detailHeadCode: "", // ← NEW
     treasuryName: "",
   });
 
@@ -91,11 +97,12 @@ const Challan = () => {
       department: "",
       divisionCode: "",
       ddo: "",
-      majorHead: "",
-      subMajorHead: "",
-      subSubMajorHead: "",
-      minorHead: "",
-      detailHead: "",
+      majorHead: "", // Level 1 — majorHeadCode
+      subMajorHead: "", // Level 2 — subMajorCode
+      minorHead: "", // Level 3 — minorHeadCode
+      subHead: "", // Level 4 — subHeadCode
+      subSubHead: "", // Level 5 — subSubHeadCode
+      detailHead: "", // Level 6 — detailHeadCode ← NEW
       treasuryName: "",
       treasuryChallanNo: "",
       treasuryChallanDate: "",
@@ -105,16 +112,15 @@ const Challan = () => {
     },
   });
 
-  // ─── Watch fields needed for cascade and for locked-input labels ───────────
   const selectedMajor = watch("majorHead");
   const selectedSubMajor = watch("subMajorHead");
-  const selectedSubSubMajor = watch("subSubMajorHead");
-  const selectedMinor = watch("minorHead");
+  const selectedMinor = watch("minorHead"); // Level 3
+  const selectedSubHead = watch("subHead"); // Level 4
+  const selectedSubSub = watch("subSubHead"); // Level 5
 
   // ─── Fetch Challan for Edit ────────────────────────────────────────────────
   useEffect(() => {
     if (!isEditMode) return;
-
     const fetchChallan = async () => {
       try {
         const res = await getChallanById(id);
@@ -146,32 +152,31 @@ const Challan = () => {
           setValue("amountInWords", rupeesToWords(data.amount));
           setValue("remarks", data.remarks || "");
 
-          // Set head codes into RHF (needed for submit payload)
+          // Head codes into RHF (needed for submit payload)
           setValue("majorHead", String(data.majorHead || ""));
           setValue("subMajorHead", String(data.subMajorHead || ""));
-          setValue("subSubMajorHead", String(data.subSubMajorHead || ""));
-          setValue("minorHead", String(data.minorHead || ""));
-          setValue("detailHead", String(data.detailHead || ""));
+          setValue("minorHead", String(data.minorHead || "")); // Level 3
+          setValue("subHead", String(data.subHead || "")); // Level 4
+          setValue("subSubHead", String(data.subSubHead || "")); // Level 5
+          setValue("detailHead", String(data.detailHead || "")); // Level 6
           setValue("treasuryName", String(data.treasuryCode || ""));
 
-          // Also store raw codes separately so LockedInputs can display labels
+          // Also store separately for LockedInput labels
           setEditCodes({
-            subMajorHead: String(data.subMajorHead || ""),
-            subSubMajorHead: String(data.subSubMajorHead || ""),
-            minorHead: String(data.minorHead || ""),
-            detailHead: String(data.detailHead || ""),
+            subMajorCode: String(data.subMajorHead || ""),
+            minorHeadCode: String(data.minorHead || ""),
+            subHeadCode: String(data.subHead || ""),
+            subSubHeadCode: String(data.subSubHead || ""),
+            detailHeadCode: String(data.detailHead || ""),
             treasuryName: String(data.treasuryCode || ""),
           });
 
-          setTimeout(() => {
-            setIsInitialDataLoaded(true);
-          }, 100);
+          setTimeout(() => setIsInitialDataLoaded(true), 100);
         }
       } catch (error) {
         showToast("Failed to fetch challan", "error");
       }
     };
-
     fetchChallan();
   }, [id, isEditMode, setValue]);
 
@@ -202,27 +207,26 @@ const Challan = () => {
     fetchHeads();
   }, []);
 
-  // ─── Detect user-driven Major Head change (skip first render) ─────────────
+  // ─── Detect user-driven Major Head change (skip mount) ────────────────────
   useEffect(() => {
     if (isFirstMajorRender.current) {
       isFirstMajorRender.current = false;
       return;
     }
-    // Only unlock if in edit mode and user actually changed it
     if (isEditMode) {
       majorHeadChangedByUser.current = true;
       setHeadFieldsUnlocked(true);
     }
   }, [selectedMajor, isEditMode]);
 
-  // ─── Sub Major Options (cascade from Major) ────────────────────────────────
+  // ─── Level 2: Sub Major Head (parent: majorHeadCode) ─────────────────────
   useEffect(() => {
     if (!selectedMajor || !isInitialDataLoaded) {
       setSubMajorOptions([]);
       return;
     }
 
-    const subs = [
+    const opts = [
       ...new Map(
         heads
           .filter(
@@ -240,139 +244,156 @@ const Challan = () => {
           ]),
       ).values(),
     ];
-    setSubMajorOptions(subs);
+    setSubMajorOptions(opts);
 
     if (majorHeadChangedByUser.current) {
       setValue("subMajorHead", "", { shouldDirty: false });
-      setValue("subSubMajorHead", "", { shouldDirty: false });
       setValue("minorHead", "", { shouldDirty: false });
+      setValue("subHead", "", { shouldDirty: false });
+      setValue("subSubHead", "", { shouldDirty: false });
       setValue("detailHead", "", { shouldDirty: false });
     }
   }, [selectedMajor, heads, isInitialDataLoaded, setValue]);
 
-  // ─── Sub Sub Major Options ─────────────────────────────────────────────────
+  // ─── Level 3: Minor Head (parent: subMajorCode) ───────────────────────────
   useEffect(() => {
     if (!selectedSubMajor || !isInitialDataLoaded) {
-      setSubSubMajorOptions([]);
-      return;
-    }
-
-    const subSubs = [
-      ...new Map(
-        heads
-          .filter(
-            (h) => String(h.subSubMajorParentCode) === String(selectedSubMajor),
-          )
-          .map((h) => [
-            String(h.subSubMajorCode || "00"),
-            {
-              label: `${h.subSubMajor || "Null"} (${h.subSubMajorCode || "00"})`,
-              value: String(h.subSubMajorCode || "00"),
-            },
-          ]),
-      ).values(),
-    ];
-    setSubSubMajorOptions(subSubs);
-
-    if (majorHeadChangedByUser.current) {
-      setValue("subSubMajorHead", "", { shouldDirty: false });
-      setValue("minorHead", "", { shouldDirty: false });
-      setValue("detailHead", "", { shouldDirty: false });
-    }
-  }, [selectedSubMajor, heads, isInitialDataLoaded, setValue]);
-
-  // ─── Minor Options ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const parentCode =
-      selectedSubSubMajor && selectedSubSubMajor !== "0"
-        ? selectedSubSubMajor
-        : selectedSubMajor;
-
-    if (!parentCode || !isInitialDataLoaded) {
       setMinorOptions([]);
       return;
     }
 
-    const minors = [
+    const opts = [
       ...new Map(
         heads
-          .filter((h) => String(h.minorHeadParentCode) === String(parentCode))
-          .map((h) => {
-            const code =
-              h.minorHeadCode && h.minorHeadCode !== "0"
-                ? String(h.minorHeadCode)
-                : "0";
-            const name =
-              h.minorHead && h.minorHead.trim() !== "" ? h.minorHead : "Null";
-            return [code, { label: `${name} (${code})`, value: code }];
-          }),
+          .filter(
+            (h) =>
+              h.minorHeadCode &&
+              h.minorHeadCode !== "0" &&
+              String(h.minorHeadParentCode) === String(selectedSubMajor),
+          )
+          .map((h) => [
+            String(h.minorHeadCode),
+            {
+              label: `${h.minorHead} (${h.minorHeadCode})`,
+              value: String(h.minorHeadCode),
+            },
+          ]),
       ).values(),
     ];
-
-    if (minors.length === 0) {
-      minors.push({ label: "Null (0)", value: "0" });
-    }
-
-    setMinorOptions(minors);
+    setMinorOptions(opts);
 
     if (majorHeadChangedByUser.current) {
       setValue("minorHead", "", { shouldDirty: false });
+      setValue("subHead", "", { shouldDirty: false });
+      setValue("subSubHead", "", { shouldDirty: false });
       setValue("detailHead", "", { shouldDirty: false });
     }
-  }, [
-    selectedSubSubMajor,
-    selectedSubMajor,
-    heads,
-    isInitialDataLoaded,
-    setValue,
-  ]);
+  }, [selectedSubMajor, heads, isInitialDataLoaded, setValue]);
 
-  // ─── Detail Options ────────────────────────────────────────────────────────
+  // ─── Level 4: Sub Head (parent: minorHeadCode) ────────────────────────────
   useEffect(() => {
-    const parentCode =
-      selectedMinor && selectedMinor !== ""
-        ? selectedMinor
-        : selectedSubSubMajor && selectedSubSubMajor !== "0"
-          ? selectedSubSubMajor
-          : selectedSubMajor;
+    if (!selectedMinor || !isInitialDataLoaded) {
+      setSubHeadOptions([]);
+      return;
+    }
 
-    if (!parentCode || !isInitialDataLoaded) {
+    const opts = [
+      ...new Map(
+        heads
+          .filter(
+            (h) =>
+              h.subHeadCode &&
+              h.subHeadCode !== "0" &&
+              String(h.subHeadParentCode) === String(selectedMinor),
+          )
+          .map((h) => [
+            String(h.subHeadCode),
+            {
+              label: `${h.subHead} (${h.subHeadCode})`,
+              value: String(h.subHeadCode),
+            },
+          ]),
+      ).values(),
+    ];
+
+    if (opts.length === 0) opts.push({ label: "Null (0)", value: "0" });
+    setSubHeadOptions(opts);
+
+    if (majorHeadChangedByUser.current) {
+      setValue("subHead", "", { shouldDirty: false });
+      setValue("subSubHead", "", { shouldDirty: false });
+      setValue("detailHead", "", { shouldDirty: false });
+    }
+  }, [selectedMinor, heads, isInitialDataLoaded, setValue]);
+
+  // ─── Level 5: Sub Sub Head (parent: subHeadCode) ──────────────────────────
+  useEffect(() => {
+    if (!selectedSubHead || !isInitialDataLoaded) {
+      setSubSubHeadOptions([]);
+      return;
+    }
+
+    const opts = [
+      ...new Map(
+        heads
+          .filter(
+            (h) =>
+              h.subSubHeadCode &&
+              h.subSubHeadCode !== "0" &&
+              String(h.subSubHeadParentCode) === String(selectedSubHead),
+          )
+          .map((h) => [
+            String(h.subSubHeadCode),
+            {
+              label: `${h.subSubHead} (${h.subSubHeadCode})`,
+              value: String(h.subSubHeadCode),
+            },
+          ]),
+      ).values(),
+    ];
+
+    if (opts.length === 0) opts.push({ label: "Null (0)", value: "0" });
+    setSubSubHeadOptions(opts);
+
+    if (majorHeadChangedByUser.current) {
+      setValue("subSubHead", "", { shouldDirty: false });
+      setValue("detailHead", "", { shouldDirty: false });
+    }
+  }, [selectedSubHead, heads, isInitialDataLoaded, setValue]);
+
+  // ─── Level 6: Detail Head (parent: subSubHeadCode) ← NEW ─────────────────
+  useEffect(() => {
+    if (!selectedSubSub || !isInitialDataLoaded) {
       setDetailOptions([]);
       return;
     }
 
-    const details = [
+    const opts = [
       ...new Map(
         heads
-          .filter((h) => String(h.detailHeadParentCode) === String(parentCode))
-          .map((h) => {
-            const code = String(
-              h.detailHeadCode && h.detailHeadCode !== "0"
-                ? h.detailHeadCode
-                : "00",
-            );
-            const name =
-              h.detailHead && h.detailHead.trim() !== ""
-                ? h.detailHead
-                : "Null";
-            return [code, { label: `${name} (${code})`, value: code }];
-          }),
+          .filter(
+            (h) =>
+              h.detailHeadCode &&
+              h.detailHeadCode !== "0" &&
+              String(h.detailHeadParentCode) === String(selectedSubSub),
+          )
+          .map((h) => [
+            String(h.detailHeadCode),
+            {
+              label: `${h.detailHead} (${h.detailHeadCode})`,
+              value: String(h.detailHeadCode),
+            },
+          ]),
       ).values(),
     ];
 
-    setDetailOptions(details);
+    if (opts.length === 0) opts.push({ label: "Null (0)", value: "0" });
+    setDetailOptions(opts);
 
     if (majorHeadChangedByUser.current) {
       setValue("detailHead", "", { shouldDirty: false });
     }
-  }, [
-    selectedMinor,
-    selectedSubSubMajor,
-    selectedSubMajor,
-    heads,
-    isInitialDataLoaded,
-    setValue,
-  ]);
+  }, [selectedSubSub, heads, isInitialDataLoaded, setValue]);
 
   // ─── Counterfoil Lookup ────────────────────────────────────────────────────
   const totalAmount = watch("totalAmount");
@@ -454,11 +475,12 @@ const Challan = () => {
       departmentId: Number(data.department),
       divisionId: Number(data.divisionCode),
       ddoId: Number(data.ddo),
-      majorHead: data.majorHead,
-      subMajorHead: data.subMajorHead,
-      subSubMajorHead: data.subSubMajorHead,
-      minorHead: data.minorHead,
-      detailHead: data.detailHead,
+      majorHead: data.majorHead, // majorHeadCode
+      subMajorHead: data.subMajorHead, // subMajorCode
+      minorHead: data.minorHead, // minorHeadCode
+      subHead: data.subHead, // subHeadCode
+      subSubHead: data.subSubHead, // subSubHeadCode
+      detailHead: data.detailHead, // detailHeadCode ← NEW
       treasuryCode: data.treasuryName,
       treasuryChallanNo: data.treasuryChallanNo,
       treasuryChallanDate: data.treasuryChallanDate,
@@ -481,26 +503,26 @@ const Challan = () => {
     }
   };
 
-  // ─── Resolve display label from raw code (for LockedInput) ────────────────
-  const getHeadLabel = (type, code) => {
+  // ─── Resolve human-readable label from raw code (for LockedInput) ─────────
+  const getHeadLabel = (level, code) => {
     if (!code || !heads.length) return code || "—";
     const found = heads.find((h) => {
-      if (type === "major") return String(h.majorHeadCode) === String(code);
-      if (type === "subMajor") return String(h.subMajorCode) === String(code);
-      if (type === "subSubMajor")
-        return String(h.subSubMajorCode) === String(code);
-      if (type === "minor") return String(h.minorHeadCode) === String(code);
-      if (type === "detail") return String(h.detailHeadCode) === String(code);
+      if (level === "subMajor") return String(h.subMajorCode) === String(code);
+      if (level === "minor") return String(h.minorHeadCode) === String(code);
+      if (level === "subHead") return String(h.subHeadCode) === String(code);
+      if (level === "subSub") return String(h.subSubHeadCode) === String(code);
+      if (level === "detail") return String(h.detailHeadCode) === String(code);
       return false;
     });
     if (!found) return code;
-    if (type === "major") return `${found.majorHead} (${found.majorHeadCode})`;
-    if (type === "subMajor") return `${found.subMajor} (${found.subMajorCode})`;
-    if (type === "subSubMajor")
-      return `${found.subSubMajor || "Null"} (${found.subSubMajorCode || "00"})`;
-    if (type === "minor") return `${found.minorHead} (${found.minorHeadCode})`;
-    if (type === "detail")
-      return `${found.detailHead || "Null"} (${found.detailHeadCode || "00"})`;
+    if (level === "subMajor")
+      return `${found.subMajor}  (${found.subMajorCode})`;
+    if (level === "minor") return `${found.minorHead} (${found.minorHeadCode})`;
+    if (level === "subHead") return `${found.subHead}   (${found.subHeadCode})`;
+    if (level === "subSub")
+      return `${found.subSubHead}(${found.subSubHeadCode})`;
+    if (level === "detail")
+      return `${found.detailHead}(${found.detailHeadCode})`;
     return code;
   };
 
@@ -509,8 +531,8 @@ const Challan = () => {
     return map[code] || code || "—";
   };
 
-  // true  → show LockedInput (readonly display, not RHF-connected)
-  // false → show SelectField (fully functional dropdown)
+  // true  → LockedInput (readonly, not RHF-connected)
+  // false → SelectField (live cascading dropdown)
   const headFieldsLocked = isEditMode && !headFieldsUnlocked;
 
   return (
@@ -613,7 +635,7 @@ const Challan = () => {
           disabled={isDdoLoading}
         />
 
-        {/* ── Major Head — always a real dropdown (changing it unlocks the rest) ── */}
+        {/* ── Level 1: Major Head — always a live dropdown, changing it unlocks the rest ── */}
         <SelectField
           label="Major Head"
           name="majorHead"
@@ -621,11 +643,11 @@ const Challan = () => {
           options={majorOptions}
         />
 
-        {/* ── Sub Major Head ── */}
+        {/* ── Level 2: Sub Major Head (subMajorCode) ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Sub Major Head"
-            value={getHeadLabel("subMajor", editCodes.subMajorHead)}
+            value={getHeadLabel("subMajor", editCodes.subMajorCode)}
           />
         ) : (
           <SelectField
@@ -636,26 +658,11 @@ const Challan = () => {
           />
         )}
 
-        {/* ── Sub Sub Major Head ── */}
-        {headFieldsLocked ? (
-          <LockedInput
-            label="Sub Sub Major Head"
-            value={getHeadLabel("subSubMajor", editCodes.subSubMajorHead)}
-          />
-        ) : (
-          <SelectField
-            label="Sub Sub Major Head"
-            name="subSubMajorHead"
-            control={control}
-            options={subSubMajorOptions}
-          />
-        )}
-
-        {/* ── Minor Head ── */}
+        {/* ── Level 3: Minor Head (minorHeadCode) ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Minor Head"
-            value={getHeadLabel("minor", editCodes.minorHead)}
+            value={getHeadLabel("minor", editCodes.minorHeadCode)}
           />
         ) : (
           <SelectField
@@ -666,11 +673,41 @@ const Challan = () => {
           />
         )}
 
-        {/* ── Detail Head ── */}
+        {/* ── Level 4: Sub Head (subHeadCode) ── */}
+        {headFieldsLocked ? (
+          <LockedInput
+            label="Sub Head"
+            value={getHeadLabel("subHead", editCodes.subHeadCode)}
+          />
+        ) : (
+          <SelectField
+            label="Sub Head"
+            name="subHead"
+            control={control}
+            options={subHeadOptions}
+          />
+        )}
+
+        {/* ── Level 5: Sub Sub Head (subSubHeadCode) ── */}
+        {headFieldsLocked ? (
+          <LockedInput
+            label="Sub Sub Head"
+            value={getHeadLabel("subSub", editCodes.subSubHeadCode)}
+          />
+        ) : (
+          <SelectField
+            label="Sub Sub Head"
+            name="subSubHead"
+            control={control}
+            options={subSubHeadOptions}
+          />
+        )}
+
+        {/* ── Level 6: Detail Head (detailHeadCode) ← NEW ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Detail Head"
-            value={getHeadLabel("detail", editCodes.detailHead)}
+            value={getHeadLabel("detail", editCodes.detailHeadCode)}
           />
         ) : (
           <SelectField

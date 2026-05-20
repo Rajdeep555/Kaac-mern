@@ -144,25 +144,37 @@ model Heads {
 }
 
 model ChallanHeads {
-  id                    Int      @id @default(autoincrement())
-  majorHead             String
-  subMajor              String?
-  subSubMajor           String?
-  minorHead             String?
-  detailHead            String?
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @default(now()) @updatedAt
-  detailHeadCode        String?  @default("0")
-  detailHeadParentCode  String?  @default("0")
-  majorHeadCode         String   @default("0")
-  minorHeadCode         String?  @default("0")
-  minorHeadParentCode   String?  @default("0")
-  subMajorCode          String?  @default("0")
-  subMajorParentCode    String?  @default("0")
-  subSubMajorCode       String?  @default("0")
-  subSubMajorParentCode String?  @default("0")
+  id                   Int      @id @default(autoincrement())
+  majorHead            String
+  subMajor             String?   // Sub Major Head name
+  minorHead            String?   // Minor Head name
+  subHead              String?   // Sub Head name
+  subSubHead           String?   // Sub Sub Head name
+  detailHead           String?   // Detail Head name  ← NEW
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @default(now()) @updatedAt
+  majorHeadCode        String   @default("0")
+  subMajorCode         String?  @default("0")
+  subMajorParentCode   String?  @default("0")   // parent: majorHeadCode
+
+  // Level 3 — Minor Head  (was subSubMajor)
+  minorHeadCode        String?  @default("0")
+  minorHeadParentCode  String?  @default("0")   // parent: subMajorCode
+
+  // Level 4 — Sub Head  (was minorHead)
+  subHeadCode          String?  @default("0")
+  subHeadParentCode    String?  @default("0")   // parent: minorHeadCode
+
+  // Level 5 — Sub Sub Head  (was detailHead)
+  subSubHeadCode       String?  @default("0")
+  subSubHeadParentCode String?  @default("0")   // parent: subHeadCode
+
+  // Level 6 — Detail Head  ← NEW
+  detailHeadCode       String?  @default("0")
+  detailHeadParentCode String?  @default("0")   // parent: subSubHeadCode
 }
+
 
 model Challan {
   id                  Int         @id @default(autoincrement())

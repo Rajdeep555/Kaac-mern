@@ -117,7 +117,7 @@ const Login = () => {
               <p
                 className="text-xs font-bold tracking-widest uppercase mb-1"
                 style={{ color: "#c9a84c" }}>
-                Government of India ( KAAC )
+                Karbi Anglong Autonomous Council, Diphu
               </p>
               <h1 className="text-xl font-bold text-white leading-tight">
                 Financial Management
