@@ -29,14 +29,14 @@ export const createExpenditureSchema = z.object({
     requisitionNo: z.string().nullable().optional(),
     requisitionDate: z.string().nullable().optional(),
 
-    grantNo: z.string().nullable().optional(),
+    grantNo: z.coerce.string().nullable().optional(),
 
     // ✅ FIXED: intField handles both String and Number input → always outputs Int
     departmentId: intField,
     ddoId: intField,
 
     workName: z.string().nullable().optional(),
-    expenditureType: z.string().min(1),
+    expenditureType: z.coerce.string().min(1),
 
     /* ================= HEADS ================= */
     majorHead: z.string().min(1),
@@ -51,9 +51,9 @@ export const createExpenditureSchema = z.object({
 
     /* ================= CLASSIFICATION ================= */
     salaryType: z.enum(["SALARY", "NON_SALARY"]),
-    planType: z.string().min(1),
+    planType: z.coerce.string().min(1),
     financialYear: z.string().min(1),
-    objectHead: z.string().nullable().optional(),
+    objectHead: z.coerce.string().nullable().optional(),
 
     /* ================= AMOUNT BREAKUP ================= */
     payOfficers: decimalField,

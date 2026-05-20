@@ -23,6 +23,21 @@ import { showToast } from "../../utils/toast.js";
 import { getAllChallanHead } from "../../api/challanHead.api.js";
 import { useNavigate, useParams } from "react-router-dom";
 
+// ─── Standalone readonly display input (NOT registered with RHF) ──────────────
+// Used to show pre-filled head labels in edit mode without RHF interference.
+const LockedInput = ({ label, value }) => (
+  <div className="flex flex-col gap-1">
+    <label className="text-sm font-medium">{label}</label>
+    <input
+      type="text"
+      readOnly
+      tabIndex={-1}
+      value={value || "—"}
+      className="border border-zinc-400 rounded outline-none px-3 py-2 w-full bg-zinc-50 text-zinc-600 cursor-default"
+    />
+  </div>
+);
+
 const Challan = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,6 +46,7 @@ const Challan = () => {
   const [isChallanLoading, setIsChallanLoading] = useState(true);
   const [counterfoilError, setCounterfoilError] = useState("");
   const [heads, setHeads] = useState([]);
+  const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(!isEditMode);
 
   const [majorOptions, setMajorOptions] = useState([]);
   const [subMajorOptions, setSubMajorOptions] = useState([]);
@@ -38,15 +54,22 @@ const Challan = () => {
   const [minorOptions, setMinorOptions] = useState([]);
   const [detailOptions, setDetailOptions] = useState([]);
 
-  // Stores the raw codes + display labels from the API response
-  const [editLabels, setEditLabels] = useState(null);
-
   // Tracks if the user has manually changed Major Head while in edit mode.
-  // Using useRef so flipping it doesn't cause an extra re-render cascade.
   const majorHeadChangedByUser = useRef(false);
-
-  // Dummy state just to force a re-render when majorHeadChangedByUser flips
   const [headFieldsUnlocked, setHeadFieldsUnlocked] = useState(false);
+
+  // Tracks whether the selectedMajor effect is running for the first time
+  const isFirstMajorRender = useRef(true);
+
+  // Raw DB codes stored separately so LockedInput can show labels
+  // even before `heads` is loaded (falls back to raw code, then label once loaded)
+  const [editCodes, setEditCodes] = useState({
+    subMajorHead: "",
+    subSubMajorHead: "",
+    minorHead: "",
+    detailHead: "",
+    treasuryName: "",
+  });
 
   const { departments, loading: isDepartmentLoading } = useDepartments({
     type: "COUNCIL",
@@ -60,6 +83,7 @@ const Challan = () => {
     watch,
     setValue,
     reset,
+    control,
     formState: { isSubmitting },
   } = useForm({
     defaultValues: {
@@ -81,6 +105,12 @@ const Challan = () => {
     },
   });
 
+  // ─── Watch fields needed for cascade and for locked-input labels ───────────
+  const selectedMajor = watch("majorHead");
+  const selectedSubMajor = watch("subMajorHead");
+  const selectedSubSubMajor = watch("subSubMajorHead");
+  const selectedMinor = watch("minorHead");
+
   // ─── Fetch Challan for Edit ────────────────────────────────────────────────
   useEffect(() => {
     if (!isEditMode) return;
@@ -91,7 +121,6 @@ const Challan = () => {
         if (res.data.success) {
           const data = res.data.data;
 
-          // Fill all non-cascading fields immediately
           setValue("counterfoilNo", data.counterfoilNo || "");
           setValue(
             "counterfoilDate",
@@ -103,9 +132,9 @@ const Challan = () => {
             data.challanDate ? data.challanDate.slice(0, 10) : "",
           );
           setValue("challanType", data.challanType || "");
-          setValue("department", data.departmentId);
-          setValue("divisionCode", data.divisionId);
-          setValue("ddo", data.ddoId);
+          setValue("department", String(data.departmentId));
+          setValue("divisionCode", String(data.divisionId));
+          setValue("ddo", String(data.ddoId));
           setValue("treasuryChallanNo", data.treasuryChallanNo);
           setValue(
             "treasuryChallanDate",
@@ -117,23 +146,26 @@ const Challan = () => {
           setValue("amountInWords", rupeesToWords(data.amount));
           setValue("remarks", data.remarks || "");
 
-          // Set hidden form values for the head fields (needed for submit payload)
-          setValue("majorHead", data.majorHead);
-          setValue("subMajorHead", data.subMajorHead);
-          setValue("subSubMajorHead", data.subSubMajorHead);
-          setValue("minorHead", data.minorHead);
-          setValue("detailHead", data.detailHead);
-          setValue("treasuryName", data.treasuryCode);
+          // Set head codes into RHF (needed for submit payload)
+          setValue("majorHead", String(data.majorHead || ""));
+          setValue("subMajorHead", String(data.subMajorHead || ""));
+          setValue("subSubMajorHead", String(data.subSubMajorHead || ""));
+          setValue("minorHead", String(data.minorHead || ""));
+          setValue("detailHead", String(data.detailHead || ""));
+          setValue("treasuryName", String(data.treasuryCode || ""));
 
-          // Store raw codes — we will build display labels once heads are loaded
-          setEditLabels({
-            majorHead: data.majorHead,
-            subMajorHead: data.subMajorHead,
-            subSubMajorHead: data.subSubMajorHead,
-            minorHead: data.minorHead,
-            detailHead: data.detailHead,
-            treasuryCode: data.treasuryCode,
+          // Also store raw codes separately so LockedInputs can display labels
+          setEditCodes({
+            subMajorHead: String(data.subMajorHead || ""),
+            subSubMajorHead: String(data.subSubMajorHead || ""),
+            minorHead: String(data.minorHead || ""),
+            detailHead: String(data.detailHead || ""),
+            treasuryName: String(data.treasuryCode || ""),
           });
+
+          setTimeout(() => {
+            setIsInitialDataLoaded(true);
+          }, 100);
         }
       } catch (error) {
         showToast("Failed to fetch challan", "error");
@@ -142,11 +174,6 @@ const Challan = () => {
 
     fetchChallan();
   }, [id, isEditMode, setValue]);
-
-  const selectedMajor = watch("majorHead");
-  const selectedSubMajor = watch("subMajorHead");
-  const selectedSubSubMajor = watch("subSubMajorHead");
-  const selectedMinor = watch("minorHead");
 
   // ─── Fetch All Challan Heads ───────────────────────────────────────────────
   useEffect(() => {
@@ -161,10 +188,10 @@ const Challan = () => {
             data
               .filter((h) => h.majorHeadCode && h.majorHeadCode !== "0")
               .map((h) => [
-                h.majorHeadCode,
+                String(h.majorHeadCode),
                 {
                   label: `${h.majorHead} (${h.majorHeadCode})`,
-                  value: h.majorHeadCode,
+                  value: String(h.majorHeadCode),
                 },
               ]),
           ).values(),
@@ -175,9 +202,22 @@ const Challan = () => {
     fetchHeads();
   }, []);
 
+  // ─── Detect user-driven Major Head change (skip first render) ─────────────
+  useEffect(() => {
+    if (isFirstMajorRender.current) {
+      isFirstMajorRender.current = false;
+      return;
+    }
+    // Only unlock if in edit mode and user actually changed it
+    if (isEditMode) {
+      majorHeadChangedByUser.current = true;
+      setHeadFieldsUnlocked(true);
+    }
+  }, [selectedMajor, isEditMode]);
+
   // ─── Sub Major Options (cascade from Major) ────────────────────────────────
   useEffect(() => {
-    if (!selectedMajor) {
+    if (!selectedMajor || !isInitialDataLoaded) {
       setSubMajorOptions([]);
       return;
     }
@@ -189,31 +229,30 @@ const Challan = () => {
             (h) =>
               h.subMajorCode &&
               h.subMajorCode !== "0" &&
-              h.subMajorParentCode === selectedMajor,
+              String(h.subMajorParentCode) === String(selectedMajor),
           )
           .map((h) => [
-            h.subMajorCode,
+            String(h.subMajorCode),
             {
               label: `${h.subMajor} (${h.subMajorCode})`,
-              value: h.subMajorCode,
+              value: String(h.subMajorCode),
             },
           ]),
       ).values(),
     ];
     setSubMajorOptions(subs);
 
-    // Only clear downstream if user actively changed the major head
     if (majorHeadChangedByUser.current) {
-      setValue("subMajorHead", "");
-      setValue("subSubMajorHead", "");
-      setValue("minorHead", "");
-      setValue("detailHead", "");
+      setValue("subMajorHead", "", { shouldDirty: false });
+      setValue("subSubMajorHead", "", { shouldDirty: false });
+      setValue("minorHead", "", { shouldDirty: false });
+      setValue("detailHead", "", { shouldDirty: false });
     }
-  }, [selectedMajor, heads]);
+  }, [selectedMajor, heads, isInitialDataLoaded, setValue]);
 
   // ─── Sub Sub Major Options ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!selectedSubMajor) {
+    if (!selectedSubMajor || !isInitialDataLoaded) {
       setSubSubMajorOptions([]);
       return;
     }
@@ -221,12 +260,14 @@ const Challan = () => {
     const subSubs = [
       ...new Map(
         heads
-          .filter((h) => h.subSubMajorParentCode === selectedSubMajor)
+          .filter(
+            (h) => String(h.subSubMajorParentCode) === String(selectedSubMajor),
+          )
           .map((h) => [
-            h.subSubMajorCode || "00",
+            String(h.subSubMajorCode || "00"),
             {
               label: `${h.subSubMajor || "Null"} (${h.subSubMajorCode || "00"})`,
-              value: h.subSubMajorCode || "00",
+              value: String(h.subSubMajorCode || "00"),
             },
           ]),
       ).values(),
@@ -234,11 +275,11 @@ const Challan = () => {
     setSubSubMajorOptions(subSubs);
 
     if (majorHeadChangedByUser.current) {
-      setValue("subSubMajorHead", "");
-      setValue("minorHead", "");
-      setValue("detailHead", "");
+      setValue("subSubMajorHead", "", { shouldDirty: false });
+      setValue("minorHead", "", { shouldDirty: false });
+      setValue("detailHead", "", { shouldDirty: false });
     }
-  }, [selectedSubMajor, heads]);
+  }, [selectedSubMajor, heads, isInitialDataLoaded, setValue]);
 
   // ─── Minor Options ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -247,7 +288,7 @@ const Challan = () => {
         ? selectedSubSubMajor
         : selectedSubMajor;
 
-    if (!parentCode) {
+    if (!parentCode || !isInitialDataLoaded) {
       setMinorOptions([]);
       return;
     }
@@ -255,39 +296,47 @@ const Challan = () => {
     const minors = [
       ...new Map(
         heads
-          .filter(
-            (h) =>
-              h.minorHeadCode &&
-              h.minorHeadCode !== "0" &&
-              h.minorHeadParentCode === parentCode,
-          )
-          .map((h) => [
-            h.minorHeadCode,
-            {
-              label: `${h.minorHead} (${h.minorHeadCode})`,
-              value: h.minorHeadCode,
-            },
-          ]),
+          .filter((h) => String(h.minorHeadParentCode) === String(parentCode))
+          .map((h) => {
+            const code =
+              h.minorHeadCode && h.minorHeadCode !== "0"
+                ? String(h.minorHeadCode)
+                : "0";
+            const name =
+              h.minorHead && h.minorHead.trim() !== "" ? h.minorHead : "Null";
+            return [code, { label: `${name} (${code})`, value: code }];
+          }),
       ).values(),
     ];
+
+    if (minors.length === 0) {
+      minors.push({ label: "Null (0)", value: "0" });
+    }
+
     setMinorOptions(minors);
 
     if (majorHeadChangedByUser.current) {
-      setValue("minorHead", "");
-      setValue("detailHead", "");
+      setValue("minorHead", "", { shouldDirty: false });
+      setValue("detailHead", "", { shouldDirty: false });
     }
-  }, [selectedSubSubMajor, selectedSubMajor, heads]);
+  }, [
+    selectedSubSubMajor,
+    selectedSubMajor,
+    heads,
+    isInitialDataLoaded,
+    setValue,
+  ]);
 
   // ─── Detail Options ────────────────────────────────────────────────────────
   useEffect(() => {
     const parentCode =
-      selectedMinor && selectedMinor !== "0"
+      selectedMinor && selectedMinor !== ""
         ? selectedMinor
         : selectedSubSubMajor && selectedSubSubMajor !== "0"
           ? selectedSubSubMajor
           : selectedSubMajor;
 
-    if (!parentCode) {
+    if (!parentCode || !isInitialDataLoaded) {
       setDetailOptions([]);
       return;
     }
@@ -295,12 +344,13 @@ const Challan = () => {
     const details = [
       ...new Map(
         heads
-          .filter((h) => h.detailHeadParentCode === parentCode)
+          .filter((h) => String(h.detailHeadParentCode) === String(parentCode))
           .map((h) => {
-            const code =
+            const code = String(
               h.detailHeadCode && h.detailHeadCode !== "0"
                 ? h.detailHeadCode
-                : "00";
+                : "00",
+            );
             const name =
               h.detailHead && h.detailHead.trim() !== ""
                 ? h.detailHead
@@ -309,12 +359,20 @@ const Challan = () => {
           }),
       ).values(),
     ];
+
     setDetailOptions(details);
 
     if (majorHeadChangedByUser.current) {
-      setValue("detailHead", "");
+      setValue("detailHead", "", { shouldDirty: false });
     }
-  }, [selectedMinor, selectedSubSubMajor, selectedSubMajor, heads]);
+  }, [
+    selectedMinor,
+    selectedSubSubMajor,
+    selectedSubMajor,
+    heads,
+    isInitialDataLoaded,
+    setValue,
+  ]);
 
   // ─── Counterfoil Lookup ────────────────────────────────────────────────────
   const totalAmount = watch("totalAmount");
@@ -366,6 +424,7 @@ const Challan = () => {
 
   // ─── Auto Challan Number ───────────────────────────────────────────────────
   useEffect(() => {
+    if (isEditMode) return;
     const fetchNextChallanNo = async () => {
       setIsChallanLoading(true);
       try {
@@ -382,7 +441,7 @@ const Challan = () => {
       }
     };
     fetchNextChallanNo();
-  }, [setValue]);
+  }, [setValue, isEditMode]);
 
   // ─── Submit ────────────────────────────────────────────────────────────────
   const onSubmit = async (data) => {
@@ -406,7 +465,6 @@ const Challan = () => {
       amount: data.totalAmount.replace(/,/g, ""),
       remarks: data.remarks,
     };
-    // console.log("Payload:", payload);
 
     try {
       if (isEditMode) {
@@ -423,15 +481,16 @@ const Challan = () => {
     }
   };
 
-  // ─── Helper: Resolve display label from raw code ───────────────────────────
+  // ─── Resolve display label from raw code (for LockedInput) ────────────────
   const getHeadLabel = (type, code) => {
     if (!code || !heads.length) return code || "—";
     const found = heads.find((h) => {
-      if (type === "major") return h.majorHeadCode === code;
-      if (type === "subMajor") return h.subMajorCode === code;
-      if (type === "subSubMajor") return h.subSubMajorCode === code;
-      if (type === "minor") return h.minorHeadCode === code;
-      if (type === "detail") return h.detailHeadCode === code;
+      if (type === "major") return String(h.majorHeadCode) === String(code);
+      if (type === "subMajor") return String(h.subMajorCode) === String(code);
+      if (type === "subSubMajor")
+        return String(h.subSubMajorCode) === String(code);
+      if (type === "minor") return String(h.minorHeadCode) === String(code);
+      if (type === "detail") return String(h.detailHeadCode) === String(code);
       return false;
     });
     if (!found) return code;
@@ -446,19 +505,13 @@ const Challan = () => {
   };
 
   const getTreasuryLabel = (code) => {
-    const map = { council: "01-Council", css: "02-CSS" };
+    const map = { council: "01-Council", css: "02-CSS", Diphu: "01-Diphu" };
     return map[code] || code || "—";
   };
 
-  // HEAD FIELDS ARE LOCKED as plain text in edit mode until user changes Major Head
+  // true  → show LockedInput (readonly display, not RHF-connected)
+  // false → show SelectField (fully functional dropdown)
   const headFieldsLocked = isEditMode && !headFieldsUnlocked;
-
-  const handleMajorHeadChange = (e) => {
-    // Unlock all cascading dropdowns
-    majorHeadChangedByUser.current = true;
-    setHeadFieldsUnlocked(true); // triggers re-render so locked → unlocked
-    setValue("majorHead", e.target.value);
-  };
 
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">
@@ -481,6 +534,7 @@ const Challan = () => {
       <FormWrapper
         onSubmit={handleSubmit(onSubmit)}
         isSubmitting={isSubmitting}>
+        {/* ── Counterfoil No ── */}
         <div>
           <InputField
             label="Counterfoil No."
@@ -494,6 +548,7 @@ const Challan = () => {
           )}
         </div>
 
+        {/* ── Counterfoil Date ── */}
         <DateField
           label="Counterfoil Date"
           name="counterfoilDate"
@@ -502,6 +557,7 @@ const Challan = () => {
           {...register("counterfoilDate")}
         />
 
+        {/* ── Challan No ── */}
         <InputField
           label="Challan No."
           readonly={true}
@@ -512,6 +568,7 @@ const Challan = () => {
           {...register("challanNo")}
         />
 
+        {/* ── Challan Date ── */}
         <DateField
           label="Challan Date"
           name="challanDate"
@@ -519,156 +576,128 @@ const Challan = () => {
           {...register("challanDate")}
         />
 
+        {/* ── Type ── */}
         <SelectField
           label="Type"
           name="challanType"
-          register={register}
+          control={control}
           removable
           options={[{ label: "01-Council", value: "COUNCIL" }]}
-          {...register("challanType")}
         />
 
+        {/* ── Department ── */}
         <SelectField
           label="Department"
           name="department"
-          register={register}
+          control={control}
           options={departments}
           disabled={isDepartmentLoading}
-          {...register("department")}
         />
 
+        {/* ── Division Code ── */}
         <SelectField
           label="Division Code"
           name="divisionCode"
-          register={register}
+          control={control}
           options={divisionOptions}
           disabled={isDivisionLoading}
-          {...register("divisionCode")}
         />
 
+        {/* ── DDO ── */}
         <SelectField
           label="DDO"
           name="ddo"
-          register={register}
+          control={control}
           removable
           options={ddos}
           disabled={isDdoLoading}
-          {...register("ddo")}
         />
 
-        {/* ── Major Head: always a real dropdown, but onChange unlocks the rest ── */}
+        {/* ── Major Head — always a real dropdown (changing it unlocks the rest) ── */}
         <SelectField
           label="Major Head"
           name="majorHead"
-          register={register}
+          control={control}
           options={majorOptions}
-          {...register("majorHead", { onChange: handleMajorHeadChange })}
         />
 
         {/* ── Sub Major Head ── */}
-        {headFieldsLocked && editLabels ? (
-          <InputField
+        {headFieldsLocked ? (
+          <LockedInput
             label="Sub Major Head"
-            name="subMajorHead"
-            register={register}
-            readonly={true}
-            defaultValue={getHeadLabel("subMajor", editLabels.subMajorHead)}
-            {...register("subMajorHead")}
+            value={getHeadLabel("subMajor", editCodes.subMajorHead)}
           />
         ) : (
           <SelectField
             label="Sub Major Head"
             name="subMajorHead"
-            register={register}
+            control={control}
             options={subMajorOptions}
-            {...register("subMajorHead")}
           />
         )}
 
         {/* ── Sub Sub Major Head ── */}
-        {headFieldsLocked && editLabels ? (
-          <InputField
+        {headFieldsLocked ? (
+          <LockedInput
             label="Sub Sub Major Head"
-            name="subSubMajorHead"
-            register={register}
-            readonly={true}
-            defaultValue={getHeadLabel(
-              "subSubMajor",
-              editLabels.subSubMajorHead,
-            )}
-            {...register("subSubMajorHead")}
+            value={getHeadLabel("subSubMajor", editCodes.subSubMajorHead)}
           />
         ) : (
           <SelectField
             label="Sub Sub Major Head"
             name="subSubMajorHead"
-            register={register}
+            control={control}
             options={subSubMajorOptions}
-            {...register("subSubMajorHead")}
           />
         )}
 
         {/* ── Minor Head ── */}
-        {headFieldsLocked && editLabels ? (
-          <InputField
+        {headFieldsLocked ? (
+          <LockedInput
             label="Minor Head"
-            name="minorHead"
-            register={register}
-            readonly={true}
-            defaultValue={getHeadLabel("minor", editLabels.minorHead)}
-            {...register("minorHead")}
+            value={getHeadLabel("minor", editCodes.minorHead)}
           />
         ) : (
           <SelectField
             label="Minor Head"
             name="minorHead"
-            register={register}
+            control={control}
             options={minorOptions}
-            {...register("minorHead")}
           />
         )}
 
         {/* ── Detail Head ── */}
-        {headFieldsLocked && editLabels ? (
-          <InputField
+        {headFieldsLocked ? (
+          <LockedInput
             label="Detail Head"
-            name="detailHead"
-            register={register}
-            readonly={true}
-            defaultValue={getHeadLabel("detail", editLabels.detailHead)}
-            {...register("detailHead")}
+            value={getHeadLabel("detail", editCodes.detailHead)}
           />
         ) : (
           <SelectField
             label="Detail Head"
             name="detailHead"
-            register={register}
+            control={control}
             options={detailOptions}
-            {...register("detailHead")}
           />
         )}
 
         {/* ── Treasury Name ── */}
-        {headFieldsLocked && editLabels ? (
-          <InputField
+        {headFieldsLocked ? (
+          <LockedInput
             label="Treasury Name"
-            name="treasuryName"
-            register={register}
-            readonly={true}
-            defaultValue={getTreasuryLabel(editLabels.treasuryCode)}
-            {...register("treasuryName")}
+            value={getTreasuryLabel(editCodes.treasuryName)}
           />
         ) : (
           <SelectField
             label="Treasury Name"
             name="treasuryName"
-            register={register}
+            control={control}
             removable
             options={[{ label: "01-Diphu", value: "Diphu" }]}
-            {...register("treasuryName")}
           />
         )}
 
+        {/* ── Treasury Challan No ── */}
         <InputField
           label="Treasury Challan No"
           name="treasuryChallanNo"
@@ -676,6 +705,7 @@ const Challan = () => {
           {...register("treasuryChallanNo")}
         />
 
+        {/* ── Treasury Challan Date ── */}
         <DateField
           label="Treasury Challan Date"
           name="treasuryChallanDate"
@@ -683,6 +713,7 @@ const Challan = () => {
           {...register("treasuryChallanDate")}
         />
 
+        {/* ── Total Amount ── */}
         <InputField
           label="Total Amount"
           name="totalAmount"
@@ -690,6 +721,7 @@ const Challan = () => {
           {...register("totalAmount")}
         />
 
+        {/* ── Amount In Words ── */}
         <InputField
           label="Amount In Words"
           name="amountInWords"
@@ -698,6 +730,7 @@ const Challan = () => {
           {...register("amountInWords")}
         />
 
+        {/* ── Remarks ── */}
         <TextAreaField label="Remarks" name="remarks" register={register} />
       </FormWrapper>
     </div>

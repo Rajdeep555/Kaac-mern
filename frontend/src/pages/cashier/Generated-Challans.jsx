@@ -27,7 +27,7 @@ const GeneratedChallans = () => {
           challanNo: c.challanNo,
           challanDate: c.challanDate?.slice(0, 10),
           codes: `${c.majorHead}-${c.subMajorHead}-${c.subSubMajorHead}-${c.minorHead}-${c.detailHead}`,
-          ddo: c.ddo?.name || "",
+          ddo: c.ddo?.ddoName || "",
           treasuryChallanNo: c.treasuryChallanNo,
           totalAmount: Number(c.amount).toLocaleString("en-IN"),
         }));

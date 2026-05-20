@@ -33,6 +33,10 @@ const StateChallan = () => {
   const [editLabels, setEditLabels] = useState(null);
   const [headFieldsUnlocked, setHeadFieldsUnlocked] = useState(false);
   const majorHeadChangedByUser = useRef(false);
+
+  // Tracks whether selectedMajor effect is running for the first time
+  const isFirstMajorRender = useRef(true);
+
   const [sector, setSector] = useState("");
 
   const {
@@ -58,6 +62,7 @@ const StateChallan = () => {
     watch,
     setValue,
     reset,
+    control, // ← required by new SelectField
     formState: { isSubmitting },
   } = useForm({
     defaultValues: {
@@ -92,12 +97,20 @@ const StateChallan = () => {
   const totalAmount = watch("totalAmount");
   const watchedSector = watch("sector");
 
-  // Sync sector state for useHeadHierarchy in create mode
+  // Watched head values — used by cascade useEffects
+  const watchedMajorHead = watch("majorHead");
+  const watchedSubMajorHead = watch("subMajorHead");
+  const watchedMinorHead = watch("minorHead");
+  const watchedSubHead = watch("subHead");
+  const watchedSubSubHead = watch("subSubHead");
+  const watchedDetailHead = watch("detailHead");
+
+  // ─── Sync sector state for useHeadHierarchy in create mode ────────────────
   useEffect(() => {
     if (!isEditMode) setSector(watchedSector);
   }, [watchedSector, isEditMode]);
 
-  // Amount → Words
+  // ─── Amount → Words ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!totalAmount) {
       setValue("amountInWords", "");
@@ -109,7 +122,7 @@ const StateChallan = () => {
     setValue("amountInWords", rupeesToWords(raw));
   }, [totalAmount, setValue]);
 
-  // Fetch + prefill in edit mode
+  // ─── Fetch + prefill in edit mode ─────────────────────────────────────────
   useEffect(() => {
     if (!isEditMode) return;
 
@@ -122,7 +135,6 @@ const StateChallan = () => {
           return;
         }
 
-        // Prefill all form fields
         setValue("challanNo", data.challanNo ?? "");
         setValue("challanDate", data.challanDate?.slice(0, 10) ?? "");
         setValue("stateNo", data.stateNo ?? "");
@@ -158,10 +170,8 @@ const StateChallan = () => {
         setValue("treasuryCode", data.treasuryCode ?? "");
         setValue("treasuryChallanNo", data.treasuryChallanNo ?? "");
 
-        // Set sector for useHeadHierarchy
         setSector(data.sector ?? "");
 
-        // Save raw codes for locked readonly labels
         setEditLabels({
           sector: data.sector ?? "",
           ddo: data.ddo ? String(data.ddo) : "",
@@ -175,7 +185,7 @@ const StateChallan = () => {
           subDetailHead: data.subDetailHead ?? "",
         });
 
-        // Cascade fetch all dropdown options using data.* directly
+        // Cascade-fetch all dropdown options using saved codes
         if (data.majorHead) {
           await fetchSubMajors(data.majorHead, data.sector);
         }
@@ -252,30 +262,103 @@ const StateChallan = () => {
     load();
   }, [id]);
 
-  // Resolve display label from loaded options array
-  const getLabel = (options, value) => {
-    if (!value) return "—";
-    const found = options.find((o) => String(o.value) === String(value));
-    return found ? found.label : value;
-  };
-
-  // Major Head change → unlock all cascade dropdowns
-  const handleMajorHeadChange = (e) => {
+  // ─── Detect user-driven Major Head change ─────────────────────────────────
+  // Skip the very first run (initial mount / edit pre-fill).
+  useEffect(() => {
+    if (isFirstMajorRender.current) {
+      isFirstMajorRender.current = false;
+      return;
+    }
     majorHeadChangedByUser.current = true;
     setHeadFieldsUnlocked(true);
-    setValue("majorHead", e.target.value);
+  }, [watchedMajorHead]);
+
+  // ─── Cascade: Major Head → fetch Sub Majors (create mode only) ────────────
+  useEffect(() => {
+    if (!watchedMajorHead || !majorHeadChangedByUser.current) return;
     setValue("subMajorHead", "");
     setValue("minorHead", "");
     setValue("subHead", "");
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
-    if (e.target.value) fetchSubMajors(e.target.value);
-  };
+    fetchSubMajors(watchedMajorHead);
+  }, [watchedMajorHead]);
 
-  // Sector change in create mode
-  const handleSectorChange = (e) => {
-    setValue("sector", e.target.value);
+  // ─── Cascade: Sub Major → fetch Minors ────────────────────────────────────
+  useEffect(() => {
+    if (!watchedSubMajorHead || !majorHeadChangedByUser.current) return;
+    setValue("minorHead", "");
+    setValue("subHead", "");
+    setValue("subSubHead", "");
+    setValue("detailHead", "");
+    setValue("subDetailHead", "");
+    fetchMinors({
+      majorHeadCode: watchedMajorHead,
+      subMajorCode: watchedSubMajorHead,
+    });
+  }, [watchedSubMajorHead]);
+
+  // ─── Cascade: Minor → fetch Sub Heads ─────────────────────────────────────
+  useEffect(() => {
+    if (!watchedMinorHead || !majorHeadChangedByUser.current) return;
+    setValue("subHead", "");
+    setValue("subSubHead", "");
+    setValue("detailHead", "");
+    setValue("subDetailHead", "");
+    fetchSubHeads({
+      majorHeadCode: watchedMajorHead,
+      subMajorCode: watchedSubMajorHead,
+      minorHeadCode: watchedMinorHead,
+    });
+  }, [watchedMinorHead]);
+
+  // ─── Cascade: Sub Head → fetch Sub Sub Heads ──────────────────────────────
+  useEffect(() => {
+    if (!watchedSubHead || !majorHeadChangedByUser.current) return;
+    setValue("subSubHead", "");
+    setValue("detailHead", "");
+    setValue("subDetailHead", "");
+    fetchSubSubHeads({
+      majorHeadCode: watchedMajorHead,
+      subMajorCode: watchedSubMajorHead,
+      minorHeadCode: watchedMinorHead,
+      subHeadCode: watchedSubHead,
+    });
+  }, [watchedSubHead]);
+
+  // ─── Cascade: Sub Sub Head → fetch Detail Heads ───────────────────────────
+  useEffect(() => {
+    if (!watchedSubSubHead || !majorHeadChangedByUser.current) return;
+    setValue("detailHead", "");
+    setValue("subDetailHead", "");
+    fetchDetailHeads({
+      majorHeadCode: watchedMajorHead,
+      subMajorCode: watchedSubMajorHead,
+      minorHeadCode: watchedMinorHead,
+      subHeadCode: watchedSubHead,
+      subSubHeadCode: watchedSubSubHead,
+    });
+  }, [watchedSubSubHead]);
+
+  // ─── Cascade: Detail Head → fetch Sub Detail Heads ────────────────────────
+  useEffect(() => {
+    if (!watchedDetailHead || !majorHeadChangedByUser.current) return;
+    setValue("subDetailHead", "");
+    fetchSubDetailHeads({
+      majorHeadCode: watchedMajorHead,
+      subMajorCode: watchedSubMajorHead,
+      minorHeadCode: watchedMinorHead,
+      subHeadCode: watchedSubHead,
+      subSubHeadCode: watchedSubSubHead,
+      detailHeadCode: watchedDetailHead,
+    });
+  }, [watchedDetailHead]);
+
+  // ─── Sector change in create mode — reset all head fields ─────────────────
+  // Handled reactively: watchedSector change → setSector → useHeadHierarchy resets
+  useEffect(() => {
+    if (isEditMode) return;
     setValue("majorHead", "");
     setValue("subMajorHead", "");
     setValue("minorHead", "");
@@ -283,11 +366,18 @@ const StateChallan = () => {
     setValue("subSubHead", "");
     setValue("detailHead", "");
     setValue("subDetailHead", "");
+  }, [watchedSector, isEditMode]);
+
+  // ─── Resolve display label from loaded options array ──────────────────────
+  const getLabel = (options, value) => {
+    if (!value) return "—";
+    const found = options.find((o) => String(o.value) === String(value));
+    return found ? found.label : value;
   };
 
+  // ─── Submit ────────────────────────────────────────────────────────────────
   const onSubmit = async (data) => {
     try {
-      // Explicit payload — never send extra fields
       const payload = {
         challanNo: data.challanNo,
         challanDate: data.challanDate,
@@ -315,6 +405,8 @@ const StateChallan = () => {
         treasuryCode: data.treasuryCode,
         treasuryChallanNo: data.treasuryChallanNo,
       };
+
+      console.log(payload);
 
       if (isEditMode) {
         await update(id, payload);
@@ -464,7 +556,7 @@ const StateChallan = () => {
           {...register("subject")}
         />
 
-        {/* Sector */}
+        {/* ── Sector ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sector"
@@ -478,50 +570,46 @@ const StateChallan = () => {
           <SelectField
             label="Sector *"
             name="sector"
-            register={register}
+            control={control}
             options={[
               { label: "Select Sector", value: "" },
               { label: "STATE", value: "STATE" },
             ]}
-            {...register("sector", { onChange: handleSectorChange })}
           />
         )}
 
-        {/* DDO */}
+        {/* ── DDO ── */}
         <SelectField
           label="DDO"
           name="ddo"
-          register={register}
+          control={control}
           removable
           disabled={ddoLoading}
           options={ddoOptions}
-          {...register("ddo")}
         />
 
-        {/* Division Code */}
+        {/* ── Division Code ── */}
         <SelectField
           label="Division Code"
           name="divisionCode"
-          register={register}
+          control={control}
           removable
           disabled={divisionLoading}
           options={divisionSelectOptions}
-          {...register("divisionCode")}
         />
 
         <HeadLoadingBar />
 
-        {/* Major Head — always dropdown, onChange unlocks rest */}
+        {/* ── Major Head — always a dropdown; useEffect above handles unlock + cascade ── */}
         <SelectField
           label="Major Head"
           name="majorHead"
-          register={register}
+          control={control}
           disabled={headLoading || (!isEditMode && !watchedSector)}
           options={majorHeads}
-          {...register("majorHead", { onChange: handleMajorHeadChange })}
         />
 
-        {/* Sub Major Head */}
+        {/* ── Sub Major Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Major Head"
@@ -535,29 +623,14 @@ const StateChallan = () => {
           <SelectField
             label="Sub Major Head"
             name="subMajorHead"
-            register={register}
+            control={control}
             removable
             disabled={headLoading}
             options={subMajors}
-            {...register("subMajorHead", {
-              onChange: (e) => {
-                setValue("subMajorHead", e.target.value);
-                setValue("minorHead", "");
-                setValue("subHead", "");
-                setValue("subSubHead", "");
-                setValue("detailHead", "");
-                setValue("subDetailHead", "");
-                if (e.target.value)
-                  fetchMinors({
-                    majorHeadCode: watch("majorHead"),
-                    subMajorCode: e.target.value,
-                  });
-              },
-            })}
           />
         )}
 
-        {/* Minor Head */}
+        {/* ── Minor Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Minor Head"
@@ -571,29 +644,14 @@ const StateChallan = () => {
           <SelectField
             label="Minor Head"
             name="minorHead"
-            register={register}
+            control={control}
             removable
             disabled={headLoading}
             options={minors}
-            {...register("minorHead", {
-              onChange: (e) => {
-                setValue("minorHead", e.target.value);
-                setValue("subHead", "");
-                setValue("subSubHead", "");
-                setValue("detailHead", "");
-                setValue("subDetailHead", "");
-                if (e.target.value)
-                  fetchSubHeads({
-                    majorHeadCode: watch("majorHead"),
-                    subMajorCode: watch("subMajorHead"),
-                    minorHeadCode: e.target.value,
-                  });
-              },
-            })}
           />
         )}
 
-        {/* Sub Head */}
+        {/* ── Sub Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Head"
@@ -607,29 +665,14 @@ const StateChallan = () => {
           <SelectField
             label="Sub Head"
             name="subHead"
-            register={register}
+            control={control}
             removable
             disabled={headLoading}
             options={subHeads}
-            {...register("subHead", {
-              onChange: (e) => {
-                setValue("subHead", e.target.value);
-                setValue("subSubHead", "");
-                setValue("detailHead", "");
-                setValue("subDetailHead", "");
-                if (e.target.value)
-                  fetchSubSubHeads({
-                    majorHeadCode: watch("majorHead"),
-                    subMajorCode: watch("subMajorHead"),
-                    minorHeadCode: watch("minorHead"),
-                    subHeadCode: e.target.value,
-                  });
-              },
-            })}
           />
         )}
 
-        {/* Sub Sub Head */}
+        {/* ── Sub Sub Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Sub Head"
@@ -643,29 +686,14 @@ const StateChallan = () => {
           <SelectField
             label="Sub Sub Head"
             name="subSubHead"
-            register={register}
+            control={control}
             removable
             disabled={headLoading}
             options={subSubHeads}
-            {...register("subSubHead", {
-              onChange: (e) => {
-                setValue("subSubHead", e.target.value);
-                setValue("detailHead", "");
-                setValue("subDetailHead", "");
-                if (e.target.value)
-                  fetchDetailHeads({
-                    majorHeadCode: watch("majorHead"),
-                    subMajorCode: watch("subMajorHead"),
-                    minorHeadCode: watch("minorHead"),
-                    subHeadCode: watch("subHead"),
-                    subSubHeadCode: e.target.value,
-                  });
-              },
-            })}
           />
         )}
 
-        {/* Detail Head */}
+        {/* ── Detail Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Detail Head"
@@ -679,29 +707,14 @@ const StateChallan = () => {
           <SelectField
             label="Detail Head"
             name="detailHead"
-            register={register}
+            control={control}
             removable
             disabled={headLoading}
             options={detailHeads}
-            {...register("detailHead", {
-              onChange: (e) => {
-                setValue("detailHead", e.target.value);
-                setValue("subDetailHead", "");
-                if (e.target.value)
-                  fetchSubDetailHeads({
-                    majorHeadCode: watch("majorHead"),
-                    subMajorCode: watch("subMajorHead"),
-                    minorHeadCode: watch("minorHead"),
-                    subHeadCode: watch("subHead"),
-                    subSubHeadCode: watch("subSubHead"),
-                    detailHeadCode: e.target.value,
-                  });
-              },
-            })}
           />
         )}
 
-        {/* Sub Detail Head */}
+        {/* ── Sub Detail Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Detail Head"
@@ -715,11 +728,10 @@ const StateChallan = () => {
           <SelectField
             label="Sub Detail Head"
             name="subDetailHead"
-            register={register}
+            control={control}
             removable
             disabled={headLoading}
             options={subDetailHeads}
-            {...register("subDetailHead")}
           />
         )}
 

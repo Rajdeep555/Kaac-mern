@@ -27,6 +27,7 @@ const monthOptions = [
 
 const BasicDetailsSection = ({
   register,
+  control, // ✅ ADD control parameter
   departments,
   ddos,
   grants,
@@ -55,11 +56,11 @@ const BasicDetailsSection = ({
   }
   return (
     <>
+      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Select Sector"
         name="sector"
-        register={register}
-        required
+        control={control}
         options={[
           { label: "Select Sector", value: "" },
           { label: "01-COUNCIL", value: "COUNCIL" },
@@ -76,21 +77,25 @@ const BasicDetailsSection = ({
         placeholder={isExpenditureLoading ? "fetching..." : ""}
       />
 
+      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Financial Year"
         name="financialYear"
-        register={register}
+        control={control}
         options={[
           { label: "Select Financial Year", value: "" },
           ...financialYearOptions,
         ]}
       />
+
+      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Month"
         name="month"
-        register={register}
+        control={control}
         options={monthOptions}
       />
+
       <DateField
         label="Date"
         name="voucherDate"
@@ -113,24 +118,27 @@ const BasicDetailsSection = ({
         max={maxDate}
       />
 
+      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Grant Name & No"
         name="grantNo"
-        register={register}
+        control={control}
         options={[{ label: "Select Grant", value: "" }, ...grants]}
       />
 
+      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Department Name & Code"
         name="department"
-        register={register}
+        control={control}
         options={[{ label: "Select Department", value: "" }, ...departments]}
       />
 
+      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Select DDO"
         name="ddo"
-        register={register}
+        control={control}
         options={[{ label: "Select DDO", value: "" }, ...ddos]}
       />
     </>
