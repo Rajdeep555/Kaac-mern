@@ -722,7 +722,11 @@ const Challan = () => {
             name="treasuryName"
             control={control}
             removable
-            options={[{ label: "01-Diphu", value: "Diphu" }]}
+            options={[
+              { label: "01-Diphu", value: "Diphu" },
+              { label: "02-Hamren", value: "Hamren" },
+              { label: "03-Bokajan", value: "Bokajan" },
+            ]}
           />
         )}
 

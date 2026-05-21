@@ -47,7 +47,7 @@ export const createExpenditure = async (data) => {
             "Building Loan": { major: "661", sub_major: "01", minor: "02" },
             "Car Loan": { major: "661", sub_major: "02", minor: "01" },
             "Earnest Money": { major: "8440", sub_major: "00", minor: "120" },
-            "House Rent": { major: "8440", sub_major: "00", minor: "120" },
+            "House Rent": { major: "007", sub_major: "01", minor: "00" },
             "Security Deposits": { major: "8440", sub_major: "00", minor: "120" },
             "Forest Royalty": { major: "013", sub_major: "01", minor: "01" },
             "MC Forest Royalty": { major: "013", sub_major: "01", minor: "01" },
