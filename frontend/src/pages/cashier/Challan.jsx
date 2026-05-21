@@ -23,15 +23,6 @@ import { showToast } from "../../utils/toast.js";
 import { getAllChallanHead } from "../../api/challanHead.api.js";
 import { useNavigate, useParams } from "react-router-dom";
 
-// ─── UI Label → DB field mapping ──────────────────────────────────────────────
-// Major Head      → majorHeadCode
-// Sub Major Head  → subMajorCode      (parent: majorHeadCode)
-// Minor Head      → minorHeadCode     (parent: subMajorCode)
-// Sub Head        → subHeadCode       (parent: minorHeadCode)
-// Sub Sub Head    → subSubHeadCode    (parent: subHeadCode)
-// Detail Head     → detailHeadCode    (parent: subSubHeadCode)  ← NEW
-
-// ─── Standalone readonly display input (NOT registered with RHF) ──────────────
 const LockedInput = ({ label, value }) => (
   <div className="flex flex-col gap-1">
     <label className="text-sm font-medium">{label}</label>
@@ -55,25 +46,23 @@ const Challan = () => {
   const [heads, setHeads] = useState([]);
   const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(!isEditMode);
 
-  // One state per dropdown level
-  const [majorOptions, setMajorOptions] = useState([]); // Level 1
-  const [subMajorOptions, setSubMajorOptions] = useState([]); // Level 2
-  const [minorOptions, setMinorOptions] = useState([]); // Level 3
-  const [subHeadOptions, setSubHeadOptions] = useState([]); // Level 4
-  const [subSubHeadOptions, setSubSubHeadOptions] = useState([]); // Level 5
-  const [detailOptions, setDetailOptions] = useState([]); // Level 6 ← NEW
+  const [majorOptions, setMajorOptions] = useState([]);
+  const [subMajorOptions, setSubMajorOptions] = useState([]);
+  const [minorOptions, setMinorOptions] = useState([]);
+  const [subHeadOptions, setSubHeadOptions] = useState([]);
+  const [subSubHeadOptions, setSubSubHeadOptions] = useState([]);
+  const [detailOptions, setDetailOptions] = useState([]);
 
   const majorHeadChangedByUser = useRef(false);
   const [headFieldsUnlocked, setHeadFieldsUnlocked] = useState(false);
   const isFirstMajorRender = useRef(true);
 
-  // Raw DB codes kept separately for LockedInput display in edit mode
   const [editCodes, setEditCodes] = useState({
     subMajorCode: "",
     minorHeadCode: "",
     subHeadCode: "",
     subSubHeadCode: "",
-    detailHeadCode: "", // ← NEW
+    detailHeadCode: "",
     treasuryName: "",
   });
 
@@ -97,12 +86,12 @@ const Challan = () => {
       department: "",
       divisionCode: "",
       ddo: "",
-      majorHead: "", // Level 1 — majorHeadCode
-      subMajorHead: "", // Level 2 — subMajorCode
-      minorHead: "", // Level 3 — minorHeadCode
-      subHead: "", // Level 4 — subHeadCode
-      subSubHead: "", // Level 5 — subSubHeadCode
-      detailHead: "", // Level 6 — detailHeadCode ← NEW
+      majorHead: "",
+      subMajorHead: "",
+      minorHead: "",
+      subHead: "",
+      subSubHead: "",
+      detailHead: "",
       treasuryName: "",
       treasuryChallanNo: "",
       treasuryChallanDate: "",
@@ -114,9 +103,9 @@ const Challan = () => {
 
   const selectedMajor = watch("majorHead");
   const selectedSubMajor = watch("subMajorHead");
-  const selectedMinor = watch("minorHead"); // Level 3
-  const selectedSubHead = watch("subHead"); // Level 4
-  const selectedSubSub = watch("subSubHead"); // Level 5
+  const selectedMinor = watch("minorHead");
+  const selectedSubHead = watch("subHead");
+  const selectedSubSub = watch("subSubHead");
 
   // ─── Fetch Challan for Edit ────────────────────────────────────────────────
   useEffect(() => {
@@ -152,16 +141,14 @@ const Challan = () => {
           setValue("amountInWords", rupeesToWords(data.amount));
           setValue("remarks", data.remarks || "");
 
-          // Head codes into RHF (needed for submit payload)
           setValue("majorHead", String(data.majorHead || ""));
           setValue("subMajorHead", String(data.subMajorHead || ""));
-          setValue("minorHead", String(data.minorHead || "")); // Level 3
-          setValue("subHead", String(data.subHead || "")); // Level 4
-          setValue("subSubHead", String(data.subSubHead || "")); // Level 5
-          setValue("detailHead", String(data.detailHead || "")); // Level 6
+          setValue("minorHead", String(data.minorHead || ""));
+          setValue("subHead", String(data.subHead || ""));
+          setValue("subSubHead", String(data.subSubHead || ""));
+          setValue("detailHead", String(data.detailHead || ""));
           setValue("treasuryName", String(data.treasuryCode || ""));
 
-          // Also store separately for LockedInput labels
           setEditCodes({
             subMajorCode: String(data.subMajorHead || ""),
             minorHeadCode: String(data.minorHead || ""),
@@ -207,7 +194,7 @@ const Challan = () => {
     fetchHeads();
   }, []);
 
-  // ─── Detect user-driven Major Head change (skip mount) ────────────────────
+  // ─── Detect user-driven Major Head change ─────────────────────────────────
   useEffect(() => {
     if (isFirstMajorRender.current) {
       isFirstMajorRender.current = false;
@@ -219,7 +206,7 @@ const Challan = () => {
     }
   }, [selectedMajor, isEditMode]);
 
-  // ─── Level 2: Sub Major Head (parent: majorHeadCode) ─────────────────────
+  // ─── Level 2: Sub Major Head ──────────────────────────────────────────────
   useEffect(() => {
     if (!selectedMajor || !isInitialDataLoaded) {
       setSubMajorOptions([]);
@@ -255,7 +242,7 @@ const Challan = () => {
     }
   }, [selectedMajor, heads, isInitialDataLoaded, setValue]);
 
-  // ─── Level 3: Minor Head (parent: subMajorCode) ───────────────────────────
+  // ─── Level 3: Minor Head ──────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedSubMajor || !isInitialDataLoaded) {
       setMinorOptions([]);
@@ -290,7 +277,7 @@ const Challan = () => {
     }
   }, [selectedSubMajor, heads, isInitialDataLoaded, setValue]);
 
-  // ─── Level 4: Sub Head (parent: minorHeadCode) ────────────────────────────
+  // ─── Level 4: Sub Head ────────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedMinor || !isInitialDataLoaded) {
       setSubHeadOptions([]);
@@ -326,7 +313,7 @@ const Challan = () => {
     }
   }, [selectedMinor, heads, isInitialDataLoaded, setValue]);
 
-  // ─── Level 5: Sub Sub Head (parent: subHeadCode) ──────────────────────────
+  // ─── Level 5: Sub Sub Head ────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedSubHead || !isInitialDataLoaded) {
       setSubSubHeadOptions([]);
@@ -361,7 +348,7 @@ const Challan = () => {
     }
   }, [selectedSubHead, heads, isInitialDataLoaded, setValue]);
 
-  // ─── Level 6: Detail Head (parent: subSubHeadCode) ← NEW ─────────────────
+  // ─── Level 6: Detail Head ─────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedSubSub || !isInitialDataLoaded) {
       setDetailOptions([]);
@@ -400,12 +387,18 @@ const Challan = () => {
   const counterfoilNo = watch("counterfoilNo");
 
   useEffect(() => {
-    if (!counterfoilNo) return;
+    if (!counterfoilNo) {
+      // ✅ Clear error when field is emptied
+      setCounterfoilError("");
+      return;
+    }
     const timer = setTimeout(async () => {
       try {
         const res = await getCashReceiptByCounterfoil(counterfoilNo);
         if (res.data.success) {
           showToast("Counterfoil no found", "success");
+          // ✅ Clear any previous "not found" error on success
+          setCounterfoilError("");
           const receipt = res.data.data;
           setValue("totalAmount", receipt.rupeesInCash);
           setValue("amountInWords", rupeesToWords(receipt.rupeesInCash));
@@ -475,12 +468,12 @@ const Challan = () => {
       departmentId: Number(data.department),
       divisionId: Number(data.divisionCode),
       ddoId: Number(data.ddo),
-      majorHead: data.majorHead, // majorHeadCode
-      subMajorHead: data.subMajorHead, // subMajorCode
-      minorHead: data.minorHead, // minorHeadCode
-      subHead: data.subHead, // subHeadCode
-      subSubHead: data.subSubHead, // subSubHeadCode
-      detailHead: data.detailHead, // detailHeadCode ← NEW
+      majorHead: data.majorHead,
+      subMajorHead: data.subMajorHead,
+      minorHead: data.minorHead,
+      subHead: data.subHead,
+      subSubHead: data.subSubHead,
+      detailHead: data.detailHead,
       treasuryCode: data.treasuryName,
       treasuryChallanNo: data.treasuryChallanNo,
       treasuryChallanDate: data.treasuryChallanDate,
@@ -503,7 +496,7 @@ const Challan = () => {
     }
   };
 
-  // ─── Resolve human-readable label from raw code (for LockedInput) ─────────
+  // ─── Resolve human-readable label from raw code ───────────────────────────
   const getHeadLabel = (level, code) => {
     if (!code || !heads.length) return code || "—";
     const found = heads.find((h) => {
@@ -531,8 +524,6 @@ const Challan = () => {
     return map[code] || code || "—";
   };
 
-  // true  → LockedInput (readonly, not RHF-connected)
-  // false → SelectField (live cascading dropdown)
   const headFieldsLocked = isEditMode && !headFieldsUnlocked;
 
   return (
@@ -565,6 +556,7 @@ const Challan = () => {
             register={register}
             {...register("counterfoilNo")}
           />
+          {/* ✅ Shows error or success — clears automatically when found */}
           {counterfoilError && (
             <p className="text-red-500 text-sm mt-1">{counterfoilError}</p>
           )}
@@ -635,7 +627,7 @@ const Challan = () => {
           disabled={isDdoLoading}
         />
 
-        {/* ── Level 1: Major Head — always a live dropdown, changing it unlocks the rest ── */}
+        {/* ── Level 1: Major Head ── */}
         <SelectField
           label="Major Head"
           name="majorHead"
@@ -643,7 +635,7 @@ const Challan = () => {
           options={majorOptions}
         />
 
-        {/* ── Level 2: Sub Major Head (subMajorCode) ── */}
+        {/* ── Level 2: Sub Major Head ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Sub Major Head"
@@ -658,7 +650,7 @@ const Challan = () => {
           />
         )}
 
-        {/* ── Level 3: Minor Head (minorHeadCode) ── */}
+        {/* ── Level 3: Minor Head ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Minor Head"
@@ -673,7 +665,7 @@ const Challan = () => {
           />
         )}
 
-        {/* ── Level 4: Sub Head (subHeadCode) ── */}
+        {/* ── Level 4: Sub Head ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Sub Head"
@@ -688,7 +680,7 @@ const Challan = () => {
           />
         )}
 
-        {/* ── Level 5: Sub Sub Head (subSubHeadCode) ── */}
+        {/* ── Level 5: Sub Sub Head ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Sub Sub Head"
@@ -703,7 +695,7 @@ const Challan = () => {
           />
         )}
 
-        {/* ── Level 6: Detail Head (detailHeadCode) ← NEW ── */}
+        {/* ── Level 6: Detail Head ── */}
         {headFieldsLocked ? (
           <LockedInput
             label="Detail Head"

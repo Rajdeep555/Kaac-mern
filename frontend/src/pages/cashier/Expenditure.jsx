@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Breadcrumbs from "../../components/ui/Breadcrumbs";
@@ -64,10 +64,15 @@ const Expenditure = () => {
   const [savedDepartmentId, setSavedDepartmentId] = useState(null);
   const [savedDdoId, setSavedDdoId] = useState(null);
 
+  // ✅ Saved head values for edit mode pre-population
+  const [savedHeads, setSavedHeads] = useState(null);
+
+  // ✅ Ref to suppress cascade clears during initial edit-mode data load
+  const isCascadeLockedRef = useRef(false);
+
   // ✅ Alert modal state
   const [alertModal, setAlertModal] = useState(DEFAULT_ALERT);
 
-  // ✅ Close handler — navigates away only on success
   const closeAlert = () => {
     const wasSuccess = alertModal.isSuccess;
     setAlertModal(DEFAULT_ALERT);
@@ -140,7 +145,6 @@ const Expenditure = () => {
       advanceRecovery: 0,
       otherDeductions: 0,
 
-      // computed — keep 0
       grossDeduction: 0,
       cpfPayable: 0,
       netDeduction: 0,
@@ -176,7 +180,6 @@ const Expenditure = () => {
   const { ddos } = useDdo();
   const { planNonPlan } = usePlanNonPlan();
   const { expenditureTypeOptions } = useExpenditureTypes();
-
   const { objectHeadOptions } = useObjectHead();
   const { grantOptions } = useGrants();
 
@@ -203,6 +206,7 @@ const Expenditure = () => {
     if (isEditMode && id) {
       const loadExpenditure = async () => {
         setIsExpenditureLoading(true);
+        isCascadeLockedRef.current = true;
         try {
           const response = await getExpenditureById(id);
           const data = response.data.data;
@@ -220,6 +224,17 @@ const Expenditure = () => {
           const ddoId = String(data.ddoId ?? data.ddo?.id ?? "");
           setSavedDepartmentId(deptId);
           setSavedDdoId(ddoId);
+
+          // ✅ Save all head values so we can re-apply after fetching option lists
+          setSavedHeads({
+            majorHead: data.majorHead || "",
+            subMajorHead: data.subMajorHead || "",
+            minorHead: data.minorHead || "",
+            subHead: data.subHead || "",
+            subSubHead: data.subSubHead || "",
+            detailHead: data.detailHead || "",
+            subDetailHead: data.subDetailHead || "",
+          });
 
           const flatData = {
             ...data,
@@ -244,6 +259,9 @@ const Expenditure = () => {
           });
         } finally {
           setIsExpenditureLoading(false);
+          setTimeout(() => {
+            isCascadeLockedRef.current = false;
+          }, 300);
         }
       };
       loadExpenditure();
@@ -251,6 +269,102 @@ const Expenditure = () => {
       setIsDataLoaded(true);
     }
   }, [id, isEditMode, navigate, reset]);
+
+  /* ================= PRE-POPULATE HEAD DROPDOWNS IN EDIT MODE ================= */
+  // Runs once after data loads + sector is set — fetches all option lists in
+  // sequence and re-applies saved values so every dropdown is pre-selected.
+  useEffect(() => {
+    if (!isEditMode || !savedHeads || !sector || !isDataLoaded) return;
+    if (!savedHeads.majorHead) return;
+
+    const populateHeads = async () => {
+      isCascadeLockedRef.current = true;
+      try {
+        const {
+          majorHead,
+          subMajorHead,
+          minorHead,
+          subHead,
+          subSubHead,
+          detailHead,
+          subDetailHead,
+        } = savedHeads;
+
+        // Step 1 — fetch subMajors for majorHead, then restore majorHead
+        await fetchSubMajors(majorHead);
+        setValue("majorHead", majorHead, { shouldDirty: false });
+
+        if (subMajorHead) {
+          // Step 2 — fetch minors, restore subMajorHead
+          await fetchMinors({
+            majorHeadCode: majorHead,
+            subMajorCode: subMajorHead,
+          });
+          setValue("subMajorHead", subMajorHead, { shouldDirty: false });
+        }
+
+        if (minorHead) {
+          // Step 3 — fetch subHeads, restore minorHead
+          await fetchSubHeads({
+            majorHeadCode: majorHead,
+            subMajorCode: subMajorHead,
+            minorHeadCode: minorHead,
+          });
+          setValue("minorHead", minorHead, { shouldDirty: false });
+        }
+
+        if (subHead) {
+          // Step 4 — fetch subSubHeads, restore subHead
+          await fetchSubSubHeads({
+            majorHeadCode: majorHead,
+            subMajorCode: subMajorHead,
+            minorHeadCode: minorHead,
+            subHeadCode: subHead,
+          });
+          setValue("subHead", subHead, { shouldDirty: false });
+        }
+
+        if (subSubHead) {
+          // Step 5 — fetch detailHeads, restore subSubHead
+          await fetchDetailHeads({
+            majorHeadCode: majorHead,
+            subMajorCode: subMajorHead,
+            minorHeadCode: minorHead,
+            subHeadCode: subHead,
+            subSubHeadCode: subSubHead,
+          });
+          setValue("subSubHead", subSubHead, { shouldDirty: false });
+        }
+
+        if (detailHead) {
+          // Step 6 — fetch subDetailHeads, restore detailHead
+          await fetchSubDetailHeads({
+            majorHeadCode: majorHead,
+            subMajorCode: subMajorHead,
+            minorHeadCode: minorHead,
+            subHeadCode: subHead,
+            subSubHeadCode: subSubHead,
+            detailHeadCode: detailHead,
+          });
+          setValue("detailHead", detailHead, { shouldDirty: false });
+        }
+
+        if (subDetailHead) {
+          setValue("subDetailHead", subDetailHead, { shouldDirty: false });
+        }
+      } catch (err) {
+        console.error("Failed to populate head hierarchy in edit mode", err);
+      } finally {
+        setTimeout(() => {
+          isCascadeLockedRef.current = false;
+        }, 100);
+      }
+    };
+
+    populateHeads();
+    // ✅ Only run once when savedHeads + sector are both ready
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, savedHeads, sector, isDataLoaded]);
 
   /* ================= RE-APPLY DEPARTMENT AFTER DEPARTMENTS LOAD ================= */
   useEffect(() => {
@@ -268,10 +382,16 @@ const Expenditure = () => {
       setValue("department", savedDepartmentId, { shouldDirty: false });
   }, [departments, depsLoading, savedDepartmentId, isEditMode, setValue]);
 
-  /* ================= RESET ALL ON SECTOR CHANGE ================= */
-  // ✅ FIX: Remove isEditMode from condition - allow clearing in both modes
+  /* ================= RE-APPLY DDO AFTER DDOS LOAD ================= */
   useEffect(() => {
-    if (!sector || !isDataLoaded) return;
+    if (!isEditMode || !savedDdoId || !ddos || ddos.length === 0) return;
+    const exists = ddos.some((d) => String(d.value ?? d.id) === savedDdoId);
+    if (exists) setValue("ddo", savedDdoId, { shouldDirty: false });
+  }, [ddos, savedDdoId, isEditMode, setValue]);
+
+  /* ================= RESET ALL ON SECTOR CHANGE ================= */
+  useEffect(() => {
+    if (!sector || !isDataLoaded || isCascadeLockedRef.current) return;
     setValue("department", "");
     setValue("ddo", "");
     setValue("majorHead", "");
@@ -284,9 +404,8 @@ const Expenditure = () => {
   }, [sector, setValue, isDataLoaded]);
 
   /* ================= MAJOR → SUB MAJOR ================= */
-  // ✅ FIX: Remove isEditMode - allow cascading in all modes
   useEffect(() => {
-    if (!majorHead || !isDataLoaded) return;
+    if (!majorHead || !isDataLoaded || isCascadeLockedRef.current) return;
     fetchSubMajors(majorHead);
     setValue("subMajorHead", "", { shouldDirty: false });
     setValue("minorHead", "", { shouldDirty: false });
@@ -297,9 +416,8 @@ const Expenditure = () => {
   }, [majorHead, isDataLoaded, fetchSubMajors, setValue]);
 
   /* ================= SUB MAJOR → MINOR ================= */
-  // ✅ FIX: Remove isEditMode - allow cascading in all modes
   useEffect(() => {
-    if (!subMajorHead || !isDataLoaded) return;
+    if (!subMajorHead || !isDataLoaded || isCascadeLockedRef.current) return;
     fetchMinors({ majorHeadCode: majorHead, subMajorCode: subMajorHead });
     setValue("minorHead", "", { shouldDirty: false });
     setValue("subHead", "", { shouldDirty: false });
@@ -309,9 +427,8 @@ const Expenditure = () => {
   }, [subMajorHead, majorHead, isDataLoaded, fetchMinors, setValue]);
 
   /* ================= MINOR → SUB HEAD ================= */
-  // ✅ FIX: Remove isEditMode - allow cascading in all modes
   useEffect(() => {
-    if (!minorHead || !isDataLoaded) return;
+    if (!minorHead || !isDataLoaded || isCascadeLockedRef.current) return;
     fetchSubHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
@@ -331,9 +448,8 @@ const Expenditure = () => {
   ]);
 
   /* ================= SUB HEAD → SUB SUB HEAD ================= */
-  // ✅ FIX: Remove isEditMode - allow cascading in all modes
   useEffect(() => {
-    if (subHead === "" || !isDataLoaded) return;
+    if (subHead === "" || !isDataLoaded || isCascadeLockedRef.current) return;
     fetchSubSubHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
@@ -354,9 +470,9 @@ const Expenditure = () => {
   ]);
 
   /* ================= SUB SUB HEAD → DETAIL ================= */
-  // ✅ FIX: Remove isEditMode - allow cascading in all modes
   useEffect(() => {
-    if (subSubHead === "" || !isDataLoaded) return;
+    if (subSubHead === "" || !isDataLoaded || isCascadeLockedRef.current)
+      return;
     fetchDetailHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
@@ -378,9 +494,8 @@ const Expenditure = () => {
   ]);
 
   /* ================= DETAIL → SUB DETAIL ================= */
-  // ✅ FIX: Remove isEditMode - allow cascading in all modes
   useEffect(() => {
-    if (!detailHead || !isDataLoaded) return;
+    if (!detailHead || !isDataLoaded || isCascadeLockedRef.current) return;
     fetchSubDetailHeads({
       majorHeadCode: majorHead,
       subMajorCode: subMajorHead,
@@ -793,7 +908,6 @@ const Expenditure = () => {
           register={register}
         />
 
-        {/* ── Expenditure Type ── */}
         <SelectField
           label="Expenditure Type"
           name="expenditureType"
@@ -822,7 +936,6 @@ const Expenditure = () => {
           subDetailHeads={subDetailHeads}
         />
 
-        {/* ── Salary Type ── */}
         <SelectField
           label="Salary / Non Salary"
           name="salaryType"
@@ -833,7 +946,6 @@ const Expenditure = () => {
           ]}
         />
 
-        {/* ── Plan / Non-Plan ── */}
         <SelectField
           label="Plan / Non-Plan"
           name="planType"
@@ -841,7 +953,6 @@ const Expenditure = () => {
           options={[{ label: "Select PlanNonPlan", value: "" }, ...planNonPlan]}
         />
 
-        {/* ── Object Head ── */}
         <SelectField
           label="Object Head"
           name="objectHead"
@@ -872,7 +983,6 @@ const Expenditure = () => {
           register={register}
         />
 
-        {/* ── Treasury Name ── */}
         <SelectField
           label="Treasury Name"
           name="treasuryName"
@@ -897,7 +1007,6 @@ const Expenditure = () => {
         />
       </FormWrapper>
 
-      {/* ✅ Alert Modal — success navigates away, error stays on page */}
       <AlertModal
         isOpen={alertModal.isOpen}
         onClose={closeAlert}

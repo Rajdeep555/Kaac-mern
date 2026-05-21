@@ -23,6 +23,7 @@ import formRoutes from "./modules/forms/forms.route.js"
 import statementsRoutes from "./modules/statements/statements.route.js"
 import stateChallanRoutes from "./modules/stateChallan/stateChallan.route.js"
 import dashboardRoutes from "./modules/personnelStats/personnelStats.route.js"
+import counterfoilRoutes from "./modules/checkCounterfoil/checkCounterfoil.route.js"
 
 const router = express.Router();
 
@@ -50,6 +51,7 @@ router.use("/v1/forms", formRoutes)
 router.use("/v1/statements", statementsRoutes);
 router.use("/v1/state-challan", stateChallanRoutes)
 router.use("/v1/dashboard", dashboardRoutes)
+router.use("/v1/counterfoil", counterfoilRoutes)
 
 
 // router.all(/.*/, (req, res) => {
