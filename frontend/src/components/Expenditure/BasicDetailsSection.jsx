@@ -114,8 +114,8 @@ const BasicDetailsSection = ({
         label="Requisition Date"
         name="requisitionDate"
         register={register}
-        min={minDate}
-        max={maxDate}
+        // min={minDate}
+        // max={maxDate}
       />
 
       {/* ✅ Changed: Use control instead of register */}
