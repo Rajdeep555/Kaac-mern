@@ -13,25 +13,26 @@ const GeneratedChallans = () => {
   const navigate = useNavigate();
 
   const fetchChallans = async (force = false) => {
-    // Skip if cache exists and not forced
     if (_challanCache && !force) {
       setChallans(_challanCache);
       return;
     }
     setLoading(true);
     try {
-      const res = await getAllChallans({ page: 1, limit: 100 });
+      // ── Fetch ALL records — DataTable handles client-side pagination ──
+      const res = await getAllChallans({ page: 1, limit: 10000 });
       if (res.data.success) {
         const formatted = res.data.data.map((c) => ({
           id: c.id,
           challanNo: c.challanNo,
           challanDate: c.challanDate?.slice(0, 10),
-          codes: `${c.majorHead}-${c.subMajorHead}-${c.subSubMajorHead}-${c.minorHead}-${c.detailHead}`,
+          counterfoilNo: c.counterfoilNo || "—",
+          codes: `${c.majorHead}-${c.subMajorHead}-${c.minorHead}-${c.detailHead}`,
           ddo: c.ddo?.ddoName || "",
           treasuryChallanNo: c.treasuryChallanNo,
           totalAmount: Number(c.amount).toLocaleString("en-IN"),
         }));
-        _challanCache = formatted; // store in cache
+        _challanCache = formatted;
         setChallans(formatted);
       }
     } catch (error) {
@@ -42,7 +43,6 @@ const GeneratedChallans = () => {
     }
   };
 
-  // Only fetches if no cache
   useEffect(() => {
     fetchChallans();
   }, []);
@@ -50,6 +50,7 @@ const GeneratedChallans = () => {
   const columns = [
     { key: "challanNo", label: "Challan No" },
     { key: "challanDate", label: "Date" },
+    { key: "counterfoilNo", label: "Counterfoil No" },
     { key: "codes", label: "Major - Detail Head" },
     { key: "ddo", label: "DDO" },
     { key: "treasuryChallanNo", label: "Treasury Challan No" },
@@ -86,7 +87,6 @@ const GeneratedChallans = () => {
       <div className="flex items-center justify-between">
         <h1 className="font-unbounded text-3xl font-normal">Challans</h1>
 
-        {/* Force refresh button */}
         <button
           onClick={() => fetchChallans(true)}
           disabled={loading}
@@ -112,17 +112,18 @@ const GeneratedChallans = () => {
         columns={columns}
         searchableKeys={[
           "challanNo",
+          "counterfoilNo",
           "treasuryChallanNo",
           "totalAmount",
           "codes",
+          "ddo",
         ]}
-        pageSize={50}
+        pageSize={70}
       />
     </div>
   );
 };
 
-// ── Export cache invalidator so edit/create pages can call it after mutation ──
 export const invalidateChallanCache = () => {
   _challanCache = null;
 };
