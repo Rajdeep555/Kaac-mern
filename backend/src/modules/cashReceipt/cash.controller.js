@@ -154,7 +154,7 @@ export const getPendingCount = async (req, res) => {
 
 export const getTotal = async (req, res) => {
     try {
-        const { filterType, fy, month } = req.query;
+        const { filterType, fy, month, day } = req.query;
 
         if (!filterType || !fy) {
             return res.status(400).json({
@@ -162,11 +162,16 @@ export const getTotal = async (req, res) => {
                 message: "filterType and fy are required",
             });
         }
-
-        if (filterType === "monthly" && !month) {
+        if ((filterType === "monthly" || filterType === "daily") && !month) {
             return res.status(400).json({
                 success: false,
-                message: "month is required for monthly filter",
+                message: "month is required for monthly/daily filter",
+            });
+        }
+        if (filterType === "daily" && !day) {
+            return res.status(400).json({
+                success: false,
+                message: "day is required for daily filter",
             });
         }
 
@@ -174,6 +179,7 @@ export const getTotal = async (req, res) => {
             filterType,
             fy,
             month,
+            day,
             userId: req.user.id,
             role: req.user.role,
         });
@@ -181,9 +187,6 @@ export const getTotal = async (req, res) => {
         return res.status(200).json({ success: true, ...data });
     } catch (error) {
         logger.error("Failed to get cash receipt total", error);
-        return res.status(500).json({
-            success: false,
-            message: error.message,
-        });
+        return res.status(500).json({ success: false, message: error.message });
     }
 };

@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import Breadcrumbs from "../../components/ui/Breadcrumbs";
 import { getCashReceiptTotal } from "../../api/cashReceipt.api";
 import { showToast } from "../../utils/toast";
@@ -32,21 +31,71 @@ const MONTHS = [
   { label: "March", value: 3 },
 ];
 
-const CashReceiptTotal = () => {
-  const navigate = useNavigate();
+// Build days array for a given month+year (accounts for leap years etc.)
+const getDaysInMonth = (monthNum, fyYear) => {
+  if (!monthNum || !fyYear) return [];
+  const calendarYear =
+    Number(monthNum) >= 4 ? Number(fyYear) : Number(fyYear) + 1;
+  const daysCount = new Date(calendarYear, Number(monthNum), 0).getDate();
+  return Array.from({ length: daysCount }, (_, i) => ({
+    label: String(i + 1).padStart(2, "0"),
+    value: i + 1,
+  }));
+};
 
-  const [filterType, setFilterType] = useState("fy"); // "fy" | "monthly"
+const FILTER_TYPES = [
+  { label: "Financial Year", value: "fy" },
+  { label: "Monthly", value: "monthly" },
+  { label: "Day", value: "daily" },
+];
+
+const CashReceiptTotal = () => {
+  const [filterType, setFilterType] = useState("fy");
   const [selectedFy, setSelectedFy] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");
 
-  const [result, setResult] = useState(null); // { total, count, from, to }
+  const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  // ── Validation ────────────────────────────────────────────────────────────
   const canSearch =
     filterType === "fy"
       ? selectedFy !== ""
-      : selectedFy !== "" && selectedMonth !== "";
+      : filterType === "monthly"
+        ? selectedFy !== "" && selectedMonth !== ""
+        : /* daily */ selectedFy !== "" &&
+          selectedMonth !== "" &&
+          selectedDay !== "";
+
+  // ── Days list reacts to month + FY selection ──────────────────────────────
+  const dayOptions = getDaysInMonth(selectedMonth, selectedFy);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const resetResult = () => {
+    setResult(null);
+    setSearched(false);
+  };
+
+  const handleFilterTypeChange = (type) => {
+    setFilterType(type);
+    setSelectedMonth("");
+    setSelectedDay("");
+    resetResult();
+  };
+
+  const handleFyChange = (val) => {
+    setSelectedFy(val);
+    setSelectedDay("");
+    resetResult();
+  };
+
+  const handleMonthChange = (val) => {
+    setSelectedMonth(val);
+    setSelectedDay("");
+    resetResult();
+  };
 
   const handleSearch = async () => {
     if (!canSearch) return;
@@ -55,7 +104,9 @@ const CashReceiptTotal = () => {
     setSearched(false);
     try {
       const params = { filterType, fy: selectedFy };
-      if (filterType === "monthly") params.month = selectedMonth;
+      if (filterType === "monthly" || filterType === "daily")
+        params.month = selectedMonth;
+      if (filterType === "daily") params.day = selectedDay;
 
       const res = await getCashReceiptTotal(params);
       if (res.data.success) {
@@ -73,11 +124,12 @@ const CashReceiptTotal = () => {
   const handleReset = () => {
     setSelectedFy("");
     setSelectedMonth("");
+    setSelectedDay("");
     setResult(null);
     setSearched(false);
   };
 
-  // Format INR
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const formatINR = (val) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -85,10 +137,17 @@ const CashReceiptTotal = () => {
       maximumFractionDigits: 2,
     }).format(val ?? 0);
 
+  const fyLabel =
+    FY_OPTIONS.find((f) => f.value === Number(selectedFy))?.label ?? "";
+  const monthLabel =
+    MONTHS.find((m) => m.value === Number(selectedMonth))?.label ?? "";
+
   const filterLabel =
     filterType === "fy"
-      ? `FY ${FY_OPTIONS.find((f) => f.value === Number(selectedFy))?.label ?? ""}`
-      : `${MONTHS.find((m) => m.value === Number(selectedMonth))?.label ?? ""} — FY ${FY_OPTIONS.find((f) => f.value === Number(selectedFy))?.label ?? ""}`;
+      ? `FY ${fyLabel}`
+      : filterType === "monthly"
+        ? `${monthLabel} — FY ${fyLabel}`
+        : /* daily */ `${selectedDay ? String(selectedDay).padStart(2, "0") : ""} ${monthLabel} — FY ${fyLabel}`;
 
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-10">
@@ -114,49 +173,30 @@ const CashReceiptTotal = () => {
         {/* Filter type toggle */}
         <div>
           <p className="text-sm font-medium text-zinc-700 mb-2">Filter By</p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                setFilterType("fy");
-                setSelectedMonth("");
-                setResult(null);
-                setSearched(false);
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
-                filterType === "fy"
-                  ? "bg-zinc-900 text-white border-zinc-900"
-                  : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
-              }`}>
-              Financial Year
-            </button>
-            <button
-              onClick={() => {
-                setFilterType("monthly");
-                setResult(null);
-                setSearched(false);
-              }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
-                filterType === "monthly"
-                  ? "bg-zinc-900 text-white border-zinc-900"
-                  : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
-              }`}>
-              Monthly
-            </button>
+          <div className="flex gap-2 flex-wrap">
+            {FILTER_TYPES.map((ft) => (
+              <button
+                key={ft.value}
+                onClick={() => handleFilterTypeChange(ft.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
+                  filterType === ft.value
+                    ? "bg-zinc-900 text-white border-zinc-900"
+                    : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
+                }`}>
+                {ft.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Financial Year selector — always shown */}
+        {/* ── Financial Year ── always visible */}
         <div>
           <label className="block text-sm font-medium text-zinc-700 mb-1">
             Financial Year <span className="text-red-500">*</span>
           </label>
           <select
             value={selectedFy}
-            onChange={(e) => {
-              setSelectedFy(e.target.value);
-              setResult(null);
-              setSearched(false);
-            }}
+            onChange={(e) => handleFyChange(e.target.value)}
             className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400">
             <option value="">— Select FY —</option>
             {FY_OPTIONS.map((fy) => (
@@ -167,19 +207,15 @@ const CashReceiptTotal = () => {
           </select>
         </div>
 
-        {/* Month selector — only for monthly filter */}
-        {filterType === "monthly" && (
+        {/* ── Month ── visible for monthly + daily */}
+        {(filterType === "monthly" || filterType === "daily") && (
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">
               Month <span className="text-red-500">*</span>
             </label>
             <select
               value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(e.target.value);
-                setResult(null);
-                setSearched(false);
-              }}
+              onChange={(e) => handleMonthChange(e.target.value)}
               disabled={!selectedFy}
               className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-400">
               <option value="">— Select Month —</option>
@@ -197,7 +233,34 @@ const CashReceiptTotal = () => {
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* ── Day ── visible only for daily */}
+        {filterType === "daily" && (
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">
+              Day <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedDay}
+              onChange={(e) => {
+                setSelectedDay(e.target.value);
+                resetResult();
+              }}
+              disabled={!selectedMonth || !selectedFy}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-400">
+              <option value="">— Select Day —</option>
+              {dayOptions.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+            {!selectedMonth && (
+              <p className="text-xs text-zinc-400 mt-1">Select a Month first</p>
+            )}
+          </div>
+        )}
+
+        {/* ── Actions ── */}
         <div className="flex gap-3 pt-1">
           <button
             onClick={handleSearch}
@@ -215,7 +278,7 @@ const CashReceiptTotal = () => {
         </div>
       </div>
 
-      {/* ── Result Card ── */}
+      {/* ── Loading ── */}
       {loading && (
         <div className="max-w-xl mt-6 flex items-center gap-3 text-zinc-500">
           <svg
@@ -235,9 +298,9 @@ const CashReceiptTotal = () => {
         </div>
       )}
 
+      {/* ── Result ── */}
       {searched && result && !loading && (
         <div className="max-w-xl mt-6 bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
-          {/* Card header */}
           <div className="bg-zinc-900 px-6 py-4">
             <p className="text-zinc-400 text-xs uppercase tracking-widest">
               Total Collected
@@ -246,8 +309,6 @@ const CashReceiptTotal = () => {
               {formatINR(result.total)}
             </p>
           </div>
-
-          {/* Card details */}
           <div className="px-6 py-4 space-y-3 text-sm text-zinc-600">
             <div className="flex justify-between border-b border-zinc-100 pb-2">
               <span className="text-zinc-500">Period</span>
@@ -277,6 +338,7 @@ const CashReceiptTotal = () => {
         </div>
       )}
 
+      {/* ── Empty state ── */}
       {searched && result && result.count === 0 && !loading && (
         <div className="max-w-xl mt-6 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-6 py-4 text-sm">
           No receipts found for the selected period.
