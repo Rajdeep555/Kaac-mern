@@ -1,6 +1,6 @@
 import logger from "../../utils/logger.js";
 import { createCashReceiptSchema } from "./cash.schema.js"
-import { createCashReceipt, getAllCashReceipts, getCashReceiptByCounterfoilNo, getCashReceiptById, getPendingReceipts, getPendingReceiptsCount, updateCashReceipt } from "./cash.service.js";
+import { createCashReceipt, getAllCashReceipts, getCashReceiptByCounterfoilNo, getCashReceiptById, getCashReceiptTotal, getPendingReceipts, getPendingReceiptsCount, updateCashReceipt } from "./cash.service.js";
 
 export const create = async (req, res) => {
     try {
@@ -151,3 +151,39 @@ export const getPendingCount = async (req, res) => {
         });
     }
 }
+
+export const getTotal = async (req, res) => {
+    try {
+        const { filterType, fy, month } = req.query;
+
+        if (!filterType || !fy) {
+            return res.status(400).json({
+                success: false,
+                message: "filterType and fy are required",
+            });
+        }
+
+        if (filterType === "monthly" && !month) {
+            return res.status(400).json({
+                success: false,
+                message: "month is required for monthly filter",
+            });
+        }
+
+        const data = await getCashReceiptTotal({
+            filterType,
+            fy,
+            month,
+            userId: req.user.id,
+            role: req.user.role,
+        });
+
+        return res.status(200).json({ success: true, ...data });
+    } catch (error) {
+        logger.error("Failed to get cash receipt total", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};

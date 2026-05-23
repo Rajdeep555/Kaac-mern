@@ -4,7 +4,7 @@ export function useDataTable({
   data = [],
   searchableKeys = [],
   statusKey,
-  pageSize = 10,
+  pageSize = 50,
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");

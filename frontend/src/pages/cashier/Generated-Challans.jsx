@@ -116,7 +116,7 @@ const GeneratedChallans = () => {
           "totalAmount",
           "codes",
         ]}
-        pageSize={10}
+        pageSize={50}
       />
     </div>
   );

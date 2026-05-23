@@ -9,24 +9,22 @@ import { showToast } from "../../utils/toast";
 
 // ── Module-level cache ──
 let _receiptCache = null;
-let _metaCache = null;
 
 const GeneratedCashReceipt = () => {
   const [receipts, setReceipts] = useState(_receiptCache || []);
   const [loading, setLoading] = useState(!_receiptCache);
-  const [meta, setMeta] = useState(_metaCache || null);
   const [pendingCount, setPendingCount] = useState(null);
   const navigate = useNavigate();
 
   const fetchReceipts = async (force = false) => {
     if (_receiptCache && !force) {
       setReceipts(_receiptCache);
-      setMeta(_metaCache);
       return;
     }
     setLoading(true);
     try {
-      const res = await getAllCashReceipts({ page: 1, limit: 10 });
+      // Fetch all records — DataTable handles client-side pagination
+      const res = await getAllCashReceipts({ page: 1, limit: 10000 });
       if (res.data.success) {
         const formatted = res.data.data.map((item) => ({
           ...item,
@@ -38,9 +36,7 @@ const GeneratedCashReceipt = () => {
             : "",
         }));
         _receiptCache = formatted;
-        _metaCache = res.data.meta;
         setReceipts(formatted);
-        setMeta(res.data.meta);
       }
     } catch (error) {
       console.error(error);
@@ -50,7 +46,6 @@ const GeneratedCashReceipt = () => {
     }
   };
 
-  // Fetch pending count separately — lightweight call
   const fetchPendingCount = async () => {
     try {
       const res = await getPendingReceiptsCount();
@@ -94,11 +89,31 @@ const GeneratedCashReceipt = () => {
         <h1 className="font-unbounded text-3xl font-normal">Cash Receipt</h1>
 
         <div className="flex items-center gap-3">
+          {/* ── Check Total Button ── */}
+          <button
+            onClick={() => navigate("/cash-receipt/total")}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-50 border border-emerald-300 text-emerald-700 rounded hover:bg-emerald-100 transition font-medium">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+            Check Total
+          </button>
+
           {/* ── Pending Receipts Button ── */}
           <button
             onClick={() => navigate("/cash-receipt/pending")}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-50 border border-red-300 text-amber-700 rounded hover:bg-amber-100 transition font-medium">
-            <span className="relative flex items-center justify-center w-5 h-5 rounded-full bg-amber-900 text-white text-xs font-bold">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-900 text-white text-xs font-bold">
               {pendingCount ?? "…"}
             </span>
             Pending Receipts
@@ -136,21 +151,14 @@ const GeneratedCashReceipt = () => {
           "letterNo",
           "rupeesInCash",
         ]}
-        pageSize={10}
+        pageSize={70}
       />
-
-      {meta && (
-        <div className="text-sm text-gray-500">
-          Page {meta.page} of {meta.totalPages} | Total Records: {meta.total}
-        </div>
-      )}
     </div>
   );
 };
 
 export const invalidateReceiptCache = () => {
   _receiptCache = null;
-  _metaCache = null;
 };
 
 export default GeneratedCashReceipt;

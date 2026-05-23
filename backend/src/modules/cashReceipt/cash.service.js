@@ -223,3 +223,49 @@ export const getPendingReceiptsCount = async (userId, role) => {
         throw error;
     }
 }
+
+export const getCashReceiptTotal = async ({ filterType, fy, month, userId, role }) => {
+    // ── Build date range ──────────────────────────────────────────────────────
+    const fyYear = Number(fy);
+    let from, to;
+
+    if (filterType === "fy") {
+        // Full financial year: April 1 of fyYear  →  March 31 of fyYear+1
+        from = new Date(fyYear, 3, 1);       // April  = month index 3
+        to = new Date(fyYear + 1, 2, 31);  // March  = month index 2
+    } else {
+        // Single month inside the FY
+        // FY months: Apr(4)–Dec(12) belong to fyYear, Jan(1)–Mar(3) belong to fyYear+1
+        const monthNum = Number(month);
+        const calendarYear = monthNum >= 4 ? fyYear : fyYear + 1;
+        from = new Date(calendarYear, monthNum - 1, 1);
+        // Last day of the month: day 0 of next month
+        to = new Date(calendarYear, monthNum, 0);
+    }
+
+    // ── Prisma where clause ───────────────────────────────────────────────────
+    const where = {
+        isActive: true,
+        date: { gte: from, lte: to },
+        ...(role === "CASHIER" && { cashierId: userId }),
+    };
+
+    // ── Fetch matching receipts ───────────────────────────────────────────────
+    const receipts = await prisma.cashReceipt.findMany({
+        where,
+        select: { rupeesInCash: true },
+    });
+
+    // rupeesInCash is stored as String — parse and sum
+    const total = receipts.reduce((sum, r) => {
+        const val = parseFloat(r.rupeesInCash?.replace(/,/g, "") ?? "0");
+        return sum + (isNaN(val) ? 0 : val);
+    }, 0);
+
+    return {
+        total: parseFloat(total.toFixed(2)),
+        count: receipts.length,
+        from: from.toISOString(),
+        to: to.toISOString(),
+    };
+};

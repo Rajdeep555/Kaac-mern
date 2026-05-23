@@ -19,7 +19,7 @@ const DataTable = ({
   columns,
   searchableKeys = [],
   statusKey,
-  pageSize = 5,
+  pageSize = 15,
   actionSlot,
   downloadFileName = "table",
   printTitle = "Report",

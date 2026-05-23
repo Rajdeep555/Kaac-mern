@@ -11,3 +11,7 @@ export const getPendingReceipts = () => {
 export const getPendingReceiptsCount = () => {
     return http.get("/cashReceipt/pending/count");
 };
+
+export const getCashReceiptTotal = (params) => {
+    return http.get("/cashReceipt/total", { params });
+};
