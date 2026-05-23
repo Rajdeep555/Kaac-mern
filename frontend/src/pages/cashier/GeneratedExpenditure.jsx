@@ -27,7 +27,7 @@ const GeneratedExpenditure = () => {
     {
       key: "ddo",
       label: "DDO",
-      render: (_, row) => row.ddo?.name || "-",
+      render: (_, row) => row.ddo?.ddoName || "-",
     },
     { key: "treasuryVoucherNo", label: "Treasury Voucher No" },
     { key: "grossAmount", label: "Gross Amount" },

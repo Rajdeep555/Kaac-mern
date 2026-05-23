@@ -20,7 +20,7 @@ const GeneratedChallans = () => {
     }
     setLoading(true);
     try {
-      const res = await getAllChallans({ page: 1, limit: 50 });
+      const res = await getAllChallans({ page: 1, limit: 100 });
       if (res.data.success) {
         const formatted = res.data.data.map((c) => ({
           id: c.id,

@@ -1,6 +1,6 @@
 import logger from "../../utils/logger.js";
 import { createCashReceiptSchema } from "./cash.schema.js"
-import { createCashReceipt, getAllCashReceipts, getCashReceiptByCounterfoilNo, getCashReceiptById, updateCashReceipt } from "./cash.service.js";
+import { createCashReceipt, getAllCashReceipts, getCashReceiptByCounterfoilNo, getCashReceiptById, getPendingReceipts, getPendingReceiptsCount, updateCashReceipt } from "./cash.service.js";
 
 export const create = async (req, res) => {
     try {
@@ -111,6 +111,40 @@ export const getByCounterfoilNo = async (req, res) => {
             data: receipt
         })
     } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}
+
+// ─── Pending Receipts ─────────────────────────────────────────────────────────
+
+export const getPending = async (req, res) => {
+    try {
+        const data = await getPendingReceipts(req.user.id, req.user.role);
+        return res.status(200).json({
+            success: true,
+            data,
+        });
+    } catch (error) {
+        logger.error("Failed to get pending receipts", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+}
+
+export const getPendingCount = async (req, res) => {
+    try {
+        const count = await getPendingReceiptsCount(req.user.id, req.user.role);
+        return res.status(200).json({
+            success: true,
+            count,
+        });
+    } catch (error) {
+        logger.error("Failed to get pending receipts count", error);
         return res.status(500).json({
             success: false,
             message: error.message,

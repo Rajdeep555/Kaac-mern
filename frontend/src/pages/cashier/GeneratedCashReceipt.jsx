@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DataTable from "../../components/DataTable/DataTable";
-import { getAllCashReceipts } from "../../api/cashReceipt.api";
+import {
+  getAllCashReceipts,
+  getPendingReceiptsCount,
+} from "../../api/cashReceipt.api";
 import { showToast } from "../../utils/toast";
 
 // ── Module-level cache ──
@@ -12,10 +15,10 @@ const GeneratedCashReceipt = () => {
   const [receipts, setReceipts] = useState(_receiptCache || []);
   const [loading, setLoading] = useState(!_receiptCache);
   const [meta, setMeta] = useState(_metaCache || null);
+  const [pendingCount, setPendingCount] = useState(null);
   const navigate = useNavigate();
 
   const fetchReceipts = async (force = false) => {
-    // Skip if cache exists and not forced
     if (_receiptCache && !force) {
       setReceipts(_receiptCache);
       setMeta(_metaCache);
@@ -34,7 +37,7 @@ const GeneratedCashReceipt = () => {
             ? new Date(item.letterDate).toLocaleDateString("en-GB")
             : "",
         }));
-        _receiptCache = formatted; // store in cache
+        _receiptCache = formatted;
         _metaCache = res.data.meta;
         setReceipts(formatted);
         setMeta(res.data.meta);
@@ -47,9 +50,21 @@ const GeneratedCashReceipt = () => {
     }
   };
 
-  // Only fetches if no cache
+  // Fetch pending count separately — lightweight call
+  const fetchPendingCount = async () => {
+    try {
+      const res = await getPendingReceiptsCount();
+      if (res.data.success) {
+        setPendingCount(res.data.count);
+      }
+    } catch (error) {
+      console.error("Failed to fetch pending count", error);
+    }
+  };
+
   useEffect(() => {
     fetchReceipts();
+    fetchPendingCount();
   }, []);
 
   const columns = [
@@ -78,25 +93,37 @@ const GeneratedCashReceipt = () => {
       <div className="flex items-center justify-between">
         <h1 className="font-unbounded text-3xl font-normal">Cash Receipt</h1>
 
-        {/* Force refresh button */}
-        <button
-          onClick={() => fetchReceipts(true)}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 text-sm border border-zinc-300 rounded hover:bg-zinc-50 transition disabled:opacity-50">
-          <svg
-            className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24">
-            <path
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0115-3.87M20 15a9 9 0 01-15 3.87"
-            />
-          </svg>
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {/* ── Pending Receipts Button ── */}
+          <button
+            onClick={() => navigate("/cash-receipt/pending")}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-50 border border-red-300 text-amber-700 rounded hover:bg-amber-100 transition font-medium">
+            <span className="relative flex items-center justify-center w-5 h-5 rounded-full bg-amber-900 text-white text-xs font-bold">
+              {pendingCount ?? "…"}
+            </span>
+            Pending Receipts
+          </button>
+
+          {/* ── Refresh Button ── */}
+          <button
+            onClick={() => fetchReceipts(true)}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm border border-zinc-300 rounded hover:bg-zinc-50 transition disabled:opacity-50">
+            <svg
+              className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24">
+              <path
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0115-3.87M20 15a9 9 0 01-15 3.87"
+              />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       <DataTable
@@ -121,7 +148,6 @@ const GeneratedCashReceipt = () => {
   );
 };
 
-// ── Export cache invalidator — call this after create/edit/delete ──
 export const invalidateReceiptCache = () => {
   _receiptCache = null;
   _metaCache = null;

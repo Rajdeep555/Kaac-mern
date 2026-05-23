@@ -199,6 +199,9 @@ export const getExpenditureForCashier = async ({
             ...(hasTreasuryVoucher === true && { treasuryVoucherNo: { not: null } }),
             ...(hasTreasuryVoucher === false && { treasuryVoucherNo: null }),
         },
+        include: {
+            ddo: true,
+        },
         orderBy: { createdAt: "desc" },
     });
 };

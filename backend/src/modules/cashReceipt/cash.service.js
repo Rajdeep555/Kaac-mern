@@ -110,7 +110,7 @@ export const getCashReceiptById = async (id, userId, role) => {
 
 export const getAllCashReceipts = async ({
     page = 1,
-    limit = 10,
+    limit = 80,
     userId,
     role,
 }) => {
@@ -163,4 +163,63 @@ export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role)
         }
     })
     return receipt;
+}
+
+
+// ─── Pending Receipts ─────────────────────────────────────────────────────────
+// A "pending" receipt is one whose counterfoilNo has NOT been used in any Challan
+
+export const getPendingReceipts = async (userId, role) => {
+    try {
+        // Step 1: collect every counterfoilNo already linked to a Challan
+        const linked = await prisma.challan.findMany({
+            where: { counterfoilNo: { not: null } },
+            select: { counterfoilNo: true },
+        });
+
+        const linkedNos = linked.map((c) => c.counterfoilNo);
+
+        // Step 2: return receipts NOT in that list, scoped to cashier if needed
+        const receipts = await prisma.cashReceipt.findMany({
+            where: {
+                isActive: true,
+                ...(role === "CASHIER" && { cashierId: userId }),
+                counterfoilNo: {
+                    notIn: linkedNos.length > 0 ? linkedNos : ["__none__"],
+                },
+            },
+            orderBy: { createdAt: "desc" },
+        });
+
+        return receipts;
+    } catch (error) {
+        logger.error("Get Pending Receipts Error:", error);
+        throw error;
+    }
+}
+
+export const getPendingReceiptsCount = async (userId, role) => {
+    try {
+        const linked = await prisma.challan.findMany({
+            where: { counterfoilNo: { not: null } },
+            select: { counterfoilNo: true },
+        });
+
+        const linkedNos = linked.map((c) => c.counterfoilNo);
+
+        const count = await prisma.cashReceipt.count({
+            where: {
+                isActive: true,
+                ...(role === "CASHIER" && { cashierId: userId }),
+                counterfoilNo: {
+                    notIn: linkedNos.length > 0 ? linkedNos : ["__none__"],
+                },
+            },
+        });
+
+        return count;
+    } catch (error) {
+        logger.error("Get Pending Receipts Count Error:", error);
+        throw error;
+    }
 }

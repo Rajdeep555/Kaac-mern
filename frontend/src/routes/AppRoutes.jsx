@@ -41,6 +41,7 @@ import NotFound from "../pages/not-found/NotFound";
 import User from "../pages/home/User";
 import ExpenditureDetailPage from "../pages/cashier/ExpenditureDetailPage";
 import ChallanHead from "../pages/home/ChallanHead";
+import PendingReceipts from "../pages/cashier/PendingReceipts";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -127,6 +128,8 @@ const AppRoutes = createBrowserRouter([
               { path: "expenditures/:id/edit", element: <EditExpenditure /> },
               { path: "cash-receipt", element: <CashReceipt /> },
               { path: "/cash-receipt/:id", element: <CashReceipt /> },
+              { path: "/cash-receipt/pending", element: <PendingReceipts /> },
+
               {
                 path: "generated-cash-receipt",
                 element: <GeneratedCashReceipt />,
