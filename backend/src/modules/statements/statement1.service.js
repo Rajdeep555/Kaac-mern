@@ -92,15 +92,30 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
 const getTotalRevenueExpenditure = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
+    // Lookup the Revenue type ID as string
+    const revenueType = await prisma.expenditureType.findFirst({
+        where: { name: { equals: "Revenue", mode: "insensitive" } },
+        select: { id: true },
+    });
+
+    console.log("👉 revenueType:", revenueType);
+
+    if (!revenueType) {
+        console.warn("⚠️ No ExpenditureType found with name 'Revenue'");
+        return 0;
+    }
+
     const rows = await prisma.expenditure.findMany({
         where: {
             isActive: true,
-            expenditureType: "REVENUE",
+            expenditureType: String(revenueType.id), // ← stored as string "2"
             ...(!isConsolidated ? { sector } : {}),
             ...(dateRange ? { voucherDate: dateRange } : {}),
         },
         select: { grossAmount: true },
     });
+
+    console.log(`👉 getTotalRevenueExpenditure | sector: ${sector} | rows found: ${rows.length}`);
 
     return rows.reduce((sum, r) => sum + safeNum(r.grossAmount), 0);
 };

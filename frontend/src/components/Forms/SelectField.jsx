@@ -137,14 +137,14 @@ export const SearchableSelect = ({
   placeholder = "Select",
 }) => {
   const [open, setOpen] = useState(false);
-
   const [search, setSearch] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const containerRef = useRef(null);
-
   const inputRef = useRef(null);
-
   const portalRef = useRef(null);
+  const listRef = useRef(null);
+  const itemRefs = useRef([]);
 
   const selectedLabel =
     options.find((o) => String(o.value) === String(value))?.label ?? "";
@@ -164,6 +164,27 @@ export const SearchableSelect = ({
     return normalize(o.label).includes(q) || normalize(o.value).includes(q);
   });
 
+  // Reset highlight when filtered list changes
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [search]);
+
+  // Auto-highlight if only one result
+  useEffect(() => {
+    if (filtered.length === 1) {
+      setHighlightedIndex(0);
+    }
+  }, [filtered.length]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
+      itemRefs.current[highlightedIndex].scrollIntoView({
+        block: "nearest",
+      });
+    }
+  }, [highlightedIndex]);
+
   // Outside click
   useEffect(() => {
     const handler = (e) => {
@@ -172,8 +193,8 @@ export const SearchableSelect = ({
       if (portalRef.current?.contains(e.target)) return;
 
       setOpen(false);
-
       setSearch("");
+      setHighlightedIndex(-1);
     };
 
     if (open) {
@@ -183,7 +204,7 @@ export const SearchableSelect = ({
     }
   }, [open]);
 
-  // Focus input
+  // Focus input on open
   useEffect(() => {
     if (open && inputRef.current) {
       const timeout = setTimeout(() => {
@@ -196,18 +217,58 @@ export const SearchableSelect = ({
 
   const handleSelect = (val) => {
     onChange(val);
-
     setOpen(false);
-
-    setTimeout(() => setSearch(""), 0);
+    setTimeout(() => {
+      setSearch("");
+      setHighlightedIndex(-1);
+    }, 0);
   };
 
   const handleClear = (e) => {
     e.stopPropagation();
-
     onChange("");
-
     setSearch("");
+    setHighlightedIndex(-1);
+  };
+
+  // ── Keyboard handler on the search input ──
+  const handleKeyDown = (e) => {
+    if (!open) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < filtered.length - 1 ? prev + 1 : 0,
+        );
+        break;
+
+      case "ArrowUp":
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev > 0 ? prev - 1 : filtered.length - 1,
+        );
+        break;
+
+      case "Enter":
+        e.preventDefault();
+        if (highlightedIndex >= 0 && filtered[highlightedIndex]) {
+          handleSelect(filtered[highlightedIndex].value);
+        } else if (filtered.length === 1) {
+          handleSelect(filtered[0].value);
+        }
+        break;
+
+      case "Escape":
+        e.preventDefault();
+        setOpen(false);
+        setSearch("");
+        setHighlightedIndex(-1);
+        break;
+
+      default:
+        break;
+    }
   };
 
   return (
@@ -281,6 +342,7 @@ export const SearchableSelect = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Search..."
               className="
                 w-full border border-zinc-300
@@ -291,26 +353,27 @@ export const SearchableSelect = ({
             />
           </div>
 
-          <ul className="max-h-52 overflow-y-auto">
+          <ul ref={listRef} className="max-h-52 overflow-y-auto">
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-sm text-zinc-400">No results</li>
             ) : (
-              filtered.map((opt) => (
+              filtered.map((opt, index) => (
                 <li
                   key={opt.value}
+                  ref={(el) => (itemRefs.current[index] = el)}
                   onMouseDown={(e) => {
                     e.preventDefault();
-
                     handleSelect(opt.value);
                   }}
+                  onMouseEnter={() => setHighlightedIndex(index)}
                   className={`
                     px-3 py-2 text-sm cursor-pointer
-                    hover:bg-blue-600 hover:text-white
-
                     ${
                       String(opt.value) === String(value)
                         ? "bg-blue-600 text-white"
-                        : ""
+                        : index === highlightedIndex
+                          ? "bg-blue-100 text-zinc-900"
+                          : "hover:bg-blue-50"
                     }
                   `}>
                   {opt.label}
