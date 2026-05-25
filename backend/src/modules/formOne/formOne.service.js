@@ -59,25 +59,34 @@ function createEmptyRow() {
 
 // Joins only truthy, non-blank parts with "-"
 const buildClassification = (...parts) =>
-    parts.filter((p) => p != null && String(p).trim() !== "" && String(p).trim() !== "0")
+    parts
+        .filter(
+            (p) =>
+                p != null &&
+                String(p).trim() !== "" &&
+                String(p).trim() !== "0"
+        )
         .join("-") || null;
-
 
 export const getCashbookRowsByFy = async (year, sector) => {
     try {
         const { from, to } = getFyRange(year);
 
+        const isStateSector = sector === "STATE";
+        const isConsolidated = sector === "CONSOLIDATED";
+
         logger.info(`Cashbook fetch started`, {
-            year, sector,
+            year,
+            sector,
             from: from.toISOString().slice(0, 10),
             to: to.toISOString().slice(0, 10),
         });
 
-        const sectorFilter =
-            sector && sector !== "CONSOLIDATED" ? { sector } : {};
-        const challanSectorFilter =
-            sector && sector !== "CONSOLIDATED" ? { challanType: sector } : {};
-        const isStateSector = sector === "STATE";
+        // For models that have a sector field, filter by it unless CONSOLIDATED
+        const sectorFilter = !isConsolidated ? { sector } : {};
+
+        // Challan uses challanType instead of sector
+        const challanSectorFilter = !isConsolidated ? { challanType: sector } : {};
 
         const [
             cashReceipts,
@@ -87,10 +96,18 @@ export const getCashbookRowsByFy = async (year, sector) => {
             expenditures,
             stateChallans,
         ] = await Promise.all([
+            // ── CashReceipt: has sector field (default COUNCIL) ─────
+            // Filter by sector unless CONSOLIDATED
             prisma.cashReceipt.findMany({
-                where: { date: { gte: from, lte: to }, isActive: true },
+                where: {
+                    date: { gte: from, lte: to },
+                    isActive: true,
+                    ...(isConsolidated ? {} : { sector }),
+                },
                 orderBy: { date: "asc" },
             }),
+
+            // ── Challan: has challanType as sector field ─────────────
             prisma.challan.findMany({
                 where: {
                     challanDate: { gte: from, lte: to },
@@ -99,6 +116,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { challanDate: "asc" },
             }),
+
+            // ── ChallanFromBill: has sector field ────────────────────
             prisma.challanFromBill.findMany({
                 where: {
                     voucharDate: { gte: from, lte: to },
@@ -108,6 +127,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { voucharDate: "asc" },
             }),
+
+            // ── ChallanTwo: has sector field ─────────────────────────
             prisma.challanTwo.findMany({
                 where: {
                     kaacChallanDate: { gte: from, lte: to },
@@ -116,6 +137,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { kaacChallanDate: "asc" },
             }),
+
+            // ── Expenditure: has sector field ────────────────────────
             prisma.expenditure.findMany({
                 where: {
                     voucherDate: { gte: from, lte: to },
@@ -124,7 +147,9 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 },
                 orderBy: { voucherDate: "asc" },
             }),
-            isStateSector
+
+            // ── StateChallan: only for STATE or CONSOLIDATED ─────────
+            isStateSector || isConsolidated
                 ? prisma.stateChallan.findMany({
                     where: {
                         challanDate: { gte: from, lte: to },
@@ -162,7 +187,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 1: CashReceipt
-        // Classification: CashReceipt has NO head fields — always null
+        // Has sector field (default COUNCIL) — filtered correctly above
+        // Classification: always null (no head fields in schema)
         // ════════════════════════════════════════════════════════
         let c1Total = 0;
         cashReceipts.forEach((r) => {
@@ -178,9 +204,10 @@ export const getCashbookRowsByFy = async (year, sector) => {
                     : null,
             ].filter(Boolean);
             row.receiptParticulars = parts.join(" | ") || null;
-            row.receiptCashAmount = r.rupeesInCash ? parseFloat(r.rupeesInCash) : null;
+            row.receiptCashAmount = r.rupeesInCash
+                ? parseFloat(r.rupeesInCash)
+                : null;
             row.receiptPlaColumn = null;
-            // CashReceipt schema has no head fields — classification is null
             row.receiptClassification = null;
             c1Total += row.receiptCashAmount ?? 0;
             rows.push(row);
@@ -188,7 +215,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 2: Challan WITHOUT counterfoilNo
-        // Classification: majorHead - subMajorHead - minorHead - subHead - subSubHead - detailHead
+        // Classification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead
         // ════════════════════════════════════════════════════════
         let c2Total = 0;
         challansWithoutCounterfoil.forEach((c) => {
@@ -201,8 +228,9 @@ export const getCashbookRowsByFy = async (year, sector) => {
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = c.remarks ?? null;
             row.receiptCashAmount = null;
-            row.receiptPlaColumn = c.amount ? parseFloat(c.amount.toString()) : null;
-            // Challan schema: majorHead, subMajorHead, minorHead, subHead, subSubHead, detailHead
+            row.receiptPlaColumn = c.amount
+                ? parseFloat(c.amount.toString())
+                : null;
             row.receiptClassification = buildClassification(
                 c.majorHead,
                 c.subMajorHead,
@@ -217,7 +245,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3A: ChallanFromBill (PLA types)
-        // Classification: majorHead - subMajor - minorHead  (schema only goes to minorHead)
+        // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
         let c3aTotal = 0;
         cfbPlaRows.forEach((cfb) => {
@@ -233,7 +261,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             row.receiptPlaColumn = cfb.amount
                 ? parseFloat(cfb.amount.toString())
                 : null;
-            // challanFromBill schema: majorHead, subMajor, minorHead (no deeper heads)
             row.receiptClassification = buildClassification(
                 cfb.majorHead,
                 cfb.subMajor,
@@ -245,7 +272,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3B: ChallanFromBill (Cash types)
-        // Classification: majorHead - subMajor - minorHead
+        // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
         let c3bTotal = 0;
         cfbCashRows.forEach((cfb) => {
@@ -261,7 +288,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 ? parseFloat(cfb.amount.toString())
                 : null;
             row.receiptPlaColumn = null;
-            // challanFromBill schema: majorHead, subMajor, minorHead (no deeper heads)
             row.receiptClassification = buildClassification(
                 cfb.majorHead,
                 cfb.subMajor,
@@ -273,7 +299,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 4: Challan WITH counterfoilNo (DR + CR pair)
-        // DR Classification: majorHead - subMajorHead - minorHead - subHead - subSubHead - detailHead
+        // DR Classification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead
         // CR treasuryClassification: same full chain
         // ════════════════════════════════════════════════════════
         let c4DrTotal = 0;
@@ -323,8 +349,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 5: ChallanTwo
-        // Classification: majorHead - subMajor - minorHead  (schema has no deeper heads)
+        // DR SIDE — CONDITION 5: ChallanTwo (has sector field — filtered correctly)
+        // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
         let c5Total = 0;
         challanTwoRows.forEach((ct) => {
@@ -340,7 +366,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             row.receiptPlaColumn = ct.amount
                 ? parseFloat(ct.amount.toString())
                 : null;
-            // challanTwo schema: majorHead, subMajor, minorHead (no subHead/detailHead)
             row.receiptClassification = buildClassification(
                 ct.majorHead,
                 ct.subMajor,
@@ -351,8 +376,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 6: StateChallan (STATE sector only)
-        // Classification: majorHead - subMajorHead - minorHead - subHead - subSubHead - detailHead - subDetailHead
+        // DR SIDE — CONDITION 6: StateChallan (STATE or CONSOLIDATED only)
+        // Classification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead-subDetailHead
         // ════════════════════════════════════════════════════════
         let c6Total = 0;
         stateChallans.forEach((sc) => {
@@ -369,7 +394,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 sc.totalAmount != null
                     ? parseFloat((sc.totalAmount * 100000).toFixed(2))
                     : null;
-            // StateChallan schema has all 7 levels including subDetailHead
             row.receiptClassification = buildClassification(
                 sc.majorHead,
                 sc.subMajorHead,
@@ -384,8 +408,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // CR SIDE — CONDITION 2: Expenditure
-        // treasuryClassification: majorHead - subMajorHead - minorHead - subHead - subSubHead - detailHead - subDetailHead
+        // CR SIDE — CONDITION 2: Expenditure (has sector field — filtered correctly)
+        // treasuryClassification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead-subDetailHead
         // ════════════════════════════════════════════════════════
         let crETotal = 0;
         expenditures.forEach((e) => {
@@ -402,7 +426,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             row.plaColumnPayment = e.grossAmount
                 ? parseFloat(e.grossAmount.toString())
                 : null;
-            // Expenditure schema has all 7 levels including subDetailHead
             row.treasuryClassification = buildClassification(
                 e.majorHead,
                 e.subMajorHead,
@@ -418,7 +441,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 3: ChallanFromBill (Cash types)
-        // treasuryClassification: majorHead - subMajor - minorHead
+        // treasuryClassification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
         let crCfbTotal = 0;
         cfbCashRows.forEach((cfb) => {
@@ -435,7 +458,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 : null;
             row.chequeNo = cfb.chequeNo ?? null;
             row.plaColumnPayment = null;
-            // challanFromBill schema: majorHead, subMajor, minorHead
             row.treasuryClassification = buildClassification(
                 cfb.majorHead,
                 cfb.subMajor,
@@ -473,10 +495,22 @@ export const getCashbookRowsByFy = async (year, sector) => {
             totalRows: rows.length,
             drRows: drRows.length,
             crRows: crRows.length,
-            drCashTotal: drRows.reduce((s, r) => s + (r.receiptCashAmount ?? 0), 0),
-            drPlaTotal: drRows.reduce((s, r) => s + (r.receiptPlaColumn ?? 0), 0),
-            crCashTotal: crRows.reduce((s, r) => s + (r.disbursementCashAmount ?? 0), 0),
-            crPlaTotal: crRows.reduce((s, r) => s + (r.plaColumnPayment ?? 0), 0),
+            drCashTotal: drRows.reduce(
+                (s, r) => s + (r.receiptCashAmount ?? 0),
+                0
+            ),
+            drPlaTotal: drRows.reduce(
+                (s, r) => s + (r.receiptPlaColumn ?? 0),
+                0
+            ),
+            crCashTotal: crRows.reduce(
+                (s, r) => s + (r.disbursementCashAmount ?? 0),
+                0
+            ),
+            crPlaTotal: crRows.reduce(
+                (s, r) => s + (r.plaColumnPayment ?? 0),
+                0
+            ),
         });
 
         return rows;
@@ -489,7 +523,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
     }
 };
 
-
 export const saveCashbookSummary = async ({
     sector,
     month,
@@ -501,7 +534,9 @@ export const saveCashbookSummary = async ({
     disbursementTreasuryPla,
 }) => {
     try {
-        logger.info(`Saving cashbook summary for sector: ${sector}, year: ${year}`);
+        logger.info(
+            `Saving cashbook summary for sector: ${sector}, year: ${year}`
+        );
 
         await prisma.cashbookInformations.updateMany({
             where: { sector: sector ?? undefined, isActive: true },

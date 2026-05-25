@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+// useCashbook.js
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { getFormOne } from "../../api/formOne.api.js";
 
-const cache = new Map();
-const cacheExpiry = new Map();
-
+// Move cache inside the hook — no shared module-level state
 export function useCashbook({ year, sector }, options = {}) {
     const { enabled = true, staleTime = 5 * 60 * 1000 } = options;
 
@@ -11,49 +10,58 @@ export function useCashbook({ year, sector }, options = {}) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const cacheKey = useMemo(() => `${year}-${sector}`, [year, sector]);
+    // Per-instance cache via ref — not shared across hook instances
+    const cacheRef = useRef(new Map());
+    const cacheExpiryRef = useRef(new Map());
 
-    const getCachedData = useCallback(() => {
-        const cached = cache.get(cacheKey);
-        const expiry = cacheExpiry.get(cacheKey);
-        const isStale = !cached || Date.now() - (expiry ?? 0) > staleTime;
-        return { cached, isStale };
-    }, [cacheKey, staleTime]);
+    const cacheKey = `${year}-${sector}`;
 
     useEffect(() => {
-        if (!enabled || !year) {
+        if (!enabled || !year || !sector) {
             setData([]);
+            setLoading(false);
             return;
         }
 
-        const { cached, isStale } = getCachedData();
+        const cached = cacheRef.current.get(cacheKey);
+        const expiry = cacheExpiryRef.current.get(cacheKey) ?? 0;
+        const isStale = !cached || Date.now() - expiry > staleTime;
 
         if (cached && !isStale) {
             setData(cached);
             return;
         }
 
+        let cancelled = false;  // ← prevent stale closure race conditions
         setLoading(true);
         setError(null);
 
         getFormOne({ year, sector })
             .then((response) => {
+                if (cancelled) return;
                 const newData = response.data?.data ?? [];
-                cache.set(cacheKey, newData);
-                cacheExpiry.set(cacheKey, Date.now());
+                cacheRef.current.set(cacheKey, newData);
+                cacheExpiryRef.current.set(cacheKey, Date.now());
                 setData(newData);
             })
             .catch((err) => {
+                if (cancelled) return;
                 setError(err);
-                const { cached: fallback } = getCachedData();
+                const fallback = cacheRef.current.get(cacheKey);
                 if (fallback) setData(fallback);
             })
-            .finally(() => setLoading(false));
-    }, [year, sector, enabled, getCachedData, cacheKey]);
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+
+        return () => {
+            cancelled = true;  // ← cleanup on unmount or key change
+        };
+    }, [year, sector, enabled, cacheKey, staleTime]);
 
     const refetch = useCallback(() => {
-        cache.delete(cacheKey);
-        cacheExpiry.delete(cacheKey);
+        cacheRef.current.delete(cacheKey);
+        cacheExpiryRef.current.delete(cacheKey);
         setData([]);
     }, [cacheKey]);
 

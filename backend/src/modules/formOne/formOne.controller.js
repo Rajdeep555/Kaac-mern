@@ -3,7 +3,8 @@ import { getCashbookRowsByFy, saveCashbookSummary } from "./formOne.service.js";
 export const getCashbookByFy = async (req, res) => {
     try {
         const { year, sector } = req.query;
-
+        console.log("👉 req.query:", req.query); // ADD THIS
+        console.log("👉 sector:", sector);        // ADD THIS
         if (!year) {
             return res.status(400).json({
                 success: false,
