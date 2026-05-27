@@ -112,13 +112,29 @@ export const createExpenditure = async (data) => {
 };
 
 export const getExpenditureById = async (id) => {
-    return prisma.expenditure.findUnique({
+    const expenditure = await prisma.expenditure.findUnique({
         where: { id: Number(id) },
         include: {
             department: true,
             ddo: true,
         },
     });
+
+    if (!expenditure) return null;
+
+    const grant = expenditure.grantNo
+        ? await prisma.grants.findUnique({
+            where: { id: Number(expenditure.grantNo) },
+            select: { code: true, name: true },
+        })
+        : null;
+
+
+
+    return {
+        ...expenditure,
+        grant,
+    };
 };
 
 export const updateExpenditure = async (id, data) => {

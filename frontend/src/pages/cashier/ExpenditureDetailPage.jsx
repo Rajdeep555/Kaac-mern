@@ -63,7 +63,7 @@ const downloadCSV = (e) => {
     ["Voucher Date", fmtDate(e.voucherDate)],
     ["Requisition No", safe(e.requisitionNo)],
     ["Requisition Date", fmtDate(e.requisitionDate)],
-    ["Grant No", safe(e.grantNo)],
+    ["Grant No", safe(e.grant?.code)],
     ["Sector", safe(e.sector)],
     ["Financial Year", safe(e.financialYear)],
     ["Expenditure Type", safe(e.expenditureType)],
@@ -214,7 +214,7 @@ const printDetail = (e) => {
           row("Voucher Date", fmtDate(e.voucherDate)),
           row("Requisition No", e.requisitionNo),
           row("Requisition Date", fmtDate(e.requisitionDate)),
-          row("Grant No", e.grantNo),
+          row("Grant No", e.grant?.code),
           row("Sector", e.sector),
           row("Financial Year", e.financialYear),
           row("Expenditure Type", e.expenditureType),
@@ -294,6 +294,7 @@ const ExpenditureDetailPage = () => {
         setLoading(true);
         const res = await getExpenditureById(id);
         setExpenditure(res.data.data);
+        console.log("Expenditure detail:", res.data.data);
       } catch (err) {
         console.error("Error detail:", err.response?.data);
         setError(
@@ -415,7 +416,7 @@ const ExpenditureDetailPage = () => {
           label="Requisition Date"
           value={fmtDate(e.requisitionDate)}
         />
-        <DetailRow label="Grant No" value={e.grantNo} />
+        <DetailRow label="Grant No" value={e.grant?.code} />
         <DetailRow label="Sector" value={e.sector} />
         <DetailRow label="Financial Year" value={e.financialYear} />
         <DetailRow label="Expenditure Type" value={e.expenditureType} />
