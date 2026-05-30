@@ -3,6 +3,7 @@ import InputField from "../Forms/InputField";
 import SelectField from "../Forms/SelectField";
 import DateField from "../Forms/DateField";
 import { getFinancialYears } from "../../hooks/useFinancialYear";
+import { useState } from "react";
 
 const financialYearOptions = getFinancialYears(2023).map((fy) => ({
   label: fy,
@@ -27,36 +28,71 @@ const monthOptions = [
 
 const BasicDetailsSection = ({
   register,
-  control, // ✅ ADD control parameter
+  control,
   departments,
   ddos,
   grants,
   isExpenditureLoading,
   watch,
+  setValue, // ✅ ADD setValue from react-hook-form
 }) => {
   const financialYear = watch("financialYear");
   const selectedMonth = watch("month");
+  const [dateError, setDateError] = useState("");
 
   let minDate = "";
   let maxDate = "";
+  let expectedYear = "";
+  let expectedMonthName = "";
 
   if (financialYear && selectedMonth) {
     const [startYear, endYear] = financialYear.split("-");
 
-    // Jan-Mar belongs to endYear
     const year =
       Number(selectedMonth) >= 1 && Number(selectedMonth) <= 3
         ? endYear
         : startYear;
+
+    expectedYear = year;
+    expectedMonthName =
+      monthOptions.find((m) => m.value === selectedMonth)?.label || "";
 
     const lastDay = new Date(year, selectedMonth, 0).getDate();
 
     minDate = `${year}-${selectedMonth}-01`;
     maxDate = `${year}-${selectedMonth}-${lastDay}`;
   }
+
+  // ✅ Validate typed date against allowed range
+  const handleDateChange = (e) => {
+    const typed = e.target.value; // "YYYY-MM-DD"
+    if (!typed) {
+      setDateError("");
+      return;
+    }
+
+    if (!minDate || !maxDate) {
+      setDateError("Please select a Financial Year and Month first.");
+      setValue("voucherDate", "");
+      return;
+    }
+
+    const typedDate = new Date(typed);
+    const min = new Date(minDate);
+    const max = new Date(maxDate);
+
+    if (typedDate < min || typedDate > max) {
+      setDateError(
+        `Invalid date. Please enter a date within ${expectedMonthName} ${expectedYear} (${minDate} to ${maxDate}).`,
+      );
+      setValue("voucherDate", ""); // clear the invalid value
+    } else {
+      setDateError(""); // valid
+    }
+  };
+
   return (
     <>
-      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Select Sector"
         name="sector"
@@ -77,7 +113,6 @@ const BasicDetailsSection = ({
         placeholder={isExpenditureLoading ? "fetching..." : ""}
       />
 
-      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Financial Year"
         name="financialYear"
@@ -88,7 +123,6 @@ const BasicDetailsSection = ({
         ]}
       />
 
-      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Month"
         name="month"
@@ -96,13 +130,28 @@ const BasicDetailsSection = ({
         options={monthOptions}
       />
 
-      <DateField
-        label="Date"
-        name="voucherDate"
-        register={register}
-        min={minDate}
-        max={maxDate}
-      />
+      {/* ✅ Wrap DateField to intercept onChange */}
+      <div>
+        <DateField
+          label="Date"
+          name="voucherDate"
+          register={register}
+          min={minDate}
+          max={maxDate}
+          onChange={handleDateChange} // pass to DateField if it forwards ...rest to <input>
+          // OR use the approach below if DateField doesn't forward onChange
+        />
+        {dateError && (
+          <p
+            style={{
+              color: "red",
+              fontSize: "12px",
+              marginTop: "4px",
+            }}>
+            ⚠️ {dateError}
+          </p>
+        )}
+      </div>
 
       <InputField
         label="Requisition No"
@@ -114,11 +163,8 @@ const BasicDetailsSection = ({
         label="Requisition Date"
         name="requisitionDate"
         register={register}
-        // min={minDate}
-        // max={maxDate}
       />
 
-      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Grant Name & No"
         name="grantNo"
@@ -126,7 +172,6 @@ const BasicDetailsSection = ({
         options={[{ label: "Select Grant", value: "" }, ...grants]}
       />
 
-      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Department Name & Code"
         name="department"
@@ -134,7 +179,6 @@ const BasicDetailsSection = ({
         options={[{ label: "Select Department", value: "" }, ...departments]}
       />
 
-      {/* ✅ Changed: Use control instead of register */}
       <SelectField
         label="Select DDO"
         name="ddo"
