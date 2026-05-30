@@ -12,7 +12,6 @@ import { Controller } from "react-hook-form";
 const parseLabel = (label = "") => {
   // Format: "Something (CODE)"
   const parenMatch = label.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
-
   if (parenMatch) {
     return {
       code: parenMatch[2].trim(),
@@ -22,7 +21,6 @@ const parseLabel = (label = "") => {
 
   // Format: "2026-2027"
   const financialYearMatch = label.match(/^(\d{4})-(\d{4})$/);
-
   if (financialYearMatch) {
     return {
       code: financialYearMatch[1],
@@ -33,7 +31,6 @@ const parseLabel = (label = "") => {
 
   // Format: "01 - Taxation"
   const dashMatch = label.match(/^(.+?)\s*-\s*(.+)$/);
-
   if (dashMatch) {
     return {
       code: dashMatch[1].trim(),
@@ -53,7 +50,6 @@ const parseLabel = (label = "") => {
 const ReadonlyField = ({ label, value }) => (
   <div className="flex flex-col gap-1">
     <label className="text-xs font-medium text-zinc-500">{label}</label>
-
     <input
       type="text"
       readOnly
@@ -81,13 +77,9 @@ const DropdownPortal = ({ anchorRef, open, children }) => {
 
     const updatePosition = () => {
       const rect = anchorRef.current.getBoundingClientRect();
-
       const viewportHeight = window.innerHeight;
-
       const dropdownHeight = 260;
-
       const spaceBelow = viewportHeight - rect.bottom;
-
       const openUpward =
         spaceBelow < dropdownHeight && rect.top > dropdownHeight;
 
@@ -96,33 +88,48 @@ const DropdownPortal = ({ anchorRef, open, children }) => {
         left: rect.left,
         width: rect.width,
         zIndex: 9999,
-
         ...(openUpward
-          ? {
-              bottom: viewportHeight - rect.top + 4,
-            }
-          : {
-              top: rect.bottom + 4,
-            }),
+          ? { bottom: viewportHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
       });
     };
 
     updatePosition();
-
     window.addEventListener("scroll", updatePosition, true);
-
     window.addEventListener("resize", updatePosition);
 
     return () => {
       window.removeEventListener("scroll", updatePosition, true);
-
       window.removeEventListener("resize", updatePosition);
     };
   }, [open, anchorRef]);
 
   if (!open) return null;
-
   return createPortal(<div style={style}>{children}</div>, document.body);
+};
+
+// ─────────────────────────────────────────────────────────────
+// Helper: get all focusable elements scoped to the nearest <form>
+// ─────────────────────────────────────────────────────────────
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "input:not([disabled]):not([tabindex='-1'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+const getFormFocusable = (triggerEl) => {
+  // Scope to closest <form> so sidebar links are excluded
+  const form = triggerEl?.closest("form");
+  const root = form ?? document;
+
+  return Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+    (el) =>
+      !el.closest('[aria-hidden="true"]') &&
+      // exclude readonly inputs (split-code / split-name fields)
+      !(el.tagName === "INPUT" && el.readOnly),
+  );
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -149,7 +156,6 @@ export const SearchableSelect = ({
   const selectedLabel =
     options.find((o) => String(o.value) === String(value))?.label ?? "";
 
-  // Better reusable search
   const normalize = (str) =>
     str
       ?.toString()
@@ -158,9 +164,7 @@ export const SearchableSelect = ({
 
   const filtered = options.filter((o) => {
     const q = normalize(search);
-
     if (!q) return true;
-
     return normalize(o.label).includes(q) || normalize(o.value).includes(q);
   });
 
@@ -171,27 +175,21 @@ export const SearchableSelect = ({
 
   // Auto-highlight if only one result
   useEffect(() => {
-    if (filtered.length === 1) {
-      setHighlightedIndex(0);
-    }
+    if (filtered.length === 1) setHighlightedIndex(0);
   }, [filtered.length]);
 
   // Scroll highlighted item into view
   useEffect(() => {
     if (highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
-      itemRefs.current[highlightedIndex].scrollIntoView({
-        block: "nearest",
-      });
+      itemRefs.current[highlightedIndex].scrollIntoView({ block: "nearest" });
     }
   }, [highlightedIndex]);
 
-  // Outside click
+  // Outside click closes dropdown
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current?.contains(e.target)) return;
-
       if (portalRef.current?.contains(e.target)) return;
-
       setOpen(false);
       setSearch("");
       setHighlightedIndex(-1);
@@ -199,18 +197,16 @@ export const SearchableSelect = ({
 
     if (open) {
       document.addEventListener("mousedown", handler);
-
       return () => document.removeEventListener("mousedown", handler);
     }
   }, [open]);
 
-  // Focus input on open
+  // Focus search input when dropdown opens
   useEffect(() => {
     if (open && inputRef.current) {
       const timeout = setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
-
       return () => clearTimeout(timeout);
     }
   }, [open]);
@@ -231,7 +227,67 @@ export const SearchableSelect = ({
     setHighlightedIndex(-1);
   };
 
-  // ── Keyboard handler on the search input ──
+  // ── Focus the next/prev focusable element inside the form ──
+  const moveFocusInForm = (shiftKey) => {
+    const triggerEl = containerRef.current?.querySelector("button");
+    const focusable = getFormFocusable(triggerEl);
+    const currentIndex = focusable.indexOf(triggerEl);
+
+    const nextIndex = shiftKey ? currentIndex - 1 : currentIndex + 1;
+    const nextEl = focusable[nextIndex];
+
+    if (nextEl) {
+      nextEl.focus();
+      return true; // handled
+    }
+    return false; // let browser handle (end/start of form)
+  };
+
+  // ── Keyboard handler on the TRIGGER button ──
+  const handleTriggerKeyDown = (e) => {
+    if (disabled) return;
+
+    switch (e.key) {
+      case " ":
+      case "Enter":
+        e.preventDefault();
+        setOpen((prev) => !prev);
+        break;
+
+      case "ArrowDown":
+        e.preventDefault();
+        setOpen(true);
+        setHighlightedIndex(filtered.length > 0 ? 0 : -1);
+        break;
+
+      case "ArrowUp":
+        e.preventDefault();
+        setOpen(true);
+        setHighlightedIndex(filtered.length > 0 ? filtered.length - 1 : -1);
+        break;
+
+      case "Tab": {
+        // If dropdown is open, close it first
+        if (open) {
+          e.preventDefault();
+          setOpen(false);
+          setSearch("");
+          setHighlightedIndex(-1);
+          return;
+        }
+
+        // Move focus within the form, bypassing sidebar
+        const moved = moveFocusInForm(e.shiftKey);
+        if (moved) e.preventDefault();
+        break;
+      }
+
+      default:
+        break;
+    }
+  };
+
+  // ── Keyboard handler on the search INPUT ──
   const handleKeyDown = (e) => {
     if (!open) return;
 
@@ -264,7 +320,23 @@ export const SearchableSelect = ({
         setOpen(false);
         setSearch("");
         setHighlightedIndex(-1);
+        // Return focus to trigger button
+        containerRef.current?.querySelector("button")?.focus();
         break;
+
+      case "Tab": {
+        // Close dropdown, then move focus within the form
+        e.preventDefault();
+        setOpen(false);
+        setSearch("");
+        setHighlightedIndex(-1);
+
+        // Small delay so dropdown close is processed before moving focus
+        setTimeout(() => {
+          moveFocusInForm(e.shiftKey);
+        }, 0);
+        break;
+      }
 
       default:
         break;
@@ -278,6 +350,7 @@ export const SearchableSelect = ({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((prev) => !prev)}
+        onKeyDown={handleTriggerKeyDown}
         className="
           border border-zinc-400 rounded
           outline-none
@@ -287,9 +360,7 @@ export const SearchableSelect = ({
           bg-white
         ">
         <span
-          className={`truncate text-sm ${
-            !selectedLabel ? "text-zinc-400" : ""
-          }`}>
+          className={`truncate text-sm ${!selectedLabel ? "text-zinc-400" : ""}`}>
           {selectedLabel || placeholder}
         </span>
 
@@ -299,12 +370,7 @@ export const SearchableSelect = ({
               role="button"
               tabIndex={0}
               onClick={handleClear}
-              className="
-                text-zinc-400
-                hover:text-red-500
-                transition-colors
-                text-xs
-              ">
+              className="text-zinc-400 hover:text-red-500 transition-colors text-xs">
               ✕
             </span>
           )}
@@ -332,10 +398,7 @@ export const SearchableSelect = ({
       <DropdownPortal anchorRef={containerRef} open={open}>
         <div
           ref={portalRef}
-          className="
-            bg-white border border-zinc-300
-            rounded shadow-xl
-          ">
+          className="bg-white border border-zinc-300 rounded shadow-xl">
           <div className="p-2 border-b border-zinc-200">
             <input
               ref={inputRef}
@@ -410,13 +473,11 @@ const SelectField = ({
         {isFinancialYear ? (
           <>
             <ReadonlyField label="Financial Year Start" value={splitCode} />
-
             <ReadonlyField label="Financial Year End" value={splitName} />
           </>
         ) : (
           <>
             <ReadonlyField label={`${label} Code`} value={splitCode} />
-
             <ReadonlyField label={`${label} Name`} value={splitName} />
           </>
         )}
@@ -434,14 +495,12 @@ const SelectField = ({
           const selectedLabel =
             options.find((o) => String(o.value) === String(field.value))
               ?.label ?? "";
-
           const { code: splitCode, name: splitName } =
             parseLabel(selectedLabel);
 
           return (
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium">{label}</label>
-
               <SearchableSelect
                 name={name}
                 value={field.value ?? ""}
@@ -449,7 +508,6 @@ const SelectField = ({
                 options={options}
                 disabled={disabled}
               />
-
               {field.value &&
                 renderSplitFields(selectedLabel, splitCode, splitName)}
             </div>
@@ -462,28 +520,18 @@ const SelectField = ({
   // Controlled Mode
   const selectedLabel =
     options.find((o) => String(o.value) === String(value))?.label ?? "";
-
   const { code: splitCode, name: splitName } = parseLabel(selectedLabel);
 
   return (
     <div className="flex flex-col gap-1">
       <label className="text-sm font-medium">{label}</label>
-
       <SearchableSelect
         name={name}
         value={value ?? ""}
-        onChange={(val) =>
-          onChange({
-            target: {
-              name,
-              value: val,
-            },
-          })
-        }
+        onChange={(val) => onChange({ target: { name, value: val } })}
         options={options}
         disabled={disabled}
       />
-
       {value && renderSplitFields(selectedLabel, splitCode, splitName)}
     </div>
   );
