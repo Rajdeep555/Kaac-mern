@@ -23,6 +23,7 @@ const DataTable = ({
   actionSlot,
   downloadFileName = "table",
   printTitle = "Report",
+  emptyMessage,
 }) => {
   const {
     search,
@@ -55,7 +56,7 @@ const DataTable = ({
 
   const csvColumns = useMemo(
     () => (columns || []).filter((c) => c?.key),
-    [columns]
+    [columns],
   );
 
   const handleDownloadThisPage = () => {
@@ -177,7 +178,7 @@ const DataTable = ({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="text-center py-4">
-                  No data found
+                  {emptyMessage || "No data found"}
                 </td>
               </tr>
             ) : (

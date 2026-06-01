@@ -3,10 +3,45 @@ import logger from "../../utils/logger.js";
 
 export const createExpenditure = async (data) => {
     return prisma.$transaction(async (tx) => {
-        // 1) Create expenditure first
+
+        const { sector } = data;
+
+        if (!sector || !["COUNCIL", "STATE"].includes(sector)) {
+            throw new Error("Invalid sector");
+        }
+
+        const now = new Date();
+        const fySuffix = now.getMonth() >= 3
+            ? String(now.getFullYear() + 1).slice(-2)
+            : String(now.getFullYear()).slice(-2);
+
+        const prefixMap = { COUNCIL: "KAAC", STATE: "STATE" };
+        const voucherPrefix = `${prefixMap[sector]}-${fySuffix}-`;
+
+        const lastVoucher = await tx.expenditure.findFirst({
+            where: {
+                sector,
+                voucherNo: { startsWith: voucherPrefix },
+            },
+            orderBy: { id: "desc" },
+            select: { voucherNo: true },
+        });
+
+        let nextSerial = 1;
+        if (lastVoucher?.voucherNo) {
+            const parts = lastVoucher.voucherNo.split("-");
+            nextSerial = parseInt(parts[parts.length - 1]) + 1;
+        }
+
+        const generatedVoucherNo = `${voucherPrefix}${String(nextSerial).padStart(4, "0")}`;
+
+        // ✅ Strip any voucherNo that came from the request body
+        const { voucherNo: _ignored, ...cleanData } = data;
+
         const expenditure = await tx.expenditure.create({
             data: {
-                ...data,
+                ...cleanData,
+                voucherNo: generatedVoucherNo,  // ✅ only the generated one reaches DB
                 voucherDate: data.voucherDate ? new Date(data.voucherDate) : null,
                 requisitionDate: data.requisitionDate ? new Date(data.requisitionDate) : null,
                 chequeIssueDate: data.chequeIssueDate ? new Date(data.chequeIssueDate) : null,
@@ -14,7 +49,6 @@ export const createExpenditure = async (data) => {
             },
         });
 
-        // 2) Deduction fields mapping: DB field => amountType display
         const deductionFields = {
             earnestMoneyDeduction: "Earnest Money",
             ptax: "Professional Tax",
@@ -41,7 +75,6 @@ export const createExpenditure = async (data) => {
             cpfRecovery: "CPF Advance",
         };
 
-        // 3) Head code mapping: amountType => {major, sub_major, minor}
         const headCodeMapping = {
             "Professional Tax": { major: "001", sub_major: "01", minor: "02" },
             "Building Loan": { major: "661", sub_major: "01", minor: "02" },
@@ -68,15 +101,11 @@ export const createExpenditure = async (data) => {
             "CPF Advance": { major: "662", sub_major: "01", minor: "05" },
         };
 
-        // 4) ✅ BATCH CREATE challanFromBill rows (fixes transaction timeout)
         const challanData = [];
-
         for (const [dbField, amountType] of Object.entries(deductionFields)) {
             const amount = data[dbField];
-
             if (amount && amount > 0) {
                 const headCodes = headCodeMapping[amountType] || { major: "", sub_major: "", minor: "" };
-
                 challanData.push({
                     challanNo: expenditure.voucherNo,
                     idFromExpenditure: expenditure.id,
@@ -100,11 +129,8 @@ export const createExpenditure = async (data) => {
             }
         }
 
-        // Single batch insert - 100x faster!
         if (challanData.length > 0) {
-            await tx.challanFromBill.createMany({
-                data: challanData,
-            });
+            await tx.challanFromBill.createMany({ data: challanData });
         }
 
         return expenditure;
@@ -235,5 +261,19 @@ export const getExpendituresForAdmin = async ({ sector, month, year }) => {
     return prisma.expenditure.findMany({
         where: whereClause,
         orderBy: { chequeIssueDate: "asc" },
+    });
+};
+
+export const deleteExpenditure = async (id) => {
+    return prisma.$transaction(async (tx) => {
+        // Delete related challans first (foreign key constraint)
+        await tx.challanFromBill.deleteMany({
+            where: { idFromExpenditure: Number(id) },
+        });
+
+        // Then delete the expenditure
+        return tx.expenditure.delete({
+            where: { id: Number(id) },
+        });
     });
 };

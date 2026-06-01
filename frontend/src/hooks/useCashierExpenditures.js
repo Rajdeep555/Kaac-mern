@@ -1,15 +1,14 @@
 import { useEffect, useState, useMemo } from "react";
 import { getCashierExpenditures } from "../api/expenditure.api.js";
 
-export const useCashierExpenditures = ({
-    sector,
-    treasuryStatus,
-} = {}) => {
+let sharedCache = null;
+
+export const useCashierExpenditures = ({ sector, treasuryStatus } = {}) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [refreshTick, setRefreshTick] = useState(0);
 
-    // ✅ Serialize sector array → stable string for useEffect comparison
     const sectorKey = useMemo(() => {
         if (!sector) return "";
         return Array.isArray(sector) ? sector.join(",") : sector;
@@ -17,13 +16,20 @@ export const useCashierExpenditures = ({
 
     useEffect(() => {
         const fetchExpenditures = async () => {
+            if (sharedCache) {
+                setData(sharedCache);
+                setLoading(false);
+                return;
+            }
             try {
                 setLoading(true);
                 const res = await getCashierExpenditures({
                     sector,
                     treasury: treasuryStatus,
                 });
-                setData(res.data.data || []);
+                const result = res.data.data || [];
+                sharedCache = result;
+                setData(result);
             } catch (err) {
                 console.error("Failed to fetch expenditures", err);
                 setError(err);
@@ -33,7 +39,12 @@ export const useCashierExpenditures = ({
         };
 
         fetchExpenditures();
-    }, [sectorKey, treasuryStatus]); // ✅ sectorKey is a stable string
+    }, [sectorKey, treasuryStatus, refreshTick]);
 
-    return { data, loading, error };
+    const invalidate = () => {
+        sharedCache = null;
+        setRefreshTick((t) => t + 1); // triggers useEffect to re-run
+    };
+
+    return { data, loading, error, invalidate };
 };

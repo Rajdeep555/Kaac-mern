@@ -33,6 +33,7 @@ import DeductionsSection from "../../components/Expenditure/DeductionsSection.js
 import { useGrants } from "../../hooks/useGrants.js";
 import TableButton from "../../components/ui/TableButton.jsx";
 import { useExpenditureTypes } from "../../hooks/useExpenditureTypes.js";
+import { useCashierExpenditures } from "../../hooks/useCashierExpenditures.js";
 
 // ✅ Indian FY helper (April–March)
 const getFinancialYearFromDate = (dateStr) => {
@@ -57,6 +58,7 @@ const Expenditure = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = Boolean(id);
+  const { invalidate } = useCashierExpenditures();
 
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isExpenditureLoading, setIsExpenditureLoading] = useState(false);
@@ -728,7 +730,7 @@ const Expenditure = () => {
     };
     return {
       sector: data.sector,
-      voucherNo: data.voucherNo,
+      // voucherNo: data.voucherNo,
       voucherDate: toISODate(data.voucherDate),
       requisitionNo: data.requisitionNo || null,
       requisitionDate: toISODate(data.requisitionDate),
@@ -809,23 +811,38 @@ const Expenditure = () => {
     setIsSubmitting(true);
     try {
       const payload = transformDataForBackend(data);
-      console.log("SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
+      // console.log("SENDING PAYLOAD:", JSON.stringify(payload, null, 2));
 
       if (isEditMode) {
         await updateExpenditure(id, payload);
+        setAlertModal({
+          isOpen: true,
+          title: "✅ Success",
+          message: "Expenditure has been updated successfully.",
+          isSuccess: true,
+        });
       } else {
-        await createExpenditure(payload);
+        const response = await createExpenditure(payload);
+        const assignedVoucherNo = response?.data?.data?.voucherNo ?? "";
+
+        invalidate();
         reset();
+        setAlertModal({
+          isOpen: true,
+          title: "✅ Success",
+          message: `Expenditure created successfully.\n\nVoucher No: ${assignedVoucherNo}`,
+          isSuccess: true,
+        });
       }
 
-      setAlertModal({
-        isOpen: true,
-        title: "✅ Success",
-        message: isEditMode
-          ? "Expenditure has been updated successfully."
-          : "New expenditure has been created successfully.",
-        isSuccess: true,
-      });
+      // setAlertModal({
+      //   isOpen: true,
+      //   title: "✅ Success",
+      //   message: isEditMode
+      //     ? "Expenditure has been updated successfully."
+      //     : "New expenditure has been created successfully.",
+      //   isSuccess: true,
+      // });
     } catch (error) {
       console.error("Failed to submit expenditure", error);
       if (error.response) {
@@ -860,6 +877,14 @@ const Expenditure = () => {
 
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">
+      {isEditMode && isExpenditureLoading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/70 backdrop-blur-sm">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="mt-3 text-sm text-zinc-500 font-medium">
+            Loading expenditure...
+          </p>
+        </div>
+      )}
       <div className="border-b border-zinc-400 leading-9">
         <div className="flex items-center justify-between">
           <Breadcrumbs
@@ -900,6 +925,7 @@ const Expenditure = () => {
           watch={watch}
           grants={grantOptions}
           isExpenditureLoading={isExpenditureLoading}
+          isEditMode={isEditMode}
         />
 
         <InputField

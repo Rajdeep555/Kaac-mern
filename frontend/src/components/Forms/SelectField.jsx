@@ -211,12 +211,33 @@ export const SearchableSelect = ({
     }
   }, [open]);
 
+  // ── Focus the next/prev focusable element inside the form ──
+  // Defined first so handleSelect can call it
+  const moveFocusInForm = (shiftKey) => {
+    const triggerEl = containerRef.current?.querySelector("button");
+    const focusable = getFormFocusable(triggerEl);
+    const currentIndex = focusable.indexOf(triggerEl);
+    if (currentIndex === -1) return false;
+
+    const nextIndex = shiftKey ? currentIndex - 1 : currentIndex + 1;
+    const nextEl = focusable[nextIndex];
+
+    if (nextEl) {
+      nextEl.focus();
+      return true;
+    }
+    return false;
+  };
+
   const handleSelect = (val) => {
     onChange(val);
     setOpen(false);
+    setSearch("");
+    setHighlightedIndex(-1);
+    const triggerEl = containerRef.current?.querySelector("button");
+    triggerEl?.focus();
     setTimeout(() => {
-      setSearch("");
-      setHighlightedIndex(-1);
+      moveFocusInForm(false);
     }, 0);
   };
 
@@ -225,22 +246,6 @@ export const SearchableSelect = ({
     onChange("");
     setSearch("");
     setHighlightedIndex(-1);
-  };
-
-  // ── Focus the next/prev focusable element inside the form ──
-  const moveFocusInForm = (shiftKey) => {
-    const triggerEl = containerRef.current?.querySelector("button");
-    const focusable = getFormFocusable(triggerEl);
-    const currentIndex = focusable.indexOf(triggerEl);
-
-    const nextIndex = shiftKey ? currentIndex - 1 : currentIndex + 1;
-    const nextEl = focusable[nextIndex];
-
-    if (nextEl) {
-      nextEl.focus();
-      return true; // handled
-    }
-    return false; // let browser handle (end/start of form)
   };
 
   // ── Keyboard handler on the TRIGGER button ──
@@ -368,7 +373,7 @@ export const SearchableSelect = ({
           {value && !disabled && (
             <span
               role="button"
-              tabIndex={0}
+              tabIndex={-1}
               onClick={handleClear}
               className="text-zinc-400 hover:text-red-500 transition-colors text-xs">
               ✕

@@ -5,7 +5,8 @@ import {
     getExpenditureForCashier,
     getVoucherNo,
     updateExpenditure,  // Add this import
-    getExpendituresForAdmin  // Add this import
+    getExpendituresForAdmin,  // Add this import
+    deleteExpenditure
 } from "./expenditure.service.js";
 import logger from "../../utils/logger.js";
 
@@ -21,14 +22,18 @@ const handleError = (res, error, message = "An error occurred") => {
 export const create = async (req, res) => {
     try {
         const cashierId = req.user.id;
-        const payload = createExpenditureSchema.parse(req.body);
+
+        // Strip voucherNo from body before parsing — backend generates it
+        const { voucherNo: _ignored, ...bodyWithoutVoucher } = req.body;
+        const payload = createExpenditureSchema.parse(bodyWithoutVoucher);
+
         const expenditure = await createExpenditure({ ...payload, cashierId });
 
         return res.status(201).json({
             success: true,
             message: "Expenditure Created Successfully",
             data: expenditure,
-        })
+        });
     } catch (error) {
         console.error("Create Expenditure Error:", error);
 
@@ -53,7 +58,8 @@ export const create = async (req, res) => {
             message: "Internal Server Error",
         });
     }
-}
+};
+
 
 export const getById = async (req, res) => {
     try {
@@ -183,5 +189,35 @@ export const getAdminExpenditures = async (req, res) => {
             message: error.message || 'Internal server error',
             error: process.env.NODE_ENV === 'development' ? error : undefined
         });
+    }
+};
+
+export const remove = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const existing = await getExpenditureById(id);
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                message: "Expenditure not found",
+            });
+        }
+
+        if (req.user.role === "CASHIER" && existing.cashierId !== req.user.id) {
+            return res.status(403).json({
+                success: false,
+                message: "Forbidden",
+            });
+        }
+
+        await deleteExpenditure(id);
+
+        res.status(200).json({
+            success: true,
+            message: "Expenditure deleted successfully",
+        });
+    } catch (error) {
+        handleError(res, error);
     }
 };

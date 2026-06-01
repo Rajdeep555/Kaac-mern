@@ -13,3 +13,7 @@ export const getAdminExpenditures = (params = {}) => {
     console.log('API Call params:', params); // Debug log
     return http.get("/expenditure/admin", { params });
 };
+
+export const deleteExpenditure = async (id) => {
+    return http.delete(`/expenditure/${id}`);
+};
