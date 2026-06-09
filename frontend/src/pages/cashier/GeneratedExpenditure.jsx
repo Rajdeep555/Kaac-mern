@@ -1,10 +1,11 @@
+// GeneratedExpenditure.jsx
 import React, { useState } from "react";
 import DataTable from "../../components/DataTable/DataTable";
 import TableButton from "../../components/ui/TableButton";
 import { useNavigate } from "react-router-dom";
 import { useCashierExpenditures } from "../../hooks/useCashierExpenditures.js";
 import { deleteExpenditure } from "../../api/expenditure.api.js";
-
+import { LuReceipt } from "react-icons/lu";
 // ✅ Truncate helper
 const Truncate = ({ text, max = 20 }) => {
   if (!text) return "-";
@@ -42,7 +43,7 @@ const GeneratedExpenditure = () => {
     setIsDeleting(true);
     try {
       await deleteExpenditure(confirmModal.id);
-      invalidate(); // ✅ clears cache and triggers refetch
+      invalidate();
       setConfirmModal({ isOpen: false, id: null, voucherNo: "" });
     } catch (error) {
       console.error("Failed to delete expenditure", error);
@@ -72,9 +73,7 @@ const GeneratedExpenditure = () => {
     {
       key: "ddo",
       label: "DDO",
-      render: (_, row) => (
-        <Truncate text={row.ddo?.ddoName} max={25} /> // ✅ truncate long DDO names
-      ),
+      render: (_, row) => <Truncate text={row.ddo?.ddoName} max={25} />,
     },
     {
       key: "treasuryVoucherNo",
@@ -120,10 +119,17 @@ const GeneratedExpenditure = () => {
         searchableKeys={["voucherNo", "treasuryVoucherNo", "majorHead"]}
         pageSize={10}
         actionSlot={
-          <TableButton
-            name="Add New Expenditure"
-            onClick={() => navigate("/expenditures")}
-          />
+          <div className="flex items-center gap-2">
+            <TableButton
+              name="Add New Expenditure"
+              onClick={() => navigate("/expenditures")}
+            />
+            <TableButton
+              name="Cheque Details"
+              icon={<LuReceipt />}
+              onClick={() => navigate("/cheque-details")}
+            />
+          </div>
         }
       />
 

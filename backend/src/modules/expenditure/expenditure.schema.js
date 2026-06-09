@@ -23,7 +23,7 @@ const intField = z
 export const createExpenditureSchema = z.object({
     /* ================= BASIC ================= */
     sector: z.enum(["COUNCIL", "STATE"]),
-    voucherNo: z.string().optional().default(""),
+    voucherNo: z.string().optional(),
     voucherDate: z.string().nullable().optional(),
 
     requisitionNo: z.string().nullable().optional(),

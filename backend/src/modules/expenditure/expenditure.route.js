@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, fetchNextVoucherNo, getAdminExpenditures, getById, getCashierExpenditures, remove, update } from "./expenditure.controller.js";
+import { create, fetchNextVoucherNo, getAdminExpenditures, getById, getCashierExpenditures, getChequeDetailsHandler, remove, update } from "./expenditure.controller.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import authorize from "../../middlewares/role.middleware.js";
 import { ROLES } from "../../constrants/roles.js";
@@ -13,6 +13,7 @@ router.post("/create", authMiddleware, authorize(ROLES.ADMIN, ROLES.CASHIER), cr
 router.get("/next", authMiddleware, authorize(ROLES.ADMIN, ROLES.CASHIER), fetchNextVoucherNo);
 router.get("/cashier", authMiddleware, authorize(ROLES.ADMIN, ROLES.CASHIER), getCashierExpenditures);
 router.get("/admin", authMiddleware, authorize(ROLES.ADMIN), getAdminExpenditures);
+router.get("/cheque-details", authMiddleware, authorize(ROLES.CASHIER, ROLES.ADMIN), getChequeDetailsHandler);
 
 // Generic /:id route LAST
 router.get("/:id", authMiddleware, authorize(ROLES.CASHIER, ROLES.ADMIN), getById);
@@ -20,6 +21,7 @@ router.get("/:id", authMiddleware, authorize(ROLES.CASHIER, ROLES.ADMIN), getByI
 // PUT routes
 router.put("/:id", authMiddleware, authorize(ROLES.CASHIER, ROLES.ADMIN), update);
 router.delete("/:id", authMiddleware, authorize(ROLES.CASHIER), remove);
+
 
 
 export default router;

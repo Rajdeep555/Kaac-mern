@@ -6,7 +6,8 @@ import {
     getVoucherNo,
     updateExpenditure,  // Add this import
     getExpendituresForAdmin,  // Add this import
-    deleteExpenditure
+    deleteExpenditure,
+    getChequeDetails
 } from "./expenditure.service.js";
 import logger from "../../utils/logger.js";
 
@@ -96,7 +97,10 @@ export const getById = async (req, res) => {
 export const update = async (req, res) => {
     try {
         const { id } = req.params;
-        const payload = createExpenditureSchema.parse(req.body);
+
+        // ✅ Strip voucherNo BEFORE parsing — same as create
+        const { voucherNo: _ignored, ...bodyWithoutVoucher } = req.body;
+        const payload = createExpenditureSchema.parse(bodyWithoutVoucher);
 
         const existing = await getExpenditureById(id);
         if (!existing) {
@@ -105,7 +109,6 @@ export const update = async (req, res) => {
                 message: "Expenditure not found",
             });
         }
-
         if (
             req.user.role === "CASHIER" &&
             existing.cashierId !== req.user.userId
@@ -115,9 +118,7 @@ export const update = async (req, res) => {
                 message: "Forbidden",
             });
         }
-
         const updated = await updateExpenditure(id, payload);
-
         res.status(200).json({
             success: true,
             message: "Expenditure Updated Successfully",
@@ -127,6 +128,7 @@ export const update = async (req, res) => {
         handleError(res, error);
     }
 };
+
 
 export const fetchNextVoucherNo = async (req, res) => {
     try {
@@ -219,5 +221,20 @@ export const remove = async (req, res) => {
         });
     } catch (error) {
         handleError(res, error);
+    }
+};
+
+export const getChequeDetailsHandler = async (req, res) => {
+    try {
+        const { sector, financialYear, month } = req.query;
+        const data = await getChequeDetails({
+            sector: sector || undefined,
+            financialYear: financialYear || undefined,
+            month: month || undefined,
+        });
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        console.error("getChequeDetails error:", error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };

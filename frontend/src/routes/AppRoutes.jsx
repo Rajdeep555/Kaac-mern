@@ -43,6 +43,7 @@ import ExpenditureDetailPage from "../pages/cashier/ExpenditureDetailPage";
 import ChallanHead from "../pages/home/ChallanHead";
 import PendingReceipts from "../pages/cashier/PendingReceipts";
 import CashReceiptTotal from "../pages/cashier/CashReceiptTotal";
+import ChequeDetails from "../pages/cashier/ChequeDetails";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -124,6 +125,10 @@ const AppRoutes = createBrowserRouter([
               {
                 path: "generated-expenditure",
                 element: <GeneratedExpenditure />,
+              },
+              {
+                path: "cheque-details",
+                element: <ChequeDetails />,
               },
               { path: "expenditures/new", element: <CreateExpenditure /> },
               { path: "expenditures/:id/edit", element: <EditExpenditure /> },

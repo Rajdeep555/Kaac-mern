@@ -165,25 +165,26 @@ export const getExpenditureById = async (id) => {
 
 export const updateExpenditure = async (id, data) => {
     return prisma.$transaction(async (tx) => {
-        // 1) Update expenditure
+        // ✅ Strip voucherNo so it is NEVER overwritten on update
+        const { voucherNo: _ignored, ...cleanData } = data;
+
         const updatedExpenditure = await tx.expenditure.update({
             where: { id: Number(id) },
             data: {
-                ...data,
-                voucherDate: data.voucherDate ? new Date(data.voucherDate) : null,
-                requisitionDate: data.requisitionDate ? new Date(data.requisitionDate) : null,
-                chequeIssueDate: data.chequeIssueDate ? new Date(data.chequeIssueDate) : null,
-                treasuryDate: data.treasuryDate ? new Date(data.treasuryDate) : null,
+                ...cleanData,  // ✅ cleanData, not data
+                voucherDate: cleanData.voucherDate ? new Date(cleanData.voucherDate) : null,
+                requisitionDate: cleanData.requisitionDate ? new Date(cleanData.requisitionDate) : null,
+                chequeIssueDate: cleanData.chequeIssueDate ? new Date(cleanData.chequeIssueDate) : null,
+                treasuryDate: cleanData.treasuryDate ? new Date(cleanData.treasuryDate) : null,
             },
         });
 
-        // 2) Update treasury fields in ALL related challanFromBill rows
-        if (data.treasuryVoucherNo !== undefined || data.treasuryDate !== undefined) {
+        if (cleanData.treasuryVoucherNo !== undefined || cleanData.treasuryDate !== undefined) {
             await tx.challanFromBill.updateMany({
                 where: { idFromExpenditure: Number(id) },
                 data: {
-                    treasuryChallanNo: data.treasuryVoucherNo || null,
-                    treasuryChallanDate: data.treasuryDate ? new Date(data.treasuryDate) : null,
+                    treasuryChallanNo: cleanData.treasuryVoucherNo || null,
+                    treasuryChallanDate: cleanData.treasuryDate ? new Date(cleanData.treasuryDate) : null,
                 },
             });
         }
@@ -191,7 +192,6 @@ export const updateExpenditure = async (id, data) => {
         return updatedExpenditure;
     });
 };
-
 export const getVoucherNo = async (type) => {
     if (!type || !["COUNCIL", "STATE"].includes(type)) {
         logger.error("Invalid type");
@@ -276,4 +276,64 @@ export const deleteExpenditure = async (id) => {
             where: { id: Number(id) },
         });
     });
+};
+
+export const getChequeDetails = async ({ sector, financialYear, month }) => {
+    const whereClause = {
+        chequeNo: { not: null },
+    };
+
+    if (sector) whereClause.sector = sector;
+
+    // Financial year = "2025-2026" → April 2025 to March 2026
+    if (financialYear) {
+        const [startYear, endYear] = financialYear.split("-").map(Number);
+        const fyStart = new Date(startYear, 3, 1);   // April 1 of start year
+        const fyEnd = new Date(endYear, 3, 1);   // April 1 of end year (exclusive)
+        whereClause.chequeIssueDate = { gte: fyStart, lt: fyEnd };
+    }
+
+    // If a specific month is also selected, narrow further
+    if (financialYear && month) {
+        const [startYear, endYear] = financialYear.split("-").map(Number);
+        const monthNum = Number(month);
+        // Months 1-3 belong to endYear, months 4-12 belong to startYear
+        const year = monthNum >= 1 && monthNum <= 3 ? endYear : startYear;
+        whereClause.chequeIssueDate = {
+            gte: new Date(year, monthNum - 1, 1),
+            lt: new Date(year, monthNum, 1),
+        };
+    }
+
+    const rows = await prisma.expenditure.findMany({
+        where: whereClause,
+        select: {
+            chequeNo: true,
+            chequeBookNo: true,
+            chequeIssueDate: true,
+            grossAmount: true,
+            sector: true,
+        },
+        orderBy: { chequeIssueDate: "asc" },
+    });
+
+    // Group by chequeNo, sum grossAmount
+    const grouped = {};
+    for (const row of rows) {
+        const key = row.chequeNo;
+        if (!grouped[key]) {
+            grouped[key] = {
+                chequeNo: row.chequeNo,
+                chequeBookNo: row.chequeBookNo || "-",
+                chequeIssueDate: row.chequeIssueDate,
+                sector: row.sector,
+                totalAmount: 0,
+                count: 0,
+            };
+        }
+        grouped[key].totalAmount += Number(row.grossAmount);
+        grouped[key].count += 1;
+    }
+
+    return Object.values(grouped);
 };
