@@ -76,6 +76,11 @@ const GeneratedExpenditure = () => {
       render: (_, row) => <Truncate text={row.ddo?.ddoName} max={25} />,
     },
     {
+      key: "chequeNo",
+      label: "Cheque No",
+      render: (value) => <Truncate text={value} max={15} />,
+    },
+    {
       key: "treasuryVoucherNo",
       label: "Treasury Voucher No",
       render: (value) => <Truncate text={value} max={15} />,
@@ -116,7 +121,13 @@ const GeneratedExpenditure = () => {
         columns={columns}
         loading={loading}
         emptyMessage={loading ? "Loading..." : "No data found"}
-        searchableKeys={["voucherNo", "treasuryVoucherNo", "majorHead"]}
+        searchableKeys={[
+          "voucherNo",
+          "treasuryVoucherNo",
+          "majorHead",
+          "chequeNo",
+          "grossAmount",
+        ]}
         pageSize={10}
         actionSlot={
           <div className="flex items-center gap-2">
