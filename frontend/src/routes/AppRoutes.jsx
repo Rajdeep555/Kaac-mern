@@ -44,6 +44,7 @@ import ChallanHead from "../pages/home/ChallanHead";
 import PendingReceipts from "../pages/cashier/PendingReceipts";
 import CashReceiptTotal from "../pages/cashier/CashReceiptTotal";
 import ChequeDetails from "../pages/cashier/ChequeDetails";
+import Grants from "../pages/home/Grants";
 // >>>>>>> origin/frontend-design
 
 const AppRoutes = createBrowserRouter([
@@ -87,6 +88,7 @@ const AppRoutes = createBrowserRouter([
               { path: "Expenditure", element: <ExpenditureType /> },
               { path: "objecthead", element: <Object_Head /> },
               { path: "plan-non-plan", element: <Plan_Non_Plan /> },
+              { path: "grants", element: <Grants /> },
               { path: "state", element: <State /> },
               { path: "council", element: <Council /> },
               { path: "challan-head", element: <ChallanHead /> },

@@ -66,6 +66,14 @@ export const menuItems = [
   },
   {
     id: nanoid(),
+    type: "link",
+    label: "Grants",
+    to: "/grants",
+    icon: <AiFillAlert />,
+    roles: ["ADMIN"],
+  },
+  {
+    id: nanoid(),
     type: "dropdown",
     label: "Head",
     key: "head",

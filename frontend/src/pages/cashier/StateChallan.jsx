@@ -14,6 +14,7 @@ import { useStateChallan } from "../../hooks/useStateChallan";
 import { useDdo } from "../../hooks/useDDO";
 import { useDivisions } from "../../hooks/useDivisions.js";
 import { showToast } from "../../utils/toast.js";
+import { useGrants } from "../../hooks/useGrants.js";
 
 // ─── Financial Year helpers ────────────────────────────────────────────────
 const generateFinancialYears = () => {
@@ -133,6 +134,7 @@ const StateChallan = () => {
   } = useStateChallan();
   const { ddos, loading: ddoLoading } = useDdo();
   const { divisionOptions, loading: divisionLoading } = useDivisions();
+  const { grantOptions, loading: grantLoading } = useGrants();
 
   const [pageLoading, setPageLoading] = useState(isEditMode);
   const [editLabels, setEditLabels] = useState(null);
@@ -153,6 +155,11 @@ const StateChallan = () => {
   const financialYearOptions = [
     { label: "Select Financial Year", value: "" },
     ...generateFinancialYears(),
+  ];
+
+  const grantSelectOptions = [
+    { label: grantLoading ? "Loading Grants..." : "Select Grant", value: "" },
+    ...grantOptions,
   ];
 
   const { min: dateMin, max: dateMax } = getMonthBounds(
@@ -777,11 +784,13 @@ const StateChallan = () => {
         <HeadLoadingBar />
 
         {/* ── Grant No ── */}
-        <InputField
+        <SelectField
           label="Grant No"
           name="grantNo"
-          register={register}
-          {...register("grantNo")}
+          control={control}
+          removable
+          disabled={grantLoading}
+          options={grantSelectOptions}
         />
 
         {/* ── Major Head ── */}

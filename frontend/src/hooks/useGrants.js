@@ -11,20 +11,14 @@ export const useGrants = () => {
         const fetchGrants = async () => {
             setLoading(true);
             setError(null);
-
             try {
                 const res = await getGrants();
-
-                const list = Array.isArray(res?.data?.grants)
-                    ? res.data.grants
-                    : [];
-
+                const list = Array.isArray(res?.data?.grants) ? res.data.grants : [];
                 setGrants(list);
-
                 setGrantOptions(
-                    list.map((grant) => ({
-                        label: `${grant.code || grant.id} - ${grant.name || grant.grantName}`,
-                        value: grant.id,
+                    list.map((g) => ({
+                        label: `${g.code} - ${g.name}`,
+                        value: g.id,
                     }))
                 );
             } catch (err) {
@@ -36,14 +30,8 @@ export const useGrants = () => {
                 setLoading(false);
             }
         };
-
         fetchGrants();
     }, []);
 
-    return {
-        grants,
-        grantOptions,
-        loading,
-        error,
-    };
+    return { grants, setGrants, grantOptions, loading, error };
 };
