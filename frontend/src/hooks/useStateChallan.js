@@ -15,10 +15,7 @@ export const useStateChallan = () => {
     const [error, setError] = useState(null);
 
     const fetchAll = async (force = false) => {
-        if (_cache && !force) {
-            setChallans(_cache);
-            return;
-        }
+        if (_cache && !force) { setChallans(_cache); return; }
         try {
             setLoading(true);
             setError(null);
@@ -46,14 +43,29 @@ export const useStateChallan = () => {
         }
     };
 
+    /**
+     * create() returns the full challan record from the API.
+     * The caller (StateChallan.jsx) reads .challanNo from the returned object
+     * to show the user their auto-assigned number.
+     *
+     * API response shape expected:
+     *   { success: true, challanNo: "STATE-2026-01", data: { ...challan } }
+     */
     const create = async (data) => {
         try {
             setLoading(true);
             setError(null);
             const res = await createStateChallan(data);
-            _cache = null;
-            setChallans((prev) => [res.data.data, ...prev]);
-            return res.data.data;
+
+            // res.data is the full axios response body:
+            // { success, challanNo, data: { ...record } }
+            const record = res.data.data;
+
+            _cache = null; // bust cache so list refetches
+            setChallans((prev) => [record, ...prev]);
+
+            // Return the full API body so the form can extract challanNo
+            return res.data;
         } catch (err) {
             setError(err?.response?.data?.message || "Failed to create challan");
             throw err;
@@ -67,39 +79,19 @@ export const useStateChallan = () => {
             setLoading(true);
             setError(null);
 
-            // ── FIX: Only send fields the schema knows — strip everything else ──
-            const payload = {
-                challanNo: data.challanNo,
-                challanDate: data.challanDate,
-                stateNo: data.stateNo,
-                from: data.from,
-                to: data.to,
-                subject: data.subject,
-                sector: data.sector,
-                ddo: data.ddo,
-                divisionCode: data.divisionCode,
-                majorHead: data.majorHead,
-                subMajorHead: data.subMajorHead,
-                minorHead: data.minorHead,
-                subHead: data.subHead,
-                subSubHead: data.subSubHead,
-                detailHead: data.detailHead,
-                subDetailHead: data.subDetailHead,
-                purpose: data.purpose,
-                remarks: data.remarks,
-                totalAmount: data.totalAmount,
-                amountInWords: data.amountInWords,
-                focNo: data.focNo,
-                sanctionLetterNo: data.sanctionLetterNo,
-                sanctionLetterDate: data.sanctionLetterDate,
-                treasuryCode: data.treasuryCode,
-                treasuryChallanNo: data.treasuryChallanNo,
-            };
+            // Strip challanNo — it must never be sent to the update endpoint
+            const {
+                challanNo: _ignored,
+                financialYear: _fy,   // UI-only field, not persisted separately
+                ...payload
+            } = data;
 
             const res = await updateStateChallan(parseInt(id, 10), payload);
             _cache = null;
             setChallans((prev) =>
-                prev.map((c) => (c.id === parseInt(id, 10) ? res.data.data : c))
+                prev.map((c) =>
+                    c.id === parseInt(id, 10) ? res.data.data : c
+                )
             );
             return res.data.data;
         } catch (err) {
@@ -116,7 +108,9 @@ export const useStateChallan = () => {
             setError(null);
             await deleteStateChallan(id);
             _cache = null;
-            setChallans((prev) => prev.filter((c) => c.id !== parseInt(id, 10)));
+            setChallans((prev) =>
+                prev.filter((c) => c.id !== parseInt(id, 10))
+            );
         } catch (err) {
             setError(err?.response?.data?.message || "Failed to delete challan");
             throw err;
@@ -125,18 +119,7 @@ export const useStateChallan = () => {
         }
     };
 
-    useEffect(() => {
-        fetchAll();
-    }, []);
+    useEffect(() => { fetchAll(); }, []);
 
-    return {
-        challans,
-        loading,
-        error,
-        fetchAll,
-        fetchById,
-        create,
-        update,
-        remove,
-    };
+    return { challans, loading, error, fetchAll, fetchById, create, update, remove };
 };

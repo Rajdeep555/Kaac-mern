@@ -417,6 +417,7 @@ model StateChallan {
   subject            String?
   ddo                String?
   divisionCode       String?
+  grantNo            String?
   majorHead          String?
   subMajorHead       String?
   minorHead          String?
@@ -433,6 +434,8 @@ model StateChallan {
   sanctionLetterDate DateTime?
   treasuryCode       String?
   treasuryChallanNo  String?
+  treasuryChallanDate DateTime?
+  isActive           Boolean   @default(true)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   sector             Sector

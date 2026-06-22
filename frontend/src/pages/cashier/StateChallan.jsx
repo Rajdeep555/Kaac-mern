@@ -15,6 +15,111 @@ import { useDdo } from "../../hooks/useDDO";
 import { useDivisions } from "../../hooks/useDivisions.js";
 import { showToast } from "../../utils/toast.js";
 
+// ─── Financial Year helpers ────────────────────────────────────────────────
+const generateFinancialYears = () => {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let y = currentYear - 3; y <= currentYear + 1; y++) {
+    years.push({ label: `${y}-${y + 1}`, value: `${y}-${y + 1}` });
+  }
+  return years;
+};
+
+const FY_MONTHS = [
+  { label: "April", value: "04" },
+  { label: "May", value: "05" },
+  { label: "June", value: "06" },
+  { label: "July", value: "07" },
+  { label: "August", value: "08" },
+  { label: "September", value: "09" },
+  { label: "October", value: "10" },
+  { label: "November", value: "11" },
+  { label: "December", value: "12" },
+  { label: "January", value: "01" },
+  { label: "February", value: "02" },
+  { label: "March", value: "03" },
+];
+
+const calendarYearForMonth = (fyString, monthValue) => {
+  if (!fyString) return new Date().getFullYear();
+  const startYear = parseInt(fyString.split("-")[0], 10);
+  return parseInt(monthValue, 10) >= 4 ? startYear : startYear + 1;
+};
+
+const getMonthBounds = (fyString, monthValue) => {
+  if (!fyString || !monthValue) return { min: "", max: "" };
+  const calYear = calendarYearForMonth(fyString, monthValue);
+  const mm = monthValue;
+  const lastDay = new Date(calYear, parseInt(mm, 10), 0).getDate();
+  return {
+    min: `${calYear}-${mm}-01`,
+    max: `${calYear}-${mm}-${String(lastDay).padStart(2, "0")}`,
+  };
+};
+
+const TREASURY_OPTIONS = [
+  { label: "Select Treasury", value: "" },
+  { label: "01-Diphu", value: "01-Diphu" },
+  { label: "02-Hamren", value: "02-Hamren" },
+  { label: "03-Bukajan", value: "03-Bukajan" },
+];
+
+// ─── Success Modal ─────────────────────────────────────────────────────────
+const ChallanSuccessModal = ({ challanNo, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 flex flex-col items-center gap-4">
+      <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+        <svg
+          className="w-8 h-8 text-green-600"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M5 13l4 4L19 7"
+          />
+        </svg>
+      </div>
+      <h2 className="text-xl font-semibold text-zinc-800">Challan Created!</h2>
+      <p className="text-sm text-zinc-500 text-center">
+        Your State Challan has been saved. The assigned Challan No. is:
+      </p>
+      <div className="bg-zinc-100 rounded-lg px-6 py-3 text-2xl font-bold text-zinc-800 tracking-widest select-all font-mono">
+        {challanNo}
+      </div>
+      <p className="text-xs text-zinc-400 text-center">
+        Please note this number for your records.
+      </p>
+      <button
+        onClick={onClose}
+        className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+        Done
+      </button>
+    </div>
+  </div>
+);
+
+// ─── Spinner ───────────────────────────────────────────────────────────────
+const Spinner = ({ size = 8 }) => (
+  <svg
+    className={`animate-spin h-${size} w-${size}`}
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24">
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+  </svg>
+);
+
 const StateChallan = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,13 +136,29 @@ const StateChallan = () => {
 
   const [pageLoading, setPageLoading] = useState(isEditMode);
   const [editLabels, setEditLabels] = useState(null);
+  const [existingChallanNo, setExistingChallanNo] = useState(""); // shown in edit mode
   const [headFieldsUnlocked, setHeadFieldsUnlocked] = useState(false);
   const majorHeadChangedByUser = useRef(false);
-
-  // Tracks whether selectedMajor effect is running for the first time
   const isFirstMajorRender = useRef(true);
 
   const [sector, setSector] = useState("");
+
+  // FY / Month
+  const [selectedFY, setSelectedFY] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+
+  // Success modal
+  const [generatedChallanNo, setGeneratedChallanNo] = useState(null);
+
+  const financialYearOptions = [
+    { label: "Select Financial Year", value: "" },
+    ...generateFinancialYears(),
+  ];
+
+  const { min: dateMin, max: dateMax } = getMonthBounds(
+    selectedFY,
+    selectedMonth,
+  );
 
   const {
     loading: headLoading,
@@ -62,11 +183,10 @@ const StateChallan = () => {
     watch,
     setValue,
     reset,
-    control, // ← required by new SelectField
-    formState: { isSubmitting },
+    control,
+    formState: { isSubmitting, errors },
   } = useForm({
     defaultValues: {
-      challanNo: "",
       challanDate: "",
       stateNo: "",
       from: "",
@@ -75,6 +195,7 @@ const StateChallan = () => {
       sector: "",
       ddo: "",
       divisionCode: "",
+      grantNo: "",
       majorHead: "",
       subMajorHead: "",
       minorHead: "",
@@ -91,13 +212,12 @@ const StateChallan = () => {
       sanctionLetterDate: "",
       treasuryCode: "",
       treasuryChallanNo: "",
+      treasuryChallanDate: "",
     },
   });
 
   const totalAmount = watch("totalAmount");
   const watchedSector = watch("sector");
-
-  // Watched head values — used by cascade useEffects
   const watchedMajorHead = watch("majorHead");
   const watchedSubMajorHead = watch("subMajorHead");
   const watchedMinorHead = watch("minorHead");
@@ -105,12 +225,17 @@ const StateChallan = () => {
   const watchedSubSubHead = watch("subSubHead");
   const watchedDetailHead = watch("detailHead");
 
-  // ─── Sync sector state for useHeadHierarchy in create mode ────────────────
+  // Reset challanDate when FY or month changes
+  useEffect(() => {
+    setValue("challanDate", "");
+  }, [selectedFY, selectedMonth]);
+
+  // Sync sector for head hierarchy
   useEffect(() => {
     if (!isEditMode) setSector(watchedSector);
   }, [watchedSector, isEditMode]);
 
-  // ─── Amount → Words ────────────────────────────────────────────────────────
+  // Amount → Words
   useEffect(() => {
     if (!totalAmount) {
       setValue("amountInWords", "");
@@ -122,10 +247,9 @@ const StateChallan = () => {
     setValue("amountInWords", rupeesToWords(raw));
   }, [totalAmount, setValue]);
 
-  // ─── Fetch + prefill in edit mode ─────────────────────────────────────────
+  // ── Fetch + prefill in edit mode ────────────────────────────────────────
   useEffect(() => {
     if (!isEditMode) return;
-
     const load = async () => {
       setPageLoading(true);
       try {
@@ -135,8 +259,20 @@ const StateChallan = () => {
           return;
         }
 
-        setValue("challanNo", data.challanNo ?? "");
-        setValue("challanDate", data.challanDate?.slice(0, 10) ?? "");
+        // Store the existing challanNo for display
+        setExistingChallanNo(data.challanNo ?? "");
+
+        // Restore FY + month from stored date
+        if (data.challanDate) {
+          const d = new Date(data.challanDate);
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yyyy = d.getFullYear();
+          const fyStart = parseInt(mm, 10) >= 4 ? yyyy : yyyy - 1;
+          setSelectedFY(`${fyStart}-${fyStart + 1}`);
+          setSelectedMonth(mm);
+          setValue("challanDate", data.challanDate.slice(0, 10));
+        }
+
         setValue("stateNo", data.stateNo ?? "");
         setValue("from", data.from ?? "");
         setValue("to", data.to ?? "");
@@ -147,6 +283,7 @@ const StateChallan = () => {
           "divisionCode",
           data.divisionCode ? String(data.divisionCode) : "",
         );
+        setValue("grantNo", data.grantNo ?? "");
         setValue("majorHead", data.majorHead ?? "");
         setValue("subMajorHead", data.subMajorHead ?? "");
         setValue("minorHead", data.minorHead ?? "");
@@ -169,9 +306,12 @@ const StateChallan = () => {
         );
         setValue("treasuryCode", data.treasuryCode ?? "");
         setValue("treasuryChallanNo", data.treasuryChallanNo ?? "");
+        setValue(
+          "treasuryChallanDate",
+          data.treasuryChallanDate?.slice(0, 10) ?? "",
+        );
 
         setSector(data.sector ?? "");
-
         setEditLabels({
           sector: data.sector ?? "",
           ddo: data.ddo ? String(data.ddo) : "",
@@ -185,31 +325,26 @@ const StateChallan = () => {
           subDetailHead: data.subDetailHead ?? "",
         });
 
-        // Cascade-fetch all dropdown options using saved codes
-        if (data.majorHead) {
-          await fetchSubMajors(data.majorHead, data.sector);
-        }
-        if (data.majorHead && data.subMajorHead) {
+        if (data.majorHead) await fetchSubMajors(data.majorHead, data.sector);
+        if (data.majorHead && data.subMajorHead)
           await fetchMinors({
             sectorOverride: data.sector,
             majorHeadCode: data.majorHead,
             subMajorCode: data.subMajorHead,
           });
-        }
-        if (data.majorHead && data.subMajorHead && data.minorHead) {
+        if (data.majorHead && data.subMajorHead && data.minorHead)
           await fetchSubHeads({
             sectorOverride: data.sector,
             majorHeadCode: data.majorHead,
             subMajorCode: data.subMajorHead,
             minorHeadCode: data.minorHead,
           });
-        }
         if (
           data.majorHead &&
           data.subMajorHead &&
           data.minorHead &&
           data.subHead
-        ) {
+        )
           await fetchSubSubHeads({
             sectorOverride: data.sector,
             majorHeadCode: data.majorHead,
@@ -217,14 +352,13 @@ const StateChallan = () => {
             minorHeadCode: data.minorHead,
             subHeadCode: data.subHead,
           });
-        }
         if (
           data.majorHead &&
           data.subMajorHead &&
           data.minorHead &&
           data.subHead &&
           data.subSubHead
-        ) {
+        )
           await fetchDetailHeads({
             sectorOverride: data.sector,
             majorHeadCode: data.majorHead,
@@ -233,7 +367,6 @@ const StateChallan = () => {
             subHeadCode: data.subHead,
             subSubHeadCode: data.subSubHead,
           });
-        }
         if (
           data.majorHead &&
           data.subMajorHead &&
@@ -241,7 +374,7 @@ const StateChallan = () => {
           data.subHead &&
           data.subSubHead &&
           data.detailHead
-        ) {
+        )
           await fetchSubDetailHeads({
             sectorOverride: data.sector,
             majorHeadCode: data.majorHead,
@@ -251,19 +384,16 @@ const StateChallan = () => {
             subSubHeadCode: data.subSubHead,
             detailHeadCode: data.detailHead,
           });
-        }
       } catch {
         showToast("Failed to load challan", "error");
       } finally {
         setPageLoading(false);
       }
     };
-
     load();
   }, [id]);
 
-  // ─── Detect user-driven Major Head change ─────────────────────────────────
-  // Skip the very first run (initial mount / edit pre-fill).
+  // Detect user-driven Major Head change
   useEffect(() => {
     if (isFirstMajorRender.current) {
       isFirstMajorRender.current = false;
@@ -273,7 +403,7 @@ const StateChallan = () => {
     setHeadFieldsUnlocked(true);
   }, [watchedMajorHead]);
 
-  // ─── Cascade: Major Head → fetch Sub Majors (create mode only) ────────────
+  // Cascade effects
   useEffect(() => {
     if (!watchedMajorHead || !majorHeadChangedByUser.current) return;
     setValue("subMajorHead", "");
@@ -285,7 +415,6 @@ const StateChallan = () => {
     fetchSubMajors(watchedMajorHead);
   }, [watchedMajorHead]);
 
-  // ─── Cascade: Sub Major → fetch Minors ────────────────────────────────────
   useEffect(() => {
     if (!watchedSubMajorHead || !majorHeadChangedByUser.current) return;
     setValue("minorHead", "");
@@ -299,7 +428,6 @@ const StateChallan = () => {
     });
   }, [watchedSubMajorHead]);
 
-  // ─── Cascade: Minor → fetch Sub Heads ─────────────────────────────────────
   useEffect(() => {
     if (!watchedMinorHead || !majorHeadChangedByUser.current) return;
     setValue("subHead", "");
@@ -313,7 +441,6 @@ const StateChallan = () => {
     });
   }, [watchedMinorHead]);
 
-  // ─── Cascade: Sub Head → fetch Sub Sub Heads ──────────────────────────────
   useEffect(() => {
     if (!watchedSubHead || !majorHeadChangedByUser.current) return;
     setValue("subSubHead", "");
@@ -327,7 +454,6 @@ const StateChallan = () => {
     });
   }, [watchedSubHead]);
 
-  // ─── Cascade: Sub Sub Head → fetch Detail Heads ───────────────────────────
   useEffect(() => {
     if (!watchedSubSubHead || !majorHeadChangedByUser.current) return;
     setValue("detailHead", "");
@@ -341,7 +467,6 @@ const StateChallan = () => {
     });
   }, [watchedSubSubHead]);
 
-  // ─── Cascade: Detail Head → fetch Sub Detail Heads ────────────────────────
   useEffect(() => {
     if (!watchedDetailHead || !majorHeadChangedByUser.current) return;
     setValue("subDetailHead", "");
@@ -355,8 +480,6 @@ const StateChallan = () => {
     });
   }, [watchedDetailHead]);
 
-  // ─── Sector change in create mode — reset all head fields ─────────────────
-  // Handled reactively: watchedSector change → setSector → useHeadHierarchy resets
   useEffect(() => {
     if (isEditMode) return;
     setValue("majorHead", "");
@@ -368,54 +491,57 @@ const StateChallan = () => {
     setValue("subDetailHead", "");
   }, [watchedSector, isEditMode]);
 
-  // ─── Resolve display label from loaded options array ──────────────────────
   const getLabel = (options, value) => {
     if (!value) return "—";
     const found = options.find((o) => String(o.value) === String(value));
     return found ? found.label : value;
   };
 
-  // ─── Submit ────────────────────────────────────────────────────────────────
-  const onSubmit = async (data) => {
+  // ── Submit ──────────────────────────────────────────────────────────────
+  const onSubmit = async (formData) => {
     try {
       const payload = {
-        challanNo: data.challanNo,
-        challanDate: data.challanDate,
-        stateNo: data.stateNo,
-        from: data.from,
-        to: data.to,
-        subject: data.subject,
-        sector: data.sector,
-        ddo: data.ddo,
-        divisionCode: data.divisionCode,
-        majorHead: data.majorHead,
-        subMajorHead: data.subMajorHead,
-        minorHead: data.minorHead,
-        subHead: data.subHead,
-        subSubHead: data.subSubHead,
-        detailHead: data.detailHead,
-        subDetailHead: data.subDetailHead,
-        purpose: data.purpose,
-        remarks: data.remarks,
-        totalAmount: data.totalAmount,
-        amountInWords: data.amountInWords,
-        focNo: data.focNo,
-        sanctionLetterNo: data.sanctionLetterNo,
-        sanctionLetterDate: data.sanctionLetterDate,
-        treasuryCode: data.treasuryCode,
-        treasuryChallanNo: data.treasuryChallanNo,
+        challanDate: formData.challanDate,
+        stateNo: formData.stateNo,
+        from: formData.from,
+        to: formData.to,
+        subject: formData.subject,
+        sector: formData.sector,
+        ddo: formData.ddo,
+        divisionCode: formData.divisionCode,
+        grantNo: formData.grantNo,
+        majorHead: formData.majorHead,
+        subMajorHead: formData.subMajorHead,
+        minorHead: formData.minorHead,
+        subHead: formData.subHead,
+        subSubHead: formData.subSubHead,
+        detailHead: formData.detailHead,
+        subDetailHead: formData.subDetailHead,
+        purpose: formData.purpose,
+        remarks: formData.remarks,
+        totalAmount: formData.totalAmount,
+        amountInWords: formData.amountInWords,
+        focNo: formData.focNo,
+        sanctionLetterNo: formData.sanctionLetterNo,
+        sanctionLetterDate: formData.sanctionLetterDate,
+        treasuryCode: formData.treasuryCode,
+        treasuryChallanNo: formData.treasuryChallanNo,
+        treasuryChallanDate: formData.treasuryChallanDate,
+        // challanNo is intentionally NOT sent — DB generates it
       };
-
-      console.log(payload);
 
       if (isEditMode) {
         await update(id, payload);
         showToast("State Challan updated successfully!", "success");
         navigate("/state-challan");
       } else {
-        await create(payload);
-        showToast("State Challan created successfully!", "success");
+        // hook returns the full API body: { success, challanNo, data: {...} }
+        const result = await create(payload);
+        const assignedNo = result?.challanNo ?? result?.data?.challanNo ?? "—";
+        setGeneratedChallanNo(assignedNo);
         reset();
+        setSelectedFY("");
+        setSelectedMonth("");
       }
     } catch (err) {
       showToast(
@@ -431,7 +557,6 @@ const StateChallan = () => {
     { label: ddoLoading ? "Loading DDOs..." : "Select DDO", value: "" },
     ...ddos,
   ];
-
   const divisionSelectOptions = [
     {
       label: divisionLoading ? "Loading Divisions..." : "Select Division",
@@ -444,25 +569,7 @@ const StateChallan = () => {
     return (
       <div className="min-h-screen w-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-zinc-500">
-          <svg
-            className="animate-spin h-8 w-8"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24">
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8z"
-            />
-          </svg>
+          <Spinner size={8} />
           <span className="text-sm">Loading challan data...</span>
         </div>
       </div>
@@ -472,31 +579,24 @@ const StateChallan = () => {
   const HeadLoadingBar = () =>
     headLoading ? (
       <div className="col-span-full flex items-center gap-2 text-sm text-zinc-500 py-1">
-        <svg
-          className="animate-spin h-4 w-4"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24">
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8v8z"
-          />
-        </svg>
+        <Spinner size={4} />
         Loading head data...
       </div>
     ) : null;
 
   return (
     <div className="min-h-screen w-full px-5 py-3 pb-6">
+      {/* Success modal */}
+      {generatedChallanNo && (
+        <ChallanSuccessModal
+          challanNo={generatedChallanNo}
+          onClose={() => {
+            setGeneratedChallanNo(null);
+            navigate("/state-challan");
+          }}
+        />
+      )}
+
       <div className="border-b border-zinc-400 leading-9">
         <Breadcrumbs
           items={[
@@ -519,18 +619,97 @@ const StateChallan = () => {
         onSubmit={handleSubmit(onSubmit)}
         isSubmitting={isSubmitting || submitLoading}
         submitText={isEditMode ? "Update Challan" : "Create Challan"}>
-        <InputField
-          label="Challan No."
-          name="challanNo"
-          register={register}
-          {...register("challanNo")}
-        />
-        <DateField
-          label="Date"
-          name="challanDate"
-          register={register}
-          {...register("challanDate")}
-        />
+        {/* ── Financial Year ── */}
+        <div className="col-span-full">
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Financial Year <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={selectedFY}
+            onChange={(e) => {
+              setSelectedFY(e.target.value);
+              setSelectedMonth("");
+            }}>
+            {financialYearOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* ── Month ── */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Month <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-zinc-100 disabled:text-zinc-400"
+            value={selectedMonth}
+            disabled={!selectedFY}
+            onChange={(e) => setSelectedMonth(e.target.value)}>
+            <option value="">Select Month</option>
+            {FY_MONTHS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* ── Challan Date — native date picker clamped to selected month ── */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Challan Date <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            min={dateMin}
+            max={dateMax}
+            disabled={!selectedMonth}
+            className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-zinc-100 disabled:text-zinc-400"
+            {...register("challanDate", {
+              required: "Challan date is required",
+              validate: (v) => {
+                if (dateMin && v < dateMin)
+                  return `Date must be within selected month`;
+                if (dateMax && v > dateMax)
+                  return `Date must be within selected month`;
+                return true;
+              },
+            })}
+          />
+          {dateMin && dateMax && (
+            <p className="mt-1 text-xs text-zinc-400">
+              Valid range: {dateMin} → {dateMax}
+            </p>
+          )}
+          {errors.challanDate && (
+            <p className="mt-1 text-xs text-red-500">
+              {errors.challanDate.message}
+            </p>
+          )}
+        </div>
+
+        {/* ── Challan No — read-only display ── */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Challan No.
+          </label>
+          <div className="w-full border border-dashed border-zinc-300 rounded-md px-3 py-2 text-sm bg-zinc-50">
+            {isEditMode && existingChallanNo ? (
+              <span className="font-mono font-semibold text-zinc-700">
+                {existingChallanNo}
+              </span>
+            ) : (
+              <span className="italic text-zinc-400">
+                Auto-assigned on save (e.g. STATE-2026-01)
+              </span>
+            )}
+          </div>
+        </div>
+
         <InputField
           label="No."
           name="stateNo"
@@ -578,7 +757,6 @@ const StateChallan = () => {
           />
         )}
 
-        {/* ── DDO ── */}
         <SelectField
           label="DDO"
           name="ddo"
@@ -587,8 +765,6 @@ const StateChallan = () => {
           disabled={ddoLoading}
           options={ddoOptions}
         />
-
-        {/* ── Division Code ── */}
         <SelectField
           label="Division Code"
           name="divisionCode"
@@ -600,7 +776,15 @@ const StateChallan = () => {
 
         <HeadLoadingBar />
 
-        {/* ── Major Head — always a dropdown; useEffect above handles unlock + cascade ── */}
+        {/* ── Grant No ── */}
+        <InputField
+          label="Grant No"
+          name="grantNo"
+          register={register}
+          {...register("grantNo")}
+        />
+
+        {/* ── Major Head ── */}
         <SelectField
           label="Major Head"
           name="majorHead"
@@ -609,7 +793,6 @@ const StateChallan = () => {
           options={majorHeads}
         />
 
-        {/* ── Sub Major Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Major Head"
@@ -630,7 +813,6 @@ const StateChallan = () => {
           />
         )}
 
-        {/* ── Minor Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Minor Head"
@@ -651,7 +833,6 @@ const StateChallan = () => {
           />
         )}
 
-        {/* ── Sub Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Head"
@@ -672,7 +853,6 @@ const StateChallan = () => {
           />
         )}
 
-        {/* ── Sub Sub Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Sub Head"
@@ -693,7 +873,6 @@ const StateChallan = () => {
           />
         )}
 
-        {/* ── Detail Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Detail Head"
@@ -714,7 +893,6 @@ const StateChallan = () => {
           />
         )}
 
-        {/* ── Sub Detail Head ── */}
         {headFieldsLocked && editLabels ? (
           <InputField
             label="Sub Detail Head"
@@ -742,7 +920,7 @@ const StateChallan = () => {
           {...register("purpose")}
         />
         <InputField
-          label="Amount Concurred (In Lakhs)"
+          label="Amount Concurred (₹)"
           name="totalAmount"
           register={register}
           {...register("totalAmount")}
@@ -772,17 +950,23 @@ const StateChallan = () => {
           register={register}
           {...register("sanctionLetterDate")}
         />
-        <InputField
+        <SelectField
           label="Treasury Code"
           name="treasuryCode"
-          register={register}
-          {...register("treasuryCode")}
+          control={control}
+          options={TREASURY_OPTIONS}
         />
         <InputField
           label="Treasury Challan No"
           name="treasuryChallanNo"
           register={register}
           {...register("treasuryChallanNo")}
+        />
+        <DateField
+          label="Treasury Challan Date"
+          name="treasuryChallanDate"
+          register={register}
+          {...register("treasuryChallanDate")}
         />
         <TextAreaField
           label="Remarks"
