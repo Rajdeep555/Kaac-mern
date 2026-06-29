@@ -13,14 +13,14 @@ import {
 // ── Create ─────────────────────────────────────────────────────────────────
 export const createStateChallan = async (req, res) => {
     try {
-        console.log("─── [createStateChallan] raw req.body ───────────────────");
-        console.log(JSON.stringify(req.body, null, 2));
+        // console.log("─── [createStateChallan] raw req.body ───────────────────");
+        // console.log(JSON.stringify(req.body, null, 2));
 
         const parsed = stateChallanSchema.safeParse(req.body);
 
         if (!parsed.success) {
-            console.error("─── [createStateChallan] Zod validation FAILED ──────────");
-            console.error(JSON.stringify(parsed.error.flatten(), null, 2));
+            // console.error("─── [createStateChallan] Zod validation FAILED ──────────");
+            // console.error(JSON.stringify(parsed.error.flatten(), null, 2));
             return res.status(400).json({
                 success: false,
                 message: "Validation failed",
@@ -28,15 +28,15 @@ export const createStateChallan = async (req, res) => {
             });
         }
 
-        console.log("─── [createStateChallan] parsed.data (after Zod) ────────");
-        console.log(JSON.stringify(parsed.data, null, 2));
+        // console.log("─── [createStateChallan] parsed.data (after Zod) ────────");
+        // console.log(JSON.stringify(parsed.data, null, 2));
 
         const challan = await createStateChallanService({
             ...parsed.data,
             userId: req.user.id,
         });
 
-        console.log(`─── [createStateChallan] SUCCESS → challanNo: ${challan.challanNo}`);
+        // console.log(`─── [createStateChallan] SUCCESS → challanNo: ${challan.challanNo}`);
 
         return res.status(201).json({
             success: true,
@@ -44,8 +44,8 @@ export const createStateChallan = async (req, res) => {
             challanNo: challan.challanNo,
         });
     } catch (error) {
-        console.error("─── [createStateChallan] EXCEPTION ──────────────────────");
-        console.error(error);
+        // console.error("─── [createStateChallan] EXCEPTION ──────────────────────");
+        // console.error(error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -56,8 +56,8 @@ export const getAllStateChallan = async (req, res) => {
         const challans = await getAllStateChallanService();
         return res.status(200).json({ success: true, data: challans });
     } catch (error) {
-        console.error("─── [getAllStateChallan] EXCEPTION ──────────────────────");
-        console.error(error);
+        // console.error("─── [getAllStateChallan] EXCEPTION ──────────────────────");
+        // console.error(error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -72,8 +72,8 @@ export const getStateChallanById = async (req, res) => {
         const challan = await getStateChallanByIdService(id);
         return res.status(200).json({ success: true, data: challan });
     } catch (error) {
-        console.error("─── [getStateChallanById] EXCEPTION ─────────────────────");
-        console.error(error);
+        // console.error("─── [getStateChallanById] EXCEPTION ─────────────────────");
+        // console.error(error);
         return res.status(404).json({ success: false, message: error.message });
     }
 };
@@ -81,9 +81,9 @@ export const getStateChallanById = async (req, res) => {
 // ── Update ─────────────────────────────────────────────────────────────────
 export const updateStateChallan = async (req, res) => {
     try {
-        console.log(`─── [updateStateChallan] id param: ${req.params.id} ──────`);
-        console.log("─── [updateStateChallan] raw req.body ───────────────────");
-        console.log(JSON.stringify(req.body, null, 2));
+        // console.log(`─── [updateStateChallan] id param: ${req.params.id} ──────`);
+        // console.log("─── [updateStateChallan] raw req.body ───────────────────");
+        // console.log(JSON.stringify(req.body, null, 2));
 
         const parsed = updateStateChallanSchema.safeParse({
             ...req.body,
@@ -91,8 +91,8 @@ export const updateStateChallan = async (req, res) => {
         });
 
         if (!parsed.success) {
-            console.error("─── [updateStateChallan] Zod validation FAILED ──────────");
-            console.error(JSON.stringify(parsed.error.flatten(), null, 2));
+            // console.error("─── [updateStateChallan] Zod validation FAILED ──────────");
+            // console.error(JSON.stringify(parsed.error.flatten(), null, 2));
             return res.status(400).json({
                 success: false,
                 message: "Validation failed",
@@ -100,18 +100,18 @@ export const updateStateChallan = async (req, res) => {
             });
         }
 
-        console.log("─── [updateStateChallan] parsed.data (after Zod) ────────");
-        console.log(JSON.stringify(parsed.data, null, 2));
+        // console.log("─── [updateStateChallan] parsed.data (after Zod) ────────");
+        // console.log(JSON.stringify(parsed.data, null, 2));
 
         const { id, ...data } = parsed.data;
         const challan = await updateStateChallanService(id, data);
 
-        console.log(`─── [updateStateChallan] SUCCESS → id: ${challan.id}`);
+        // console.log(`─── [updateStateChallan] SUCCESS → id: ${challan.id}`);
 
         return res.status(200).json({ success: true, data: challan });
     } catch (error) {
-        console.error("─── [updateStateChallan] EXCEPTION ──────────────────────");
-        console.error(error);
+        // console.error("─── [updateStateChallan] EXCEPTION ──────────────────────");
+        // console.error(error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -126,8 +126,8 @@ export const deleteStateChallan = async (req, res) => {
         await deleteStateChallanService(id);
         return res.status(200).json({ success: true, message: "Deleted successfully" });
     } catch (error) {
-        // console.error("─── [deleteStateChallan] EXCEPTION ──────────────────────");
-        // console.error(error);
+        console.error("─── [deleteStateChallan] EXCEPTION ──────────────────────");
+        console.error(error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };
