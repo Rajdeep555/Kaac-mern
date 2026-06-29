@@ -13,7 +13,7 @@ export const stateChallanSchema = z.object({
     }),
     ddo: z.coerce.string().optional(),
     divisionCode: z.coerce.string().optional(),
-    grantNo: z.string().optional(),
+    grantNo: z.coerce.string().optional(),
     majorHead: z.string().min(1, "Major Head is required"),
     subMajorHead: z.string().optional(),
     minorHead: z.string().optional(),
