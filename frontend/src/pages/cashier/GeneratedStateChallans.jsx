@@ -6,8 +6,9 @@ import { showToast } from "../../utils/toast";
 
 const GeneratedStateChallans = () => {
   const navigate = useNavigate();
-  const { challans, loading, error, fetchAll } = useStateChallan();
+  const { challans, loading, error, fetchAll, remove } = useStateChallan();
   const [formattedChallans, setFormattedChallans] = useState([]);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     if (challans && challans.length > 0) {
@@ -38,6 +39,25 @@ const GeneratedStateChallans = () => {
     if (error) showToast(error, "error");
   }, [error]);
 
+  const handleDelete = async (row) => {
+    const confirmed = window.confirm(
+      `Delete challan "${row.challanNo}"? This action cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(row.id);
+      await remove(row.id);
+      showToast("Challan deleted successfully", "success");
+    } catch (err) {
+      // error state is already set inside the hook and surfaced via the
+      // error useEffect above, but we catch here so the promise
+      // rejection doesn't bubble up unhandled.
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const columns = [
     { key: "challanNo", label: "Challan No" },
     { key: "challanDate", label: "Date" },
@@ -49,11 +69,19 @@ const GeneratedStateChallans = () => {
       key: "actions",
       label: "Actions",
       render: (_, row) => (
-        <button
-          onClick={() => navigate(`/state-challan/${row.id}`)}
-          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition">
-          Edit
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(`/state-challan/${row.id}`)}
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition">
+            Edit
+          </button>
+          <button
+            onClick={() => handleDelete(row)}
+            disabled={deletingId === row.id}
+            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition disabled:opacity-50">
+            {deletingId === row.id ? "Deleting..." : "Delete"}
+          </button>
+        </div>
       ),
     },
   ];

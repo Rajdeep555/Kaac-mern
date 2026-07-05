@@ -408,7 +408,7 @@ model cashbookInformations {
 }
 
 model StateChallan {
-  challanNo          String?
+  challanNo          String? @unique
   challanDate        DateTime?
   cashierId          Int
   stateNo            String?

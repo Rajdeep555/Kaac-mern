@@ -102,6 +102,53 @@ const ChallanSuccessModal = ({ challanNo, onClose }) => (
   </div>
 );
 
+// ─── Delete Confirmation Modal ──────────────────────────────────────────────
+const DeleteConfirmModal = ({ challanNo, onCancel, onConfirm, deleting }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 flex flex-col items-center gap-4">
+      <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+        <svg
+          className="w-8 h-8 text-red-600"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+          />
+        </svg>
+      </div>
+      <h2 className="text-xl font-semibold text-zinc-800">Delete Challan?</h2>
+      <p className="text-sm text-zinc-500 text-center">
+        This will permanently delete challan{" "}
+        <span className="font-mono font-semibold text-zinc-700">
+          {challanNo || "—"}
+        </span>
+        . This action cannot be undone.
+      </p>
+      <div className="flex gap-3 w-full mt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={deleting}
+          className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={deleting}
+          className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+          {deleting && <Spinner size={4} />}
+          {deleting ? "Deleting..." : "Delete"}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 // ─── Spinner ───────────────────────────────────────────────────────────────
 const Spinner = ({ size = 8 }) => (
   <svg
@@ -129,6 +176,7 @@ const StateChallan = () => {
   const {
     create,
     update,
+    remove,
     fetchById,
     loading: submitLoading,
   } = useStateChallan();
@@ -151,6 +199,10 @@ const StateChallan = () => {
 
   // Success modal
   const [generatedChallanNo, setGeneratedChallanNo] = useState(null);
+
+  // Delete modal
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const financialYearOptions = [
     { label: "Select Financial Year", value: "" },
@@ -558,6 +610,33 @@ const StateChallan = () => {
     }
   };
 
+  // ── Delete ──────────────────────────────────────────────────────────────
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteCancel = () => {
+    if (deleting) return; // don't allow closing mid-request
+    setShowDeleteConfirm(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      setDeleting(true);
+      await remove(id);
+      showToast("State Challan deleted successfully!", "success");
+      navigate("/state-challan");
+    } catch (err) {
+      showToast(
+        err?.response?.data?.message || "Failed to delete challan",
+        "error",
+      );
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const headFieldsLocked = isEditMode && !headFieldsUnlocked;
 
   const ddoOptions = [
@@ -604,22 +683,59 @@ const StateChallan = () => {
         />
       )}
 
-      <div className="border-b border-zinc-400 leading-9">
-        <Breadcrumbs
-          items={[
-            { label: "Dashboard", path: "/" },
-            { label: "State Challan", path: "/state-challan" },
-            {
-              label: isEditMode ? "Edit State Challan" : "Create State Challan",
-              path: "/state-challan",
-            },
-          ]}
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <DeleteConfirmModal
+          challanNo={existingChallanNo}
+          deleting={deleting}
+          onCancel={handleDeleteCancel}
+          onConfirm={handleDeleteConfirm}
         />
-        <h1 className="font-unbounded">
-          {isEditMode
-            ? "Edit State Challan Details :"
-            : "Fill State Challan Details :"}
-        </h1>
+      )}
+
+      <div className="border-b border-zinc-400 leading-9 flex items-center justify-between">
+        <div>
+          <Breadcrumbs
+            items={[
+              { label: "Dashboard", path: "/" },
+              { label: "State Challan", path: "/state-challan" },
+              {
+                label: isEditMode
+                  ? "Edit State Challan"
+                  : "Create State Challan",
+                path: "/state-challan",
+              },
+            ]}
+          />
+          <h1 className="font-unbounded">
+            {isEditMode
+              ? "Edit State Challan Details :"
+              : "Fill State Challan Details :"}
+          </h1>
+        </div>
+
+        {/* Delete button — only shown in edit mode */}
+        {isEditMode && (
+          <button
+            type="button"
+            onClick={handleDeleteClick}
+            disabled={submitLoading || isSubmitting}
+            className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 mb-2">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            Delete Challan
+          </button>
+        )}
       </div>
 
       <FormWrapper
