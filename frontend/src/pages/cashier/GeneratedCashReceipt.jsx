@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DataTable from "../../components/DataTable/DataTable";
 import {
@@ -10,10 +10,102 @@ import { showToast } from "../../utils/toast";
 // ── Module-level cache ──
 let _receiptCache = null;
 
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+// ── Modal: shows counterfoil no + amount in a table, with gross total ──
+const ReceiptListModal = ({ title, rows, onClose }) => {
+  const total = rows.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-white rounded-lg shadow-lg flex flex-col max-h-[80vh]"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200">
+          <h2 className="font-unbounded text-lg font-normal">{title}</h2>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-700 text-xl leading-none"
+            aria-label="Close">
+            ×
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-3">
+          {rows.length === 0 ? (
+            <p className="text-sm text-zinc-400 py-8 text-center">
+              No receipts found.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-500 border-b border-zinc-200">
+                  <th className="py-2 pr-2">#</th>
+                  <th className="py-2 pr-2">Counterfoil No</th>
+                  <th className="py-2 pr-2">Date</th>
+                  <th className="py-2 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, idx) => (
+                  <tr key={r.id} className="border-b border-zinc-100">
+                    <td className="py-2 pr-2 text-zinc-400">{idx + 1}</td>
+                    <td className="py-2 pr-2 font-medium">{r.counterfoilNo}</td>
+                    <td className="py-2 pr-2">{r.date}</td>
+                    <td className="py-2 text-right">
+                      {r.amount.toLocaleString("en-IN")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {rows.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-4 border-t border-zinc-200 bg-zinc-50 rounded-b-lg">
+            <span className="text-sm text-zinc-500">
+              {rows.length} receipt{rows.length !== 1 ? "s" : ""}
+            </span>
+            <span className="font-unbounded text-base">
+              Gross Amount: ₹{total.toLocaleString("en-IN")}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Clickable stat card ──
+const StatCard = ({ label, count, onClick, accent = "blue" }) => {
+  const accentClasses =
+    accent === "blue"
+      ? "border-blue-200 hover:bg-blue-50"
+      : "border-zinc-200 hover:bg-zinc-50";
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={count === 0}
+      className={`flex flex-col items-start gap-1 px-5 py-4 rounded-lg border ${accentClasses} transition text-left disabled:opacity-60 disabled:cursor-not-allowed`}>
+      <span className="text-xs uppercase tracking-wide text-zinc-500">
+        {label}
+      </span>
+      <span className="font-unbounded text-2xl font-normal">{count}</span>
+    </button>
+  );
+};
+
 const GeneratedCashReceipt = () => {
   const [receipts, setReceipts] = useState(_receiptCache || []);
   const [loading, setLoading] = useState(!_receiptCache);
   const [pendingCount, setPendingCount] = useState(null);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [activeModal, setActiveModal] = useState(null); // "today" | "filtered" | null
   const navigate = useNavigate();
 
   const fetchReceipts = async (force = false) => {
@@ -28,12 +120,15 @@ const GeneratedCashReceipt = () => {
       if (res.data.success) {
         const formatted = res.data.data.map((item) => ({
           ...item,
+          // ── Raw ISO date kept for filtering / "today" comparisons ──
+          rawDate: item.date ? item.date.slice(0, 10) : "",
           date: item.date
             ? new Date(item.date).toLocaleDateString("en-GB")
             : "",
           letterDate: item.letterDate
             ? new Date(item.letterDate).toLocaleDateString("en-GB")
             : "",
+          amount: Number(item.rupeesInCash) || 0,
         }));
         _receiptCache = formatted;
         setReceipts(formatted);
@@ -61,6 +156,28 @@ const GeneratedCashReceipt = () => {
     fetchReceipts();
     fetchPendingCount();
   }, []);
+
+  // ── Today's generated receipts ──
+  const todayReceipts = useMemo(
+    () => receipts.filter((r) => r.rawDate === todayStr()),
+    [receipts],
+  );
+
+  // ── Date-filtered receipts ──
+  const hasDateFilter = Boolean(fromDate || toDate);
+  const filteredReceipts = useMemo(() => {
+    if (!hasDateFilter) return [];
+    return receipts.filter((r) => {
+      if (fromDate && r.rawDate < fromDate) return false;
+      if (toDate && r.rawDate > toDate) return false;
+      return true;
+    });
+  }, [receipts, fromDate, toDate, hasDateFilter]);
+
+  const clearDateFilter = () => {
+    setFromDate("");
+    setToDate("");
+  };
 
   const columns = [
     { key: "counterfoilNo", label: "Counterfoil No" },
@@ -141,8 +258,54 @@ const GeneratedCashReceipt = () => {
         </div>
       </div>
 
+      {/* ── Stats + Date Filter ── */}
+      <div className="flex flex-wrap items-end gap-4">
+        <StatCard
+          label="Today's Generated Receipts"
+          count={todayReceipts.length}
+          onClick={() => setActiveModal("today")}
+        />
+
+        {hasDateFilter && (
+          <StatCard
+            label="Filtered Receipts"
+            count={filteredReceipts.length}
+            onClick={() => setActiveModal("filtered")}
+            accent="zinc"
+          />
+        )}
+
+        <div className="flex items-end gap-3 ml-auto">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-zinc-500">From</label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="px-3 py-2 text-sm border border-zinc-300 rounded"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-zinc-500">To</label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="px-3 py-2 text-sm border border-zinc-300 rounded"
+            />
+          </div>
+          {hasDateFilter && (
+            <button
+              onClick={clearDateFilter}
+              className="px-3 py-2 text-sm text-zinc-500 hover:text-zinc-800">
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
       <DataTable
-        data={receipts}
+        data={hasDateFilter ? filteredReceipts : receipts}
         columns={columns}
         loading={loading}
         searchableKeys={[
@@ -153,6 +316,22 @@ const GeneratedCashReceipt = () => {
         ]}
         pageSize={70}
       />
+
+      {activeModal === "today" && (
+        <ReceiptListModal
+          title="Today's Generated Receipts"
+          rows={todayReceipts}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {activeModal === "filtered" && (
+        <ReceiptListModal
+          title={`Receipts (${fromDate || "…"} to ${toDate || "…"})`}
+          rows={filteredReceipts}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
     </div>
   );
 };
