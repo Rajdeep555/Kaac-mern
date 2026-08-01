@@ -392,7 +392,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
             row.receiptCashAmount = null;
             row.receiptPlaColumn =
                 sc.totalAmount != null
-                    ? parseFloat((sc.totalAmount * 100000).toFixed(2))
+                    ? parseFloat((sc.totalAmount).toFixed(2))
                     : null;
             row.receiptClassification = buildClassification(
                 sc.majorHead,
