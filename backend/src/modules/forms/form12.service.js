@@ -130,7 +130,7 @@ export const getForm12Data = async (sector) => {
 
         const scAmount = (r) =>
             r.totalAmount != null
-                ? parseFloat((r.totalAmount * 100000).toFixed(2))
+                ? parseFloat((r.totalAmount).toFixed(2))
                 : 0;
 
         const hasTreasuryChallanNo = (r) =>
