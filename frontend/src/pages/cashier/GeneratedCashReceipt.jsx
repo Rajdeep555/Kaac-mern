@@ -63,7 +63,7 @@ const downloadReceiptCsv = (groupedByDate, title) => {
 };
 
 // ── Modal: rows grouped by date — Sr No, Date, Counterfoil No, Gross Amount
-//    — with a subtotal row per date and a grand total at the bottom ──
+//    — with a bold total row per date and a grand total at the bottom ──
 const ReceiptListModal = ({ title, rows, onClose }) => {
   const groupedByDate = useMemo(() => {
     const byDate = new Map();
@@ -151,14 +151,14 @@ const ReceiptListModal = ({ title, rows, onClose }) => {
                         </tr>
                       );
                     })}
-                    {/* ── Per-date subtotal ── */}
-                    <tr className="bg-zinc-50 border-b border-zinc-200">
+                    {/* ── Per-date total (bold) ── */}
+                    <tr className="bg-zinc-100 border-b border-zinc-200">
                       <td
                         colSpan={3}
-                        className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
+                        className="py-1.5 pr-2 text-right font-bold text-zinc-700">
                         Total for {group.date}
                       </td>
-                      <td className="py-1.5 text-right font-semibold text-zinc-700">
+                      <td className="py-1.5 text-right font-bold text-zinc-900">
                         ₹{group.subtotal.toLocaleString("en-IN")}
                       </td>
                     </tr>

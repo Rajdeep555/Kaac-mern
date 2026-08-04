@@ -30,14 +30,21 @@ const downloadChallanCsv = (groupedByDate, title) => {
   let srNo = 1;
   let grandTotal = 0;
 
-  groupedByDate.forEach(({ date, rows, subtotal }) => {
-    rows.forEach((r) => {
+  groupedByDate.forEach(({ date, headGroups, subtotal }) => {
+    headGroups.forEach(({ head, rows: headRows, headSubtotal }) => {
+      headRows.forEach((r) => {
+        lines.push(
+          [srNo, date, head, r.challanNo, r.amount.toFixed(2)]
+            .map(csvField)
+            .join(","),
+        );
+        srNo++;
+      });
       lines.push(
-        [srNo, date, headCode(r), r.challanNo, r.amount.toFixed(2)]
+        ["", "", "", `Total for Head ${head}`, headSubtotal.toFixed(2)]
           .map(csvField)
           .join(","),
       );
-      srNo++;
     });
     lines.push(
       ["", "", "", `Total for ${date}`, subtotal.toFixed(2)]
@@ -65,8 +72,9 @@ const downloadChallanCsv = (groupedByDate, title) => {
   URL.revokeObjectURL(url);
 };
 
-// ── Modal: rows grouped by date — Sr No, Date, Head Code, Challan No, Gross
-//    Amount — with a subtotal row per date and a grand total at the bottom ──
+// ── Modal: rows grouped by date, then by head code within each date — Sr No,
+//    Date, Head Code, Challan No, Gross Amount — with a semibold subtotal
+//    row per head code, a bold total row per date, and a grand total ──
 const ChallanListModal = ({ title, rows, onClose }) => {
   const groupedByDate = useMemo(() => {
     const byDate = new Map();
@@ -85,11 +93,30 @@ const ChallanListModal = ({ title, rows, onClose }) => {
         byDate.get(key).push(r);
       });
 
-    return Array.from(byDate.entries()).map(([date, groupRows]) => ({
-      date,
-      rows: groupRows,
-      subtotal: groupRows.reduce((sum, r) => sum + (r.amount || 0), 0),
-    }));
+    return Array.from(byDate.entries()).map(([date, groupRows]) => {
+      // ── Head-wise breakdown within this date, stable order of first
+      //    appearance ──
+      const byHead = new Map();
+      groupRows.forEach((r) => {
+        const key = headCode(r);
+        if (!byHead.has(key)) byHead.set(key, []);
+        byHead.get(key).push(r);
+      });
+
+      const headGroups = Array.from(byHead.entries()).map(
+        ([head, headRows]) => ({
+          head,
+          rows: headRows,
+          headSubtotal: headRows.reduce((sum, r) => sum + (r.amount || 0), 0),
+        }),
+      );
+
+      return {
+        date,
+        headGroups,
+        subtotal: groupRows.reduce((sum, r) => sum + (r.amount || 0), 0),
+      };
+    });
   }, [rows]);
 
   const grandTotal = groupedByDate.reduce((sum, g) => sum + g.subtotal, 0);
@@ -142,32 +169,47 @@ const ChallanListModal = ({ title, rows, onClose }) => {
               <tbody>
                 {groupedByDate.map((group) => (
                   <React.Fragment key={group.date}>
-                    {group.rows.map((r) => {
-                      runningSrNo++;
-                      return (
-                        <tr key={r.id} className="border-b border-zinc-100">
-                          <td className="py-2 pr-2 text-zinc-400">
-                            {runningSrNo}
+                    {group.headGroups.map((hg) => (
+                      <React.Fragment key={`${group.date}-${hg.head}`}>
+                        {hg.rows.map((r) => {
+                          runningSrNo++;
+                          return (
+                            <tr key={r.id} className="border-b border-zinc-100">
+                              <td className="py-2 pr-2 text-zinc-400">
+                                {runningSrNo}
+                              </td>
+                              <td className="py-2 pr-2">{group.date}</td>
+                              <td className="py-2 pr-2">{hg.head}</td>
+                              <td className="py-2 pr-2 font-medium">
+                                {r.challanNo}
+                              </td>
+                              <td className="py-2 text-right">
+                                {r.amount.toLocaleString("en-IN")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {/* ── Per-head subtotal (semibold) ── */}
+                        <tr className="bg-zinc-50/60 border-b border-zinc-100">
+                          <td
+                            colSpan={4}
+                            className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
+                            Total for Head {hg.head}
                           </td>
-                          <td className="py-2 pr-2">{group.date}</td>
-                          <td className="py-2 pr-2">{headCode(r)}</td>
-                          <td className="py-2 pr-2 font-medium">
-                            {r.challanNo}
-                          </td>
-                          <td className="py-2 text-right">
-                            {r.amount.toLocaleString("en-IN")}
+                          <td className="py-1.5 text-right font-semibold text-zinc-700">
+                            ₹{hg.headSubtotal.toLocaleString("en-IN")}
                           </td>
                         </tr>
-                      );
-                    })}
-                    {/* ── Per-date subtotal ── */}
-                    <tr className="bg-zinc-50 border-b border-zinc-200">
+                      </React.Fragment>
+                    ))}
+                    {/* ── Per-date total (bold) ── */}
+                    <tr className="bg-zinc-100 border-b border-zinc-200">
                       <td
                         colSpan={4}
-                        className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
+                        className="py-1.5 pr-2 text-right font-bold text-zinc-700">
                         Total for {group.date}
                       </td>
-                      <td className="py-1.5 text-right font-semibold text-zinc-700">
+                      <td className="py-1.5 text-right font-bold text-zinc-900">
                         ₹{group.subtotal.toLocaleString("en-IN")}
                       </td>
                     </tr>
