@@ -1,6 +1,12 @@
 import prisma from "../../config/database.js"
 import logger from "../../utils/logger.js"
 
+// A cashier is restricted to their own entries UNLESS the relevant granular
+// permission flag is true. ADMIN (or any non-CASHIER role) is never
+// restricted by cashierId, regardless of these flags.
+const isRestricted = (role, hasPermission) =>
+    role === "CASHIER" && !hasPermission;
+
 export const createCashReceipt = async (data) => {
     try {
         const receipt = await prisma.cashReceipt.create({
@@ -25,21 +31,18 @@ export const createCashReceipt = async (data) => {
 
         return receipt;
     } catch (error) {
-        logger.error("Failed to fetch expenditure", error);
-        return res.status(500).json({
-            success: false,
-            message: error.message
-        })
+        logger.error("Failed to create cash receipt", error);
+        throw error;
     }
 }
 
-export const updateCashReceipt = async (id, data, userId, role) => {
+export const updateCashReceipt = async (id, data, userId, role, canEditAllEntries) => {
     try {
         const existing = await prisma.cashReceipt.findFirst({
             where: {
                 id: Number(id),
                 isActive: true,
-                ...(role === "CASHIER" && { cashierId: userId })
+                ...(isRestricted(role, canEditAllEntries) && { cashierId: userId })
             }
         })
 
@@ -74,14 +77,11 @@ export const updateCashReceipt = async (id, data, userId, role) => {
         return updated;
     } catch (error) {
         logger.error("Failed to update", error);
-        return res.status(500).json({
-            success: false,
-            message: error.message
-        })
+        throw error;
     }
 }
 
-export const getCashReceiptById = async (id, userId, role) => {
+export const getCashReceiptById = async (id, userId, role, canViewAllEntries) => {
     try {
         const receipt = await prisma.cashReceipt.findFirst({
             where: {
@@ -89,7 +89,7 @@ export const getCashReceiptById = async (id, userId, role) => {
                 isActive: true,
 
                 //Restricting cashier
-                ...(role === "CASHIER" && { cashierId: userId })
+                ...(isRestricted(role, canViewAllEntries) && { cashierId: userId })
             },
             include: {
                 user: true
@@ -104,7 +104,7 @@ export const getCashReceiptById = async (id, userId, role) => {
         return receipt;
     } catch (error) {
         logger.error("Get CashReceipt By ID Error:", error);
-        throw error; c
+        throw error;
     }
 }
 
@@ -113,14 +113,15 @@ export const getAllCashReceipts = async ({
     limit = 80,
     userId,
     role,
+    canViewAllEntries,
 }) => {
     try {
         const skip = (page - 1) * limit;
         const where = {
             isActive: true,
 
-            // restricting cashier to own records
-            ...(role === "CASHIER" && { cashierId: userId })
+            // restricting cashier to own records — unless canViewAllEntries is granted
+            ...(isRestricted(role, canViewAllEntries) && { cashierId: userId })
         }
 
         const [receipts, total] = await prisma.$transaction([
@@ -154,12 +155,12 @@ export const getAllCashReceipts = async ({
     }
 }
 
-export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role) => {
+export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role, canViewAllEntries) => {
     const receipt = await prisma.cashReceipt.findFirst({
         where: {
             counterfoilNo,
             isActive: true,
-            ...(role === "CASHIER" && { cashierId: userId }),
+            ...(isRestricted(role, canViewAllEntries) && { cashierId: userId }),
         }
     })
     return receipt;
@@ -169,7 +170,7 @@ export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role)
 // ─── Pending Receipts ─────────────────────────────────────────────────────────
 // A "pending" receipt is one whose counterfoilNo has NOT been used in any Challan
 
-export const getPendingReceipts = async (userId, role) => {
+export const getPendingReceipts = async (userId, role, canViewAllEntries) => {
     try {
         // Step 1: collect every counterfoilNo already linked to a Challan
         const linked = await prisma.challan.findMany({
@@ -183,7 +184,7 @@ export const getPendingReceipts = async (userId, role) => {
         const receipts = await prisma.cashReceipt.findMany({
             where: {
                 isActive: true,
-                ...(role === "CASHIER" && { cashierId: userId }),
+                ...(isRestricted(role, canViewAllEntries) && { cashierId: userId }),
                 counterfoilNo: {
                     notIn: linkedNos.length > 0 ? linkedNos : ["__none__"],
                 },
@@ -198,7 +199,7 @@ export const getPendingReceipts = async (userId, role) => {
     }
 }
 
-export const getPendingReceiptsCount = async (userId, role) => {
+export const getPendingReceiptsCount = async (userId, role, canViewAllEntries) => {
     try {
         const linked = await prisma.challan.findMany({
             where: { counterfoilNo: { not: null } },
@@ -210,7 +211,7 @@ export const getPendingReceiptsCount = async (userId, role) => {
         const count = await prisma.cashReceipt.count({
             where: {
                 isActive: true,
-                ...(role === "CASHIER" && { cashierId: userId }),
+                ...(isRestricted(role, canViewAllEntries) && { cashierId: userId }),
                 counterfoilNo: {
                     notIn: linkedNos.length > 0 ? linkedNos : ["__none__"],
                 },
@@ -224,7 +225,7 @@ export const getPendingReceiptsCount = async (userId, role) => {
     }
 }
 
-export const getCashReceiptTotal = async ({ filterType, fy, month, day, userId, role }) => {
+export const getCashReceiptTotal = async ({ filterType, fy, month, day, userId, role, canViewAllEntries }) => {
     const fyYear = Number(fy);
     const monthNum = Number(month);
     const dayNum = Number(day);
@@ -253,7 +254,7 @@ export const getCashReceiptTotal = async ({ filterType, fy, month, day, userId, 
     const where = {
         isActive: true,
         date: { gte: from, lte: to },
-        ...(role === "CASHIER" && { cashierId: userId }),
+        ...(isRestricted(role, canViewAllEntries) && { cashierId: userId }),
     };
 
     const receipts = await prisma.cashReceipt.findMany({

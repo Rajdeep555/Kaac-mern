@@ -1,6 +1,11 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
+// A cashier is restricted to their own entries UNLESS the relevant granular
+// permission flag is true. ADMIN (or any non-CASHIER role) is never
+// restricted by cashierId, regardless of these flags.
+const isRestricted = (role, hasPermission) =>
+    role === "CASHIER" && !hasPermission;
 
 export const createChallan = async (data) => {
     try {
@@ -54,13 +59,15 @@ export const createChallan = async (data) => {
     }
 };
 
-export const updateChallan = async (id, data, userId, role) => {
+export const updateChallan = async (id, data, userId, role, canEditAllEntries) => {
     try {
-        // First check 
+        // First check
         const existing = await prisma.challan.findFirst({
             where: {
                 id: Number(id),
-                ...(role === "CASHIER" && { cashierId: userId }),
+                ...(isRestricted(role, canEditAllEntries) && {
+                    cashierId: userId,
+                }),
             },
         });
 
@@ -106,14 +113,16 @@ export const updateChallan = async (id, data, userId, role) => {
     }
 };
 
-export const getChallanById = async (id, userId, role) => {
+export const getChallanById = async (id, userId, role, canViewAllEntries) => {
     try {
         const challan = await prisma.challan.findFirst({
             where: {
                 id: Number(id),
                 isActive: true,
 
-                ...(role === "CASHIER" && { cashierId: userId }),
+                ...(isRestricted(role, canViewAllEntries) && {
+                    cashierId: userId,
+                }),
             },
             include: {
                 department: true,
@@ -134,31 +143,6 @@ export const getChallanById = async (id, userId, role) => {
     }
 };
 
-// export const getAllChallans = async () => {
-//     try {
-//         const challans = await prisma.challan.findMany({
-//             where: {
-//                 isActive: true,
-//             },
-//             include: {
-//                 department: true,
-//                 division: true,
-//                 ddo: true,
-//                 user: true,
-//             },
-//             orderBy: {
-//                 createdAt: "desc",
-//             },
-//         });
-
-//         return challans;
-//     } catch (error) {
-//         logger.error("Get All Challans Error:", error);
-//         throw error;
-//     }
-// };
-
-
 export const getAllChallans = async ({
     page = 1,
     limit = 10,
@@ -166,7 +150,9 @@ export const getAllChallans = async ({
     challanType,
     userId,
     role,
+    canViewAllEntries,
 }) => {
+    console.log("DEBUG getAllChallans:", { role, canViewAllEntries, userId });
     try {
         const skip = (page - 1) * limit;
 
@@ -176,8 +162,10 @@ export const getAllChallans = async ({
             ...(departmentId && { departmentId: Number(departmentId) }),
             ...(challanType && { challanType }),
 
-            // 🔥 Restrict Cashier
-            ...(role === "CASHIER" && { cashierId: userId }),
+            // 🔥 Restrict Cashier — unless canViewAllEntries is granted
+            ...(isRestricted(role, canViewAllEntries) && {
+                cashierId: userId,
+            }),
         };
 
         const [challans, total] = await prisma.$transaction([

@@ -6,15 +6,88 @@ import {
   getPendingReceiptsCount,
 } from "../../api/cashReceipt.api";
 import { showToast } from "../../utils/toast";
+import { LuDownload } from "react-icons/lu";
 
 // ── Module-level cache ──
 let _receiptCache = null;
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-// ── Modal: shows counterfoil no + amount in a table, with gross total ──
+// ── CSV export — no external dependency, plain Blob download ──
+const csvField = (value) => {
+  const str = value === null || value === undefined ? "" : String(value);
+  return `"${str.replace(/"/g, '""')}"`;
+};
+
+const downloadReceiptCsv = (groupedByDate, title) => {
+  const lines = [
+    ["#", "Date", "Counterfoil No", "Gross Amount"].map(csvField).join(","),
+  ];
+
+  let srNo = 1;
+  let grandTotal = 0;
+
+  groupedByDate.forEach(({ date, rows, subtotal }) => {
+    rows.forEach((r) => {
+      lines.push(
+        [srNo, date, r.counterfoilNo, r.amount.toFixed(2)]
+          .map(csvField)
+          .join(","),
+      );
+      srNo++;
+    });
+    lines.push(
+      ["", "", `Total for ${date}`, subtotal.toFixed(2)]
+        .map(csvField)
+        .join(","),
+    );
+    grandTotal += subtotal;
+  });
+
+  lines.push(
+    ["", "", "GRAND TOTAL", grandTotal.toFixed(2)].map(csvField).join(","),
+  );
+
+  const csv = lines.join("\n");
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${title.replace(/\s+/g, "-")}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+// ── Modal: rows grouped by date — Sr No, Date, Counterfoil No, Gross Amount
+//    — with a subtotal row per date and a grand total at the bottom ──
 const ReceiptListModal = ({ title, rows, onClose }) => {
-  const total = rows.reduce((sum, r) => sum + (r.amount || 0), 0);
+  const groupedByDate = useMemo(() => {
+    const byDate = new Map();
+    // Stable date order, oldest first
+    [...rows]
+      .sort((a, b) =>
+        a.rawDate < b.rawDate ? -1 : a.rawDate > b.rawDate ? 1 : 0,
+      )
+      .forEach((r) => {
+        const key = r.date || "Unknown Date";
+        if (!byDate.has(key)) byDate.set(key, []);
+        byDate.get(key).push(r);
+      });
+
+    return Array.from(byDate.entries()).map(([date, groupRows]) => ({
+      date,
+      rows: groupRows,
+      subtotal: groupRows.reduce((sum, r) => sum + (r.amount || 0), 0),
+    }));
+  }, [rows]);
+
+  const grandTotal = groupedByDate.reduce((sum, g) => sum + g.subtotal, 0);
+
+  let runningSrNo = 0;
 
   return (
     <div
@@ -25,12 +98,22 @@ const ReceiptListModal = ({ title, rows, onClose }) => {
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200">
           <h2 className="font-unbounded text-lg font-normal">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-700 text-xl leading-none"
-            aria-label="Close">
-            ×
-          </button>
+          <div className="flex items-center gap-3">
+            {rows.length > 0 && (
+              <button
+                onClick={() => downloadReceiptCsv(groupedByDate, title)}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded border border-zinc-300 text-zinc-700 hover:bg-zinc-50 transition">
+                <LuDownload size={13} />
+                Download CSV
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-zinc-400 hover:text-zinc-700 text-xl leading-none"
+              aria-label="Close">
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="overflow-y-auto px-5 py-3">
@@ -43,21 +126,43 @@ const ReceiptListModal = ({ title, rows, onClose }) => {
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
                   <th className="py-2 pr-2">#</th>
-                  <th className="py-2 pr-2">Counterfoil No</th>
                   <th className="py-2 pr-2">Date</th>
+                  <th className="py-2 pr-2">Counterfoil No</th>
                   <th className="py-2 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, idx) => (
-                  <tr key={r.id} className="border-b border-zinc-100">
-                    <td className="py-2 pr-2 text-zinc-400">{idx + 1}</td>
-                    <td className="py-2 pr-2 font-medium">{r.counterfoilNo}</td>
-                    <td className="py-2 pr-2">{r.date}</td>
-                    <td className="py-2 text-right">
-                      {r.amount.toLocaleString("en-IN")}
-                    </td>
-                  </tr>
+                {groupedByDate.map((group) => (
+                  <React.Fragment key={group.date}>
+                    {group.rows.map((r) => {
+                      runningSrNo++;
+                      return (
+                        <tr key={r.id} className="border-b border-zinc-100">
+                          <td className="py-2 pr-2 text-zinc-400">
+                            {runningSrNo}
+                          </td>
+                          <td className="py-2 pr-2">{group.date}</td>
+                          <td className="py-2 pr-2 font-medium">
+                            {r.counterfoilNo}
+                          </td>
+                          <td className="py-2 text-right">
+                            {r.amount.toLocaleString("en-IN")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* ── Per-date subtotal ── */}
+                    <tr className="bg-zinc-50 border-b border-zinc-200">
+                      <td
+                        colSpan={3}
+                        className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
+                        Total for {group.date}
+                      </td>
+                      <td className="py-1.5 text-right font-semibold text-zinc-700">
+                        ₹{group.subtotal.toLocaleString("en-IN")}
+                      </td>
+                    </tr>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -67,10 +172,11 @@ const ReceiptListModal = ({ title, rows, onClose }) => {
         {rows.length > 0 && (
           <div className="flex items-center justify-between px-5 py-4 border-t border-zinc-200 bg-zinc-50 rounded-b-lg">
             <span className="text-sm text-zinc-500">
-              {rows.length} receipt{rows.length !== 1 ? "s" : ""}
+              {rows.length} receipt{rows.length !== 1 ? "s" : ""} across{" "}
+              {groupedByDate.length} date{groupedByDate.length !== 1 ? "s" : ""}
             </span>
             <span className="font-unbounded text-base">
-              Gross Amount: ₹{total.toLocaleString("en-IN")}
+              Gross Amount: ₹{grandTotal.toLocaleString("en-IN")}
             </span>
           </div>
         )}

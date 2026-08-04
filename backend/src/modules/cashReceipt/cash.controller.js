@@ -31,7 +31,8 @@ export const update = async (req, res) => {
             req.params.id,
             req.body,
             req.user.id,
-            req.user.role
+            req.user.role,
+            req.user.permissions.canEditAllEntries
         )
 
         return res.status(200).json({
@@ -52,7 +53,8 @@ export const getById = async (req, res) => {
         const receipt = await getCashReceiptById(
             req.params.id,
             req.user.id,
-            req.user.role
+            req.user.role,
+            req.user.permissions.canViewAllEntries
         );
 
         return res.status(200).json({
@@ -76,6 +78,7 @@ export const getAll = async (req, res) => {
             limit: Number(limit) || 10,
             userId: req.user.id,
             role: req.user.role,
+            canViewAllEntries: req.user.permissions.canViewAllEntries,
         })
 
         return res.status(200).json({
@@ -97,6 +100,7 @@ export const getByCounterfoilNo = async (req, res) => {
             req.params.counterfoilNo,
             req.user.id,
             req.user.role,
+            req.user.permissions.canViewAllEntries,
         )
 
         if (!receipt) {
@@ -122,7 +126,11 @@ export const getByCounterfoilNo = async (req, res) => {
 
 export const getPending = async (req, res) => {
     try {
-        const data = await getPendingReceipts(req.user.id, req.user.role);
+        const data = await getPendingReceipts(
+            req.user.id,
+            req.user.role,
+            req.user.permissions.canViewAllEntries
+        );
         return res.status(200).json({
             success: true,
             data,
@@ -138,7 +146,11 @@ export const getPending = async (req, res) => {
 
 export const getPendingCount = async (req, res) => {
     try {
-        const count = await getPendingReceiptsCount(req.user.id, req.user.role);
+        const count = await getPendingReceiptsCount(
+            req.user.id,
+            req.user.role,
+            req.user.permissions.canViewAllEntries
+        );
         return res.status(200).json({
             success: true,
             count,
@@ -182,6 +194,7 @@ export const getTotal = async (req, res) => {
             day,
             userId: req.user.id,
             role: req.user.role,
+            canViewAllEntries: req.user.permissions.canViewAllEntries,
         });
 
         return res.status(200).json({ success: true, ...data });

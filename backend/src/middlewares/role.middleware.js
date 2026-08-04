@@ -5,7 +5,7 @@ export default function authorize(...allowedRoles) {
         const userRole = req.user?.role;
 
         logger.info("Authorization check", {
-            userId: req.user?.userId,
+            userId: req.user?.id,
             userRole,
             allowedRoles,
             path: req.originalUrl,
@@ -14,7 +14,7 @@ export default function authorize(...allowedRoles) {
 
         if (!userRole || !allowedRoles.includes(userRole)) {
             logger.warn("Authorization failed", {
-                userId: req.user?.userId,
+                userId: req.user?.id,
                 userRole,
                 allowedRoles,
             });
@@ -26,7 +26,7 @@ export default function authorize(...allowedRoles) {
         }
 
         logger.info("Authorization successful", {
-            userId: req.user?.userId,
+            userId: req.user?.id,
             role: userRole,
         });
 

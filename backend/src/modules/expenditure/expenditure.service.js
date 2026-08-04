@@ -1,6 +1,12 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
+// A cashier is restricted to their own entries UNLESS the relevant granular
+// permission flag is true. ADMIN (or any non-CASHIER role) is never
+// restricted, regardless of these flags.
+const isRestricted = (role, hasPermission) =>
+    role === "CASHIER" && !hasPermission;
+
 export const createExpenditure = async (data) => {
     return prisma.$transaction(async (tx) => {
 
@@ -231,12 +237,15 @@ export const getVoucherNo = async (type) => {
 
 export const getExpenditureForCashier = async ({
     cashierId,
+    role,
+    canViewAllEntries,
     sector,
     hasTreasuryVoucher,
 }) => {
     return prisma.expenditure.findMany({
         where: {
-            cashierId,
+            // 🔥 Restrict Cashier to own entries — unless canViewAllEntries is granted
+            ...(isRestricted(role, canViewAllEntries) && { cashierId }),
             ...(sector && { sector }),
             ...(hasTreasuryVoucher === true && { treasuryVoucherNo: { not: null } }),
             ...(hasTreasuryVoucher === false && { treasuryVoucherNo: null }),

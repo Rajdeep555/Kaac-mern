@@ -34,7 +34,8 @@ export const updateChallanController = async (req, res) => {
             req.params.id,
             req.body,
             req.user.id,
-            req.user.role
+            req.user.role,
+            req.user.permissions.canEditAllEntries
         );
 
         return res.status(200).json({
@@ -55,7 +56,8 @@ export const getChallanByIdController = async (req, res) => {
         const challan = await getChallanById(
             req.params.id,
             req.user.id,
-            req.user.role
+            req.user.role,
+            req.user.permissions.canViewAllEntries
         );
 
         return res.status(200).json({
@@ -82,6 +84,7 @@ export const getAllChallansController = async (req, res) => {
             challanType,
             userId: req.user.id,
             role: req.user.role,
+            canViewAllEntries: req.user.permissions.canViewAllEntries,
         });
 
         return res.status(200).json({
@@ -95,4 +98,3 @@ export const getAllChallansController = async (req, res) => {
         });
     }
 };
-

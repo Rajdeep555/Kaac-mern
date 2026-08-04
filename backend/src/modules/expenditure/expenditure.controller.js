@@ -74,10 +74,14 @@ export const getById = async (req, res) => {
             });
         }
 
-        // CASHIER can only access his own
+        // CASHIER can only access his own — unless canViewAllEntries is granted.
+        // NOTE: was req.user.userId (always undefined with the current
+        // authMiddleware, which only sets req.user.id) — every cashier was
+        // getting a false-positive 403 here regardless of ownership.
         if (
             req.user.role === "CASHIER" &&
-            expenditure.cashierId !== req.user.userId
+            !req.user.permissions.canViewAllEntries &&
+            expenditure.cashierId !== req.user.id
         ) {
             return res.status(403).json({
                 success: false,
@@ -109,9 +113,11 @@ export const update = async (req, res) => {
                 message: "Expenditure not found",
             });
         }
+        // Same fix as getById — was req.user.userId
         if (
             req.user.role === "CASHIER" &&
-            existing.cashierId !== req.user.userId
+            !req.user.permissions.canEditAllEntries &&
+            existing.cashierId !== req.user.id
         ) {
             return res.status(403).json({
                 success: false,
@@ -149,6 +155,8 @@ export const getCashierExpenditures = async (req, res) => {
 
         const data = await getExpenditureForCashier({
             cashierId,
+            role: req.user.role,
+            canViewAllEntries: req.user.permissions.canViewAllEntries,
             sector,
             hasTreasuryVoucher: treasury === "yes" ? true : treasury === "no" ? false : undefined,
         })
@@ -168,7 +176,7 @@ export const getCashierExpenditures = async (req, res) => {
 
 export const getAdminExpenditures = async (req, res) => {
     try {
-        console.log('Query params:', req.query);
+        // console.log('Query params:', req.query);
 
         const { sector, month, year } = req.query;
 
@@ -206,7 +214,11 @@ export const remove = async (req, res) => {
             });
         }
 
-        if (req.user.role === "CASHIER" && existing.cashierId !== req.user.id) {
+        if (
+            req.user.role === "CASHIER" &&
+            !req.user.permissions.canDeleteAllEntries &&
+            existing.cashierId !== req.user.id
+        ) {
             return res.status(403).json({
                 success: false,
                 message: "Forbidden",
