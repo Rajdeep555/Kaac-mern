@@ -214,7 +214,7 @@ const getStatement5StateChallanRows = async () => {
         subDetailHead: row.subDetailHead ?? "-",
         amount:
             row.totalAmount != null
-                ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                ? parseFloat((row.totalAmount).toFixed(2))
                 : 0,
         sector: "STATE",
         source: "stateChallan",
@@ -696,7 +696,7 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                 if (!m) continue;
                 const amt =
                     r.totalAmount != null
-                        ? parseFloat((r.totalAmount * 100000).toFixed(2))
+                        ? parseFloat((r.totalAmount).toFixed(2))
                         : 0;
                 map.set(m, (map.get(m) ?? 0) + amt);
             }

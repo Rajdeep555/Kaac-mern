@@ -75,12 +75,12 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
     const challanTotal = challans.reduce((sum, r) => sum + safeNum(r.amount), 0);
     const cfbTotal = cfbRows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 
-    // totalAmount stored in lakhs → multiply by 100000
+    // totalAmount stored
     const stateChallanTotal = stateChallanRows.reduce(
         (sum, r) =>
             sum +
             (r.totalAmount != null
-                ? parseFloat((r.totalAmount * 100000).toFixed(2))
+                ? parseFloat((r.totalAmount).toFixed(2))
                 : 0),
         0
     );

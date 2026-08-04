@@ -270,7 +270,7 @@ export const getForm7BData = async (sector) => {
                     date: row.challanDate
                         ? new Date(row.challanDate).toLocaleDateString()
                         : "-",
-                    amount: parseFloat((row.totalAmount * 100000).toFixed(2)),
+                    amount: parseFloat((row.totalAmount).toFixed(2)),
                     source: "stateChallan",
                 })),
         ];
@@ -509,7 +509,7 @@ export const getForm8Data = async (sector) => {
         stateChallanRows.forEach((row) => {
             if (row.totalAmount == null || row.totalAmount === 0) return;
 
-            const amount = parseFloat((row.totalAmount * 100000).toFixed(2));
+            const amount = parseFloat((row.totalAmount).toFixed(2));
 
             // Build nomenclature from all 7 head levels — skip null/empty parts
             const nomenclature = [
@@ -886,7 +886,7 @@ export const getForm11Data = async (sector) => {
                 (sum, r) =>
                     sum +
                     (r.totalAmount != null
-                        ? parseFloat((r.totalAmount * 100000).toFixed(2))
+                        ? parseFloat((r.totalAmount).toFixed(2))
                         : 0),
                 0
             );

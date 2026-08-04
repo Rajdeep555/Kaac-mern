@@ -151,7 +151,7 @@ const getForm4StateChallanRows = async () => {
         treasury: row.treasuryCode ?? "-",
         amount:
             row.totalAmount != null
-                ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                ? parseFloat((row.totalAmount).toFixed(2))
                 : 0,
         // Cash Book Item No. = challanNo per spec
         refItemNo: row.challanNo ?? "-",
@@ -307,7 +307,7 @@ const getForm5AStateChallanRows = async () => {
         minorHead: row.minorHead ?? "-",
         amount:
             row.totalAmount != null
-                ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                ? parseFloat((row.totalAmount).toFixed(2))
                 : 0,
         sector: "STATE",
         source: "stateChallan",
@@ -905,7 +905,7 @@ export const getForm5EData = async (sector) => {
         const receiptFromStateChallan = stateChallanRows.map((row) => {
             const govtDep =
                 row.totalAmount != null
-                    ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                    ? parseFloat((row.totalAmount).toFixed(2))
                     : 0;
 
             if (govtDep === 0) return null;
@@ -1419,7 +1419,7 @@ export const getForm7Data = async (sector) => {
         stateChallanRows.forEach((row) => {
             const amount =
                 row.totalAmount != null
-                    ? parseFloat((row.totalAmount * 100000).toFixed(2))
+                    ? parseFloat((row.totalAmount).toFixed(2))
                     : 0;
 
             if (!amount) return;
