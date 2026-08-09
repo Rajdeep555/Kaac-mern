@@ -27,21 +27,28 @@ const downloadRecoveryChallanCsv = (groupedByDate, title) => {
   let srNo = 1;
   let grandTotal = 0;
 
-  groupedByDate.forEach(({ date, rows, subtotal }) => {
-    rows.forEach((r) => {
+  groupedByDate.forEach(({ date, headGroups, subtotal }) => {
+    headGroups.forEach(({ head, rows, subtotal: headSubtotal }) => {
+      rows.forEach((r) => {
+        lines.push(
+          [
+            srNo,
+            date,
+            head,
+            r.challanNo,
+            r.amountType || "-",
+            r.amountNum.toFixed(2),
+          ]
+            .map(csvField)
+            .join(","),
+        );
+        srNo++;
+      });
       lines.push(
-        [
-          srNo,
-          date,
-          headCode(r),
-          r.challanNo,
-          r.amountType || "-",
-          r.amountNum.toFixed(2),
-        ]
+        ["", "", "", "", `Total for Head ${head}`, headSubtotal.toFixed(2)]
           .map(csvField)
           .join(","),
       );
-      srNo++;
     });
     lines.push(
       ["", "", "", "", `Total for ${date}`, subtotal.toFixed(2)]
@@ -72,6 +79,8 @@ const downloadRecoveryChallanCsv = (groupedByDate, title) => {
 // ── Modal: rows grouped by date — Sr No, Date, Head Code, Challan No,
 //    Amount Type, Amount — with a subtotal row per date and a grand total ──
 const RecoveryChallanListModal = ({ title, rows, onClose }) => {
+  // Nested: date -> head groups, each head group has its own subtotal,
+  // and each date has an overall subtotal (sum of its head subtotals)
   const groupedByDate = useMemo(() => {
     const byDate = new Map();
     [...rows]
@@ -88,11 +97,30 @@ const RecoveryChallanListModal = ({ title, rows, onClose }) => {
         byDate.get(key).push(r);
       });
 
-    return Array.from(byDate.entries()).map(([date, groupRows]) => ({
-      date,
-      rows: groupRows,
-      subtotal: groupRows.reduce((sum, r) => sum + (r.amountNum || 0), 0),
-    }));
+    return Array.from(byDate.entries()).map(([date, dateRows]) => {
+      const byHead = new Map();
+      [...dateRows]
+        .sort((a, b) => headCode(a).localeCompare(headCode(b)))
+        .forEach((r) => {
+          const key = headCode(r);
+          if (!byHead.has(key)) byHead.set(key, []);
+          byHead.get(key).push(r);
+        });
+
+      const headGroups = Array.from(byHead.entries()).map(
+        ([head, headRows]) => ({
+          head,
+          rows: headRows,
+          subtotal: headRows.reduce((sum, r) => sum + (r.amountNum || 0), 0),
+        }),
+      );
+
+      return {
+        date,
+        headGroups,
+        subtotal: headGroups.reduce((sum, h) => sum + h.subtotal, 0),
+      };
+    });
   }, [rows]);
 
   const grandTotal = groupedByDate.reduce((sum, g) => sum + g.subtotal, 0);
@@ -144,36 +172,54 @@ const RecoveryChallanListModal = ({ title, rows, onClose }) => {
                 </tr>
               </thead>
               <tbody>
-                {groupedByDate.map((group) => (
-                  <React.Fragment key={group.date}>
-                    {group.rows.map((r) => {
-                      runningSrNo++;
-                      return (
-                        <tr key={r.id} className="border-b border-zinc-100">
-                          <td className="py-2 pr-2 text-zinc-400">
-                            {runningSrNo}
+                {groupedByDate.map((dateGroup) => (
+                  <React.Fragment key={dateGroup.date}>
+                    {dateGroup.headGroups.map((headGroup) => (
+                      <React.Fragment
+                        key={`${dateGroup.date}-${headGroup.head}`}>
+                        {headGroup.rows.map((r) => {
+                          runningSrNo++;
+                          return (
+                            <tr key={r.id} className="border-b border-zinc-100">
+                              <td className="py-2 pr-2 text-zinc-400">
+                                {runningSrNo}
+                              </td>
+                              <td className="py-2 pr-2">{dateGroup.date}</td>
+                              <td className="py-2 pr-2">{headCode(r)}</td>
+                              <td className="py-2 pr-2 font-medium">
+                                {r.challanNo}
+                              </td>
+                              <td className="py-2 pr-2">
+                                {r.amountType || "-"}
+                              </td>
+                              <td className="py-2 text-right">
+                                {r.amountNum.toLocaleString("en-IN")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {/* ── Per-head subtotal, within this date ── */}
+                        <tr className="bg-zinc-50 border-b border-zinc-100">
+                          <td
+                            colSpan={5}
+                            className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
+                            Total for Head {headGroup.head}
                           </td>
-                          <td className="py-2 pr-2">{group.date}</td>
-                          <td className="py-2 pr-2">{headCode(r)}</td>
-                          <td className="py-2 pr-2 font-medium">
-                            {r.challanNo}
-                          </td>
-                          <td className="py-2 pr-2">{r.amountType || "-"}</td>
-                          <td className="py-2 text-right">
-                            {r.amountNum.toLocaleString("en-IN")}
+                          <td className="py-1.5 text-right font-semibold text-zinc-700">
+                            ₹{headGroup.subtotal.toLocaleString("en-IN")}
                           </td>
                         </tr>
-                      );
-                    })}
-                    {/* ── Per-date subtotal ── */}
-                    <tr className="bg-zinc-50 border-b border-zinc-200">
+                      </React.Fragment>
+                    ))}
+                    {/* ── Date-level total, after all heads for this date ── */}
+                    <tr className="bg-zinc-100 border-b border-zinc-200">
                       <td
                         colSpan={5}
-                        className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
-                        Total for {group.date}
+                        className="py-1.5 pr-2 text-right font-semibold text-zinc-700">
+                        Total for {dateGroup.date}
                       </td>
-                      <td className="py-1.5 text-right font-semibold text-zinc-700">
-                        ₹{group.subtotal.toLocaleString("en-IN")}
+                      <td className="py-1.5 text-right font-semibold text-zinc-800">
+                        ₹{dateGroup.subtotal.toLocaleString("en-IN")}
                       </td>
                     </tr>
                   </React.Fragment>
@@ -304,6 +350,22 @@ const ChallanOfRecoveryFromBills = () => {
     },
   ];
 
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="font-unbounded text-3xl font-normal">
+            Challan of Recovery from Bills
+          </h1>
+        </div>
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-zinc-400">
+          <div className="w-10 h-10 border-4 border-zinc-300 border-t-blue-600 rounded-full animate-spin" />
+          <p className="text-sm">Fetching challans...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="font-unbounded text-3xl font-normal">
@@ -360,12 +422,8 @@ const ChallanOfRecoveryFromBills = () => {
         data={hasDateFilter ? filteredChallans : enrichedChallans}
         columns={columns}
         loading={loading}
-        searchableKeys={[
-          "challanNo",
-          "majorHead",
-          "treasuryChallanNo",
-          "amount",
-        ]}
+        emptyMessage={loading ? "Loading..." : "No data found"}
+        searchableKeys={["challanNo", "majorHead", "treasuryChallanNo"]}
         pageSize={200}
       />
 
