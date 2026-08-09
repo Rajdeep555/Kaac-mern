@@ -72,10 +72,64 @@ const downloadChallanCsv = (groupedByDate, title) => {
   URL.revokeObjectURL(url);
 };
 
+// ── CSV export for the pivot view — Date row x Head columns matrix ──
+const downloadPivotCsv = (
+  heads,
+  headLabels,
+  pivotRows,
+  headTotals,
+  grandTotal,
+  title,
+) => {
+  const lines = [
+    ["Date", ...heads.map((h) => headLabels[h]), "Total"]
+      .map(csvField)
+      .join(","),
+  ];
+
+  pivotRows.forEach((row) => {
+    lines.push(
+      [
+        row.date,
+        ...heads.map((h) => (row.amounts[h] ? row.amounts[h].toFixed(2) : "")),
+        row.total.toFixed(2),
+      ]
+        .map(csvField)
+        .join(","),
+    );
+  });
+
+  lines.push(
+    [
+      "TOTAL",
+      ...heads.map((h) => (headTotals[h] ? headTotals[h].toFixed(2) : "")),
+      grandTotal.toFixed(2),
+    ]
+      .map(csvField)
+      .join(","),
+  );
+
+  const csv = lines.join("\n");
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${title.replace(/\s+/g, "-")}-head-wise.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 // ── Modal: rows grouped by date, then by head code within each date — Sr No,
 //    Date, Head Code, Challan No, Gross Amount — with a semibold subtotal
-//    row per head code, a bold total row per date, and a grand total ──
+//    row per head code, a bold total row per date, and a grand total.
+//    Also offers a "Head-wise Matrix" view: Date rows x Head columns. ──
 const ChallanListModal = ({ title, rows, onClose }) => {
+  const [viewMode, setViewMode] = useState("list"); // "list" | "pivot"
+
   const groupedByDate = useMemo(() => {
     const byDate = new Map();
     // Stable date order, oldest first
@@ -121,21 +175,109 @@ const ChallanListModal = ({ title, rows, onClose }) => {
 
   const grandTotal = groupedByDate.reduce((sum, g) => sum + g.subtotal, 0);
 
-  let runningSrNo = 0;
+  // ── Pivot: real distinct head codes present in the data become columns,
+  //    labeled sequentially "Head 01", "Head 02", ... in sorted order (not
+  //    requiring the underlying code itself to literally be "01"-"17").
+  //    Dates become rows; cell = sum of amounts for that date+head, blank
+  //    when none. ──
+  const { heads, headLabels, pivotRows, headTotals } = useMemo(() => {
+    const distinctCodes = Array.from(new Set(rows.map((r) => headCode(r))));
+    const sortedCodes = distinctCodes.sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    );
+
+    // Map real code -> sequential display label, e.g. "011" -> "Head 01"
+    const labelByCode = {};
+    sortedCodes.forEach((code, idx) => {
+      labelByCode[code] = `Head ${String(idx + 1).padStart(2, "0")}`;
+    });
+
+    const byDate = new Map();
+    rows.forEach((r) => {
+      const code = headCode(r);
+      const dateKey = r.challanDate || "Unknown Date";
+      if (!byDate.has(dateKey)) byDate.set(dateKey, {});
+      const bucket = byDate.get(dateKey);
+      bucket[code] = (bucket[code] || 0) + (r.amount || 0);
+    });
+
+    const sortedDates = Array.from(byDate.keys()).sort((a, b) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    );
+
+    const rowsOut = sortedDates.map((date) => {
+      const amounts = byDate.get(date);
+      const total = Object.values(amounts).reduce((s, v) => s + v, 0);
+      return { date, amounts, total };
+    });
+
+    const totalsOut = {};
+    sortedCodes.forEach((code) => {
+      totalsOut[code] = rowsOut.reduce((s, r) => s + (r.amounts[code] || 0), 0);
+    });
+
+    return {
+      heads: sortedCodes,
+      headLabels: labelByCode,
+      pivotRows: rowsOut,
+      headTotals: totalsOut,
+    };
+  }, [rows]);
+
+  const pivotGrandTotal = Object.values(headTotals).reduce((s, v) => s + v, 0);
+
+  const handleDownload = () => {
+    if (viewMode === "list") {
+      downloadChallanCsv(groupedByDate, title);
+    } else {
+      downloadPivotCsv(
+        heads,
+        headLabels,
+        pivotRows,
+        headTotals,
+        pivotGrandTotal,
+        title,
+      );
+    }
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}>
       <div
-        className="w-full max-w-2xl bg-white rounded-lg shadow-lg flex flex-col max-h-[80vh]"
+        className={`w-full bg-white rounded-lg shadow-lg flex flex-col max-h-[80vh] ${
+          viewMode === "pivot" ? "max-w-5xl" : "max-w-2xl"
+        }`}
         onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 gap-3 flex-wrap">
           <h2 className="font-unbounded text-lg font-normal">{title}</h2>
           <div className="flex items-center gap-3">
+            {/* ── View toggle ── */}
+            <div className="flex rounded-md border border-zinc-300 overflow-hidden text-xs font-semibold">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`px-3 py-1.5 transition ${
+                  viewMode === "list"
+                    ? "bg-zinc-800 text-white"
+                    : "bg-white text-zinc-600 hover:bg-zinc-50"
+                }`}>
+                List
+              </button>
+              <button
+                onClick={() => setViewMode("pivot")}
+                className={`px-3 py-1.5 transition border-l border-zinc-300 ${
+                  viewMode === "pivot"
+                    ? "bg-zinc-800 text-white"
+                    : "bg-white text-zinc-600 hover:bg-zinc-50"
+                }`}>
+                Head 01-{String(heads.length).padStart(2, "0")}
+              </button>
+            </div>
+
             {rows.length > 0 && (
               <button
-                onClick={() => downloadChallanCsv(groupedByDate, title)}
+                onClick={handleDownload}
                 className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded border border-zinc-300 text-zinc-700 hover:bg-zinc-50 transition">
                 <LuDownload size={13} />
                 Download CSV
@@ -150,12 +292,12 @@ const ChallanListModal = ({ title, rows, onClose }) => {
           </div>
         </div>
 
-        <div className="overflow-y-auto px-5 py-3">
+        <div className="overflow-auto px-5 py-3">
           {rows.length === 0 ? (
             <p className="text-sm text-zinc-400 py-8 text-center">
               No challans found.
             </p>
-          ) : (
+          ) : viewMode === "list" ? (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-zinc-500 border-b border-zinc-200">
@@ -167,54 +309,110 @@ const ChallanListModal = ({ title, rows, onClose }) => {
                 </tr>
               </thead>
               <tbody>
-                {groupedByDate.map((group) => (
-                  <React.Fragment key={group.date}>
-                    {group.headGroups.map((hg) => (
-                      <React.Fragment key={`${group.date}-${hg.head}`}>
-                        {hg.rows.map((r) => {
-                          runningSrNo++;
-                          return (
-                            <tr key={r.id} className="border-b border-zinc-100">
-                              <td className="py-2 pr-2 text-zinc-400">
-                                {runningSrNo}
-                              </td>
-                              <td className="py-2 pr-2">{group.date}</td>
-                              <td className="py-2 pr-2">{hg.head}</td>
-                              <td className="py-2 pr-2 font-medium">
-                                {r.challanNo}
-                              </td>
-                              <td className="py-2 text-right">
-                                {r.amount.toLocaleString("en-IN")}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {/* ── Per-head subtotal (semibold) ── */}
-                        <tr className="bg-zinc-50/60 border-b border-zinc-100">
-                          <td
-                            colSpan={4}
-                            className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
-                            Total for Head {hg.head}
-                          </td>
-                          <td className="py-1.5 text-right font-semibold text-zinc-700">
-                            ₹{hg.headSubtotal.toLocaleString("en-IN")}
-                          </td>
-                        </tr>
-                      </React.Fragment>
+                {groupedByDate.map((group) => {
+                  let runningSrNo = 0;
+                  return (
+                    <React.Fragment key={group.date}>
+                      {group.headGroups.map((hg) => (
+                        <React.Fragment key={`${group.date}-${hg.head}`}>
+                          {hg.rows.map((r) => {
+                            runningSrNo++;
+                            return (
+                              <tr
+                                key={r.id}
+                                className="border-b border-zinc-100">
+                                <td className="py-2 pr-2 text-zinc-400">
+                                  {runningSrNo}
+                                </td>
+                                <td className="py-2 pr-2">{group.date}</td>
+                                <td className="py-2 pr-2">{hg.head}</td>
+                                <td className="py-2 pr-2 font-medium">
+                                  {r.challanNo}
+                                </td>
+                                <td className="py-2 text-right">
+                                  {r.amount.toLocaleString("en-IN")}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {/* ── Per-head subtotal (semibold) ── */}
+                          <tr className="bg-zinc-50/60 border-b border-zinc-100">
+                            <td
+                              colSpan={4}
+                              className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
+                              Total for Head {hg.head}
+                            </td>
+                            <td className="py-1.5 text-right font-semibold text-zinc-700">
+                              ₹{hg.headSubtotal.toLocaleString("en-IN")}
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      ))}
+                      {/* ── Per-date total (bold) ── */}
+                      <tr className="bg-zinc-100 border-b border-zinc-200">
+                        <td
+                          colSpan={4}
+                          className="py-1.5 pr-2 text-right font-bold text-zinc-700">
+                          Total for {group.date}
+                        </td>
+                        <td className="py-1.5 text-right font-bold text-zinc-900">
+                          ₹{group.subtotal.toLocaleString("en-IN")}
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-left text-zinc-500 border-b border-zinc-200">
+                  <th className="py-2 pr-2 sticky left-0 bg-white">Date</th>
+                  {heads.map((h) => (
+                    <th
+                      key={h}
+                      className="py-2 px-2 text-right whitespace-nowrap">
+                      {headLabels[h]}
+                    </th>
+                  ))}
+                  <th className="py-2 pl-2 text-right font-bold">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pivotRows.map((row) => (
+                  <tr key={row.date} className="border-b border-zinc-100">
+                    <td className="py-2 pr-2 font-medium sticky left-0 bg-white">
+                      {row.date}
+                    </td>
+                    {heads.map((h) => (
+                      <td key={h} className="py-2 px-2 text-right">
+                        {row.amounts[h]
+                          ? row.amounts[h].toLocaleString("en-IN")
+                          : ""}
+                      </td>
                     ))}
-                    {/* ── Per-date total (bold) ── */}
-                    <tr className="bg-zinc-100 border-b border-zinc-200">
-                      <td
-                        colSpan={4}
-                        className="py-1.5 pr-2 text-right font-bold text-zinc-700">
-                        Total for {group.date}
-                      </td>
-                      <td className="py-1.5 text-right font-bold text-zinc-900">
-                        ₹{group.subtotal.toLocaleString("en-IN")}
-                      </td>
-                    </tr>
-                  </React.Fragment>
+                    <td className="py-2 pl-2 text-right font-semibold">
+                      ₹{row.total.toLocaleString("en-IN")}
+                    </td>
+                  </tr>
                 ))}
+                {/* ── Head-wise totals row ── */}
+                <tr className="bg-zinc-100 border-t border-zinc-300">
+                  <td className="py-2 pr-2 font-bold sticky left-0 bg-zinc-100">
+                    TOTAL
+                  </td>
+                  {heads.map((h) => (
+                    <td key={h} className="py-2 px-2 text-right font-bold">
+                      {headTotals[h]
+                        ? headTotals[h].toLocaleString("en-IN")
+                        : ""}
+                    </td>
+                  ))}
+                  <td className="py-2 pl-2 text-right font-bold">
+                    ₹{pivotGrandTotal.toLocaleString("en-IN")}
+                  </td>
+                </tr>
               </tbody>
             </table>
           )}
