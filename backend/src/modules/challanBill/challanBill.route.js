@@ -6,6 +6,6 @@ import { ROLES } from "../../constrants/roles.js";
 
 const router = Router();
 
-router.get("/", authMiddleware, authorize(ROLES.CASHIER), getChallansByCashier)
+router.get("/", authMiddleware, authorize(ROLES.CASHIER, ROLES.ADMIN), getChallansByCashier)
 
 export default router;

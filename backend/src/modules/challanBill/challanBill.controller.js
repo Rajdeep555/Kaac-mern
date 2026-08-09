@@ -1,11 +1,15 @@
 import { createChallanService, deleteChallanService, getChallanByIdService, getChallansByCashierService, getChallansByExpenditureService, updateChallanService } from "./challanBill.service.js";
 
-/* ================= GET ALL CHALLANS (cashier-wise) ================= */
+/* ================= GET ALL CHALLANS (cashier-wise, or all if permitted) ================= */
 export const getChallansByCashier = async (req, res) => {
     try {
         const cashierId = req.user.id; // from JWT middleware
 
-        const challans = await getChallansByCashierService(cashierId);
+        const challans = await getChallansByCashierService(
+            cashierId,
+            req.user.role,
+            req.user.permissions.canViewAllEntries
+        );
 
         res.status(200).json({
             success: true,
@@ -27,7 +31,12 @@ export const getChallanById = async (req, res) => {
         const cashierId = req.user.id;
         const { id } = req.params;
 
-        const challan = await getChallanByIdService(id, cashierId);
+        const challan = await getChallanByIdService(
+            id,
+            cashierId,
+            req.user.role,
+            req.user.permissions.canViewAllEntries
+        );
 
         res.status(200).json({
             success: true,
@@ -49,7 +58,12 @@ export const getChallansByExpenditure = async (req, res) => {
         const cashierId = req.user.id;
         const { expenditureId } = req.params;
 
-        const challans = await getChallansByExpenditureService(expenditureId, cashierId);
+        const challans = await getChallansByExpenditureService(
+            expenditureId,
+            cashierId,
+            req.user.role,
+            req.user.permissions.canViewAllEntries
+        );
 
         res.status(200).json({
             success: true,
@@ -72,7 +86,12 @@ export const createChallan = async (req, res) => {
         const cashierId = req.user.id;
         const payload = req.body;
 
-        const challan = await createChallanService(cashierId, payload);
+        const challan = await createChallanService(
+            cashierId,
+            payload,
+            req.user.role,
+            req.user.permissions.canEditAllEntries
+        );
 
         res.status(201).json({
             success: true,
@@ -96,7 +115,13 @@ export const updateChallan = async (req, res) => {
         const { id } = req.params;
         const payload = req.body;
 
-        const updated = await updateChallanService(id, cashierId, payload);
+        const updated = await updateChallanService(
+            id,
+            cashierId,
+            payload,
+            req.user.role,
+            req.user.permissions.canEditAllEntries
+        );
 
         res.status(200).json({
             success: true,
@@ -119,7 +144,12 @@ export const deleteChallan = async (req, res) => {
         const cashierId = req.user.id;
         const { id } = req.params;
 
-        await deleteChallanService(id, cashierId);
+        await deleteChallanService(
+            id,
+            cashierId,
+            req.user.role,
+            req.user.permissions.canDeleteAllEntries
+        );
 
         res.status(200).json({
             success: true,

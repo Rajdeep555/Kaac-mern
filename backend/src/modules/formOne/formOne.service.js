@@ -30,6 +30,20 @@ const CASH_AMOUNT_TYPES = [
     "CPF Advance",
 ];
 
+// amountType values on challanFromBill (sector = STATE) that should also
+// show up on the COUNCIL cashbook's Treasury PLA column — these amounts
+// aren't reflected in council's own books yet.
+// CONSOLIDATED does NOT need this list separately: its main
+// challanFromBill query has no sector filter, so these STATE rows are
+// already picked up there via PLA_AMOUNT_TYPES.
+const STATE_AMOUNT_TYPES_FOR_COUNCIL = [
+    "Professional Tax",
+    "Monopoly",
+    "Forest Royalty",
+    "MC Forest Royalty",
+    "House Rent",
+];
+
 function getFyRange(year) {
     const from = new Date(year, 3, 1);
     const to = new Date(year + 1, 2, 31);
@@ -74,6 +88,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         const isStateSector = sector === "STATE";
         const isConsolidated = sector === "CONSOLIDATED";
+        const isCouncilSector = sector === "COUNCIL";
 
         logger.info(`Cashbook fetch started`, {
             year,
@@ -95,6 +110,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
             challanTwoRows,
             expenditures,
             stateChallans,
+            stateAmountTypeRowsForCouncil,
         ] = await Promise.all([
             // ── CashReceipt: has sector field (default COUNCIL) ─────
             // Filter by sector unless CONSOLIDATED
@@ -158,6 +174,24 @@ export const getCashbookRowsByFy = async (year, sector) => {
                     orderBy: { challanDate: "asc" },
                 })
                 : Promise.resolve([]),
+
+            // ── ChallanFromBill (STATE amountType) — COUNCIL view only ──
+            // sector hardcoded to STATE since that's where the record
+            // actually lives. Only fetched for COUNCIL — CONSOLIDATED
+            // already gets these rows via the unfiltered main
+            // challanFromBills query above, so fetching them again here
+            // would double-count them there.
+            isCouncilSector
+                ? prisma.challanFromBill.findMany({
+                    where: {
+                        voucharDate: { gte: from, lte: to },
+                        isActive: true,
+                        sector: "STATE",
+                        amountType: { in: STATE_AMOUNT_TYPES_FOR_COUNCIL },
+                    },
+                    orderBy: { voucharDate: "asc" },
+                })
+                : Promise.resolve([]),
         ]);
 
         logger.info(`[CASHBOOK] Raw fetch counts`, {
@@ -167,6 +201,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
             challanTwoRows: challanTwoRows.length,
             expenditures: expenditures.length,
             stateChallans: stateChallans.length,
+            stateAmountTypeRowsForCouncil: stateAmountTypeRowsForCouncil.length,
         });
 
         const challansWithoutCounterfoil = challans.filter(
@@ -294,6 +329,36 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 cfb.minorHead
             );
             c3bTotal += row.receiptCashAmount ?? 0;
+            rows.push(row);
+        });
+
+        // ════════════════════════════════════════════════════════
+        // DR SIDE — CONDITION 3C: ChallanFromBill (STATE amountType, COUNCIL view)
+        // sector = STATE, amountType in STATE_AMOUNT_TYPES_FOR_COUNCIL
+        // Only populated for the COUNCIL cashbook (see fetch above) —
+        // CONSOLIDATED already carries these rows via CONDITION 3A.
+        // Classification: majorHead-subMajor-minorHead
+        // ════════════════════════════════════════════════════════
+        let c3cTotal = 0;
+        stateAmountTypeRowsForCouncil.forEach((cfb) => {
+            const row = createEmptyRow();
+            row.id = `CFB-DR-STATE-PLA-${cfb.id}`;
+            row.receiptDate = cfb.voucharDate
+                ? cfb.voucharDate.toISOString().slice(0, 10)
+                : null;
+            row.receiptItemNo = cfb.challanNo ?? null;
+            row.receiptCounterfoilNo = null;
+            row.receiptParticulars = cfb.amountType ?? null;
+            row.receiptCashAmount = null;
+            row.receiptPlaColumn = cfb.amount
+                ? parseFloat(cfb.amount.toString())
+                : null;
+            row.receiptClassification = buildClassification(
+                cfb.majorHead,
+                cfb.subMajor,
+                cfb.minorHead
+            );
+            c3cTotal += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
 

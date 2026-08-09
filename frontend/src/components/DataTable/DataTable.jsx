@@ -24,6 +24,9 @@ const DataTable = ({
   downloadFileName = "table",
   printTitle = "Report",
   emptyMessage,
+  loading = false, // ✅ was accepted by every caller but never destructured —
+  // silently dropped, so the table always fell through to
+  // "No data found" while a fetch was still in flight.
 }) => {
   const {
     search,
@@ -175,7 +178,16 @@ const DataTable = ({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length} className="py-10">
+                  <div className="flex flex-col items-center justify-center gap-3 text-gray-400">
+                    <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+                    <p className="text-sm">Loading...</p>
+                  </div>
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="text-center py-4">
                   {emptyMessage || "No data found"}
@@ -203,7 +215,7 @@ const DataTable = ({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!loading && totalPages > 1 && (
         <div className="flex justify-end gap-2 print:hidden">
           <button
             disabled={page === 1}

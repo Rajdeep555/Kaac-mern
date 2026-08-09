@@ -440,7 +440,7 @@ const GeneratedChallans = () => {
           "codes",
           "ddo",
         ]}
-        pageSize={70}
+        pageSize={100}
       />
 
       {activeModal === "today" && (

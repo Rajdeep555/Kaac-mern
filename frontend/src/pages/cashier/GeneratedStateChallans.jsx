@@ -442,7 +442,7 @@ const GeneratedStateChallans = () => {
           "codes",
         ]}
         statusKey="treasuryChallanNo"
-        pageSize={10}
+        pageSize={200}
       />
 
       {activeModal === "today" && (

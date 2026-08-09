@@ -1,13 +1,20 @@
 import prisma from "../../config/database.js";
 
+// A cashier is restricted to their own entries UNLESS the relevant granular
+// permission flag is true. ADMIN (or any non-CASHIER role) is never
+// restricted, regardless of these flags.
+const isRestricted = (role, hasPermission) =>
+    role === "CASHIER" && !hasPermission;
+
 /* ================= GET ALL CHALLANS BY CASHIER ================= */
-export const getChallansByCashierService = async (cashierId) => {
+export const getChallansByCashierService = async (cashierId, role, canViewAllEntries) => {
     const challans = await prisma.challanFromBill.findMany({
         where: {
-            expenditure: {
-                cashierId: cashierId,
-            },
             isActive: true,
+            // 🔥 Restrict to own entries unless canViewAllEntries is granted
+            ...(isRestricted(role, canViewAllEntries) && {
+                expenditure: { cashierId },
+            }),
         },
         include: {
             expenditure: {
@@ -42,14 +49,14 @@ export const getChallansByCashierService = async (cashierId) => {
 };
 
 /* ================= GET SINGLE CHALLAN BY ID ================= */
-export const getChallanByIdService = async (id, cashierId) => {
+export const getChallanByIdService = async (id, cashierId, role, canViewAllEntries) => {
     const challan = await prisma.challanFromBill.findFirst({
         where: {
             id: Number(id),
             isActive: true,
-            expenditure: {
-                cashierId: cashierId, // ✅ ensures cashier can only access their own
-            },
+            ...(isRestricted(role, canViewAllEntries) && {
+                expenditure: { cashierId }, // ✅ ensures cashier can only access their own, unless granted
+            }),
         },
         include: {
             expenditure: {
@@ -85,13 +92,13 @@ export const getChallanByIdService = async (id, cashierId) => {
 };
 
 /* ================= GET CHALLANS BY EXPENDITURE ID ================= */
-export const getChallansByExpenditureService = async (expenditureId, cashierId) => {
-    // ✅ First verify the expenditure belongs to this cashier
+export const getChallansByExpenditureService = async (expenditureId, cashierId, role, canViewAllEntries) => {
+    // ✅ Verify the expenditure exists — and belongs to this cashier, unless canViewAllEntries is granted
     const expenditure = await prisma.expenditure.findFirst({
         where: {
             id: Number(expenditureId),
-            cashierId: cashierId,
             isActive: true,
+            ...(isRestricted(role, canViewAllEntries) && { cashierId }),
         },
     });
 
@@ -113,15 +120,15 @@ export const getChallansByExpenditureService = async (expenditureId, cashierId) 
 };
 
 /* ================= CREATE CHALLAN ================= */
-export const createChallanService = async (cashierId, payload) => {
+export const createChallanService = async (cashierId, payload, role, canEditAllEntries) => {
     const { idFromExpenditure, ...rest } = payload;
 
-    // ✅ Verify the expenditure belongs to this cashier before creating
+    // ✅ Verify the expenditure belongs to this cashier before creating — unless canEditAllEntries is granted
     const expenditure = await prisma.expenditure.findFirst({
         where: {
             id: Number(idFromExpenditure),
-            cashierId: cashierId,
             isActive: true,
+            ...(isRestricted(role, canEditAllEntries) && { cashierId }),
         },
     });
 
@@ -140,15 +147,15 @@ export const createChallanService = async (cashierId, payload) => {
 };
 
 /* ================= UPDATE CHALLAN ================= */
-export const updateChallanService = async (id, cashierId, payload) => {
-    // ✅ Verify ownership through expenditure
+export const updateChallanService = async (id, cashierId, payload, role, canEditAllEntries) => {
+    // ✅ Verify ownership through expenditure — unless canEditAllEntries is granted
     const existing = await prisma.challanFromBill.findFirst({
         where: {
             id: Number(id),
             isActive: true,
-            expenditure: {
-                cashierId: cashierId,
-            },
+            ...(isRestricted(role, canEditAllEntries) && {
+                expenditure: { cashierId },
+            }),
         },
     });
 
@@ -168,15 +175,15 @@ export const updateChallanService = async (id, cashierId, payload) => {
 };
 
 /* ================= DELETE (SOFT) CHALLAN ================= */
-export const deleteChallanService = async (id, cashierId) => {
-    // ✅ Verify ownership through expenditure
+export const deleteChallanService = async (id, cashierId, role, canDeleteAllEntries) => {
+    // ✅ Verify ownership through expenditure — unless canDeleteAllEntries is granted
     const existing = await prisma.challanFromBill.findFirst({
         where: {
             id: Number(id),
             isActive: true,
-            expenditure: {
-                cashierId: cashierId,
-            },
+            ...(isRestricted(role, canDeleteAllEntries) && {
+                expenditure: { cashierId },
+            }),
         },
     });
 

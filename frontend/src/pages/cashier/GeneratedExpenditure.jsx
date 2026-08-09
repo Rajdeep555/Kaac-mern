@@ -458,7 +458,7 @@ const GeneratedExpenditure = () => {
           "chequeNo",
           "grossAmount",
         ]}
-        pageSize={30}
+        pageSize={100}
         actionSlot={
           <div className="flex items-center gap-2">
             <TableButton

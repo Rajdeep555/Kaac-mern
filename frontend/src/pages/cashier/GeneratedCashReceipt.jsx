@@ -420,7 +420,7 @@ const GeneratedCashReceipt = () => {
           "letterNo",
           "rupeesInCash",
         ]}
-        pageSize={70}
+        pageSize={100}
       />
 
       {activeModal === "today" && (

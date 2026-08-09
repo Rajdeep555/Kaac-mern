@@ -31,128 +31,223 @@ const safeNum = (val) => Number(val ?? 0);
 // ─────────────────────────────────────────────────────────────
 
 // 1. Total Revenue Receipts
-// challan + challanFromBill (specific types) + stateChallan (STATE/CONSOLIDATED)
+// Council/Consolidated: existing logic
+// State: challan + stateChallan (majorHead 2011–3999), NO challanFromBill
 const getTotalRevenueReceipts = async (sector, dateRange) => {
+    const isState = sector === "STATE";
     const isConsolidated = !sector || sector === "CONSOLIDATED";
-    const includeStateChallans =
-        !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
     const [challans, cfbRows, stateChallanRows] = await Promise.all([
+        // ── Challan ─────────────────────────────────────────
         prisma.challan.findMany({
             where: {
                 isActive: true,
                 ...(!isConsolidated ? { challanType: sector } : {}),
                 ...(dateRange ? { challanDate: dateRange } : {}),
             },
-            select: { amount: true },
-        }),
-
-        prisma.challanFromBill.findMany({
-            where: {
-                isActive: true,
-                amountType: {
-                    in: ["Professional Tax", "MC Forest Royalty", "Monopoly", "Forest Royalty"],
-                },
-                ...(!isConsolidated ? { sector } : {}),
-                ...(dateRange ? { voucherDate: dateRange } : {}),
+            select: {
+                amount: true,
             },
-            select: { amount: true },
         }),
 
-        // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
-        // No isActive field on model — filter by sector = "STATE"
-        includeStateChallans
+        // ── Challan From Bill ───────────────────────────────
+        // Do NOT include for STATE
+        !isState
+            ? prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    amountType: {
+                        in: [
+                            "Professional Tax",
+                            "MC Forest Royalty",
+                            "Monopoly",
+                            "Forest Royalty",
+                        ],
+                    },
+                    ...(!isConsolidated ? { sector } : {}),
+                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                },
+                select: {
+                    amount: true,
+                },
+            })
+            : Promise.resolve([]),
+
+        // ── State Challan ───────────────────────────────────
+        // Only STATE / CONSOLIDATED
+        // STATE: majorHead 2011–3999
+        // CONSOLIDATED: existing logic
+        (!sector || sector === "CONSOLIDATED" || sector === "STATE")
             ? prisma.stateChallan.findMany({
                 where: {
                     sector: "STATE",
-                    ...(dateRange ? { challanDate: dateRange } : {}),
+
+                    ...(isState
+                        ? {
+                            majorHead: {
+                                // Can't use numeric gte/lte because majorHead is String
+                            },
+                        }
+                        : {}),
+
+                    ...(dateRange
+                        ? {
+                            challanDate: dateRange,
+                        }
+                        : {}),
                 },
-                select: { totalAmount: true },
+                select: {
+                    totalAmount: true,
+                    majorHead: true,
+                },
             })
             : Promise.resolve([]),
     ]);
 
-    const challanTotal = challans.reduce((sum, r) => sum + safeNum(r.amount), 0);
-    const cfbTotal = cfbRows.reduce((sum, r) => sum + safeNum(r.amount), 0);
-
-    // totalAmount stored
-    const stateChallanTotal = stateChallanRows.reduce(
-        (sum, r) =>
-            sum +
-            (r.totalAmount != null
-                ? parseFloat((r.totalAmount).toFixed(2))
-                : 0),
+    const challanTotal = challans.reduce(
+        (sum, r) => sum + safeNum(r.amount),
         0
     );
+
+    const cfbTotal = cfbRows.reduce(
+        (sum, r) => sum + safeNum(r.amount),
+        0
+    );
+
+    const stateChallanTotal = stateChallanRows.reduce(
+        (sum, r) => {
+            // For STATE only:
+            // majorHead must be between 2011 and 3999
+            if (isState) {
+                const majorHead = parseInt(r.majorHead, 10);
+
+                if (
+                    Number.isNaN(majorHead) ||
+                    majorHead < 2011 ||
+                    majorHead > 3999
+                ) {
+                    return sum;
+                }
+            }
+
+            return sum + safeNum(r.totalAmount);
+        },
+        0
+    );
+
+    console.log("sector:", sector);
+    console.log("challanTotal:", challanTotal);
+    console.log("cbfTotal:", cfbTotal);
+    console.log("stateChallanTotal:", stateChallanTotal);
 
     return challanTotal + cfbTotal + stateChallanTotal;
 };
 
 // 2. Total Expenditure on Revenue Account
 const getTotalRevenueExpenditure = async (sector, dateRange) => {
+    const isState = sector === "STATE";
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
-    // Lookup the Revenue type ID as string
-    const revenueType = await prisma.expenditureType.findFirst({
-        where: { name: { equals: "Revenue", mode: "insensitive" } },
-        select: { id: true },
-    });
+    let rows;
 
-    console.log("👉 revenueType:", revenueType);
+    if (isState) {
+        // STATE:
+        // Do NOT filter by expenditureType
+        // Only include majorHead between 2011 and 3999
+        rows = await prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                sector: "STATE",
+                ...(dateRange ? { voucherDate: dateRange } : {}),
+            },
+            select: {
+                grossAmount: true,
+                majorHead: true,
+            },
+        });
 
-    if (!revenueType) {
-        console.warn("⚠️ No ExpenditureType found with name 'Revenue'");
-        return 0;
+        rows = rows.filter((r) => {
+            const majorHead = parseInt(r.majorHead, 10);
+
+            return (
+                !Number.isNaN(majorHead) &&
+                majorHead >= 2011 &&
+                majorHead <= 3999
+            );
+        });
+    } else {
+        // COUNCIL / CONSOLIDATED:
+        // Keep existing Revenue expenditure logic
+
+        const revenueType = await prisma.expenditureType.findFirst({
+            where: {
+                name: {
+                    equals: "Revenue",
+                    mode: "insensitive",
+                },
+            },
+            select: {
+                id: true,
+            },
+        });
+
+        console.log("👉 revenueType:", revenueType);
+
+        if (!revenueType) {
+            console.warn("⚠️ No ExpenditureType found with name 'Revenue'");
+            return 0;
+        }
+
+        rows = await prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                expenditureType: String(revenueType.id),
+                ...(!isConsolidated ? { sector } : {}),
+                ...(dateRange ? { voucherDate: dateRange } : {}),
+            },
+            select: {
+                grossAmount: true,
+            },
+        });
     }
 
-    const rows = await prisma.expenditure.findMany({
-        where: {
-            isActive: true,
-            expenditureType: String(revenueType.id), // ← stored as string "2"
-            ...(!isConsolidated ? { sector } : {}),
-            ...(dateRange ? { voucherDate: dateRange } : {}),
-        },
-        select: { grossAmount: true },
-    });
+    console.log(
+        `👉 getTotalRevenueExpenditure | sector: ${sector} | rows found: ${rows.length}`
+    );
 
-    console.log(`👉 getTotalRevenueExpenditure | sector: ${sector} | rows found: ${rows.length}`);
-
-    return rows.reduce((sum, r) => sum + safeNum(r.grossAmount), 0);
+    return rows.reduce(
+        (sum, r) => sum + safeNum(r.grossAmount),
+        0
+    );
 };
-
-// 3. Total Capital Receipts
-// const getTotalCapitalReceipts = async (sector, dateRange) => {
-//     const isConsolidated = !sector || sector === "CONSOLIDATED";
-
-//     const rows = await prisma.challan.findMany({
-//         where: {
-//             isActive: true,
-//             majorHead: { gte: "4000", lte: "5999" },
-//             ...(!isConsolidated ? { challanType: sector } : {}),
-//             ...(dateRange ? { challanDate: dateRange } : {}),
-//         },
-//         select: { amount: true },
-//     });
-
-//     return rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
-// };
 
 const getTotalCapitalReceipts = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
     const rows = await prisma.$queryRaw`
-        SELECT amount FROM "Challan"
+        SELECT "totalAmount"
+        FROM "state_challans"
         WHERE "isActive" = true
-        AND CAST("majorHead" AS INTEGER) BETWEEN 4000 AND 5999
-        ${!isConsolidated
-            ? Prisma.sql`AND "challanType" = ${sector}::"ChallanType"`
+          AND CAST("majorHead" AS INTEGER) BETWEEN 4000 AND 5999
+
+          ${!isConsolidated
+            ? Prisma.sql`
+                AND "sector" = ${sector}::"Sector"
+              `
             : Prisma.empty}
-        ${dateRange
-            ? Prisma.sql`AND "challanDate" >= ${dateRange.gte} AND "challanDate" <= ${dateRange.lte}`
+
+          ${dateRange
+            ? Prisma.sql`
+                AND "challanDate" >= ${dateRange.gte}
+                AND "challanDate" <= ${dateRange.lte}
+              `
             : Prisma.empty}
     `;
 
-    return rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
+    return rows.reduce(
+        (sum, r) => sum + safeNum(r.totalAmount),
+        0
+    );
 };
 
 // 4. Total Expenditure on Capital Account
@@ -162,15 +257,31 @@ const getTotalCapitalExpenditure = async (sector, dateRange) => {
     const rows = await prisma.expenditure.findMany({
         where: {
             isActive: true,
-            expenditureType: "CAPITAL",
             ...(!isConsolidated ? { sector } : {}),
             ...(dateRange ? { voucherDate: dateRange } : {}),
         },
-        select: { grossAmount: true },
+        select: {
+            grossAmount: true,
+            majorHead: true,
+        },
     });
 
-    return rows.reduce((sum, r) => sum + safeNum(r.grossAmount), 0);
+    const filteredRows = rows.filter((r) => {
+        const majorHead = parseInt(r.majorHead, 10);
+
+        return (
+            !Number.isNaN(majorHead) &&
+            majorHead >= 4001 &&
+            majorHead <= 5999
+        );
+    });
+
+    return filteredRows.reduce(
+        (sum, r) => sum + safeNum(r.grossAmount),
+        0
+    );
 };
+
 
 // 5. Loan Received from State Govt
 const getLoanFromStateGovt = async (sector, dateRange) => {
@@ -333,22 +444,47 @@ const getSecurityDepositsDeducted = async (sector, dateRange) => {
 
 // 21. Other Recoveries
 const getOtherRecoveries = async (sector, dateRange) => {
+    const isState = sector === "STATE";
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
-    const rows = await prisma.expenditure.findMany({
-        where: {
-            isActive: true,
-            ...(!isConsolidated ? { sector } : {}),
-            ...(dateRange ? { voucherDate: dateRange } : {}),
-        },
-        select: {
-            advanceRecovery: true,
-            houseRent: true,
-            otherDeductions: true,
-        },
-    });
+    const [rows, cfbRows] = await Promise.all([
+        prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                ...(!isConsolidated ? { sector } : {}),
+                ...(dateRange ? { voucherDate: dateRange } : {}),
+            },
+            select: {
+                advanceRecovery: true,
+                houseRent: true,
+                otherDeductions: true,
+            },
+        }),
 
-    return rows.reduce(
+        // ── Challan From Bill ───────────────────────────────
+        // Only for STATE
+        isState
+            ? prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    amountType: {
+                        in: [
+                            "Professional Tax",
+                            "MC Forest Royalty",
+                            "Monopoly",
+                            "Forest Royalty",
+                        ],
+                    },
+                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                },
+                select: {
+                    amount: true,
+                },
+            })
+            : Promise.resolve([]),
+    ]);
+
+    const expenditureTotal = rows.reduce(
         (sum, r) =>
             sum +
             safeNum(r.advanceRecovery) +
@@ -356,6 +492,71 @@ const getOtherRecoveries = async (sector, dateRange) => {
             safeNum(r.otherDeductions),
         0
     );
+
+    const cfbTotal = cfbRows.reduce(
+        (sum, r) => sum + safeNum(r.amount),
+        0
+    );
+
+    return expenditureTotal + cfbTotal;
+};
+
+// 25. Other Deposits
+// Same as getOtherRecoveries, but WITHOUT advanceRecovery
+const getOtherDeposits = async (sector, dateRange) => {
+    const isState = sector === "STATE";
+    const isConsolidated = !sector || sector === "CONSOLIDATED";
+
+    const [rows, cfbRows] = await Promise.all([
+        prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                ...(!isConsolidated ? { sector } : {}),
+                ...(dateRange ? { voucherDate: dateRange } : {}),
+            },
+            select: {
+                houseRent: true,
+                otherDeductions: true,
+            },
+        }),
+
+        // ── Challan From Bill ───────────────────────────────
+        // Only for STATE
+        isState
+            ? prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    amountType: {
+                        in: [
+                            "Professional Tax",
+                            "MC Forest Royalty",
+                            "Monopoly",
+                            "Forest Royalty",
+                        ],
+                    },
+                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                },
+                select: {
+                    amount: true,
+                },
+            })
+            : Promise.resolve([]),
+    ]);
+
+    const expenditureTotal = rows.reduce(
+        (sum, r) =>
+            sum +
+            safeNum(r.houseRent) +
+            safeNum(r.otherDeductions),
+        0
+    );
+
+    const cfbTotal = cfbRows.reduce(
+        (sum, r) => sum + safeNum(r.amount),
+        0
+    );
+
+    return expenditureTotal + cfbTotal;
 };
 
 // 26. Security Deposits Refunded
@@ -371,11 +572,14 @@ const getSecurityDepositsRefunded = async (sector, dateRange) => {
         select: {
             securityDeposit: true,
             earnestMoney: true,
+            securityDepositsDeduction: true,
+            earnestMoneyDeduction: true,
         },
     });
 
     return rows.reduce(
-        (sum, r) => sum + safeNum(r.securityDeposit) + safeNum(r.earnestMoney),
+        (sum, r) => sum + safeNum(r.securityDeposit) + safeNum(r.earnestMoney) + safeNum(r.securityDepositsDeduction) +
+            safeNum(r.earnestMoneyDeduction),
         0
     );
 };
@@ -452,6 +656,7 @@ const buildColumn = ({
     securityDeducted,
     otherRecoveries,
     securityRefunded,
+    otherDeposits,
     openingCashBalance,
     closingCashBalance,
     prevTreasuryBalance = 0,
@@ -490,7 +695,6 @@ const buildColumn = ({
     // ── Part II: Deposit Fund ────────────────────────────────
     const fundsReceivedDeposits = 0;
     const expenditureAgainstDeposits = 0;
-    const otherDeposits = 0;
 
     const totalReceiptPart2 =
         fundsReceivedDeposits +
@@ -588,6 +792,7 @@ export const getStatement1Data = async (sector, financialYear) => {
             currSecurityDeducted,
             currOtherRecoveries,
             currSecurityRefunded,
+            currOtherDeposits,
             currOpeningCashBalance,
             currClosingCashBalance,
         ] = await Promise.all([
@@ -605,6 +810,7 @@ export const getStatement1Data = async (sector, financialYear) => {
             getSecurityDepositsDeducted(sector, currentDateRange),
             getOtherRecoveries(sector, currentDateRange),
             getSecurityDepositsRefunded(sector, currentDateRange),
+            getOtherDeposits(sector, currentDateRange),
             getOpeningCashBalance(sector, startYear),
             getClosingCashBalance(sector, currentDateRange),
         ]);
@@ -624,6 +830,7 @@ export const getStatement1Data = async (sector, financialYear) => {
             securityDeducted: 0,
             otherRecoveries: 0,
             securityRefunded: 0,
+            otherDeposits: 0,
             openingCashBalance: 0,
             closingCashBalance: 0,
             prevTreasuryBalance: 0,
@@ -644,6 +851,7 @@ export const getStatement1Data = async (sector, financialYear) => {
             securityDeducted: currSecurityDeducted,
             otherRecoveries: currOtherRecoveries,
             securityRefunded: currSecurityRefunded,
+            otherDeposits: currOtherDeposits,
             openingCashBalance: currOpeningCashBalance,
             closingCashBalance: currClosingCashBalance,
             prevTreasuryBalance: 0,

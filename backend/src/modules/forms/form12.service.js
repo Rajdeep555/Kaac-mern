@@ -179,7 +179,7 @@ export const getForm12Data = async (sector) => {
             .filter((c) => !(c.departmentId >= 8001 && c.departmentId <= 8017))
             .reduce((sum, c) => sum + safe(c.amount), 0);
 
-        const receiptMisc = miscChallans;
+        const receiptMisc = 0;
 
         const receiptCash = cashReceiptRows.reduce(
             (sum, r) => sum + safe(r.rupeesInCash), 0
