@@ -19,6 +19,12 @@ const Form4 = ({ sector }) => {
     }
   };
 
+  // Total of Amount Remitted column
+  const totalAmount = (form4Data ?? []).reduce(
+    (sum, item) => sum + Number(item?.amount ?? 0),
+    0,
+  );
+
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
@@ -117,6 +123,21 @@ const Form4 = ({ sector }) => {
               );
             })}
           </tbody>
+
+          {/* Total row for Amount Remitted */}
+          {form4Data && form4Data.length > 0 && (
+            <tfoot>
+              <tr className="border font-bold">
+                <td className="border py-1" colSpan={3}>
+                  Total
+                </td>
+                <td className="border py-1">₹{totalAmount.toFixed(2)}</td>
+                <td
+                  className="border py-1"
+                  colSpan={sector === "CONSOLIDATED" ? 3 : 2}></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

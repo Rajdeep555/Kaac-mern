@@ -30,23 +30,9 @@ const CASH_AMOUNT_TYPES = [
     "CPF Advance",
 ];
 
-// amountType values on challanFromBill (sector = STATE) that should also
-// show up on the COUNCIL cashbook's Treasury PLA column — these amounts
-// aren't reflected in council's own books yet.
-// CONSOLIDATED does NOT need this list separately: its main
-// challanFromBill query has no sector filter, so these STATE rows are
-// already picked up there via PLA_AMOUNT_TYPES.
-const STATE_AMOUNT_TYPES_FOR_COUNCIL = [
-    "Professional Tax",
-    "Monopoly",
-    "Forest Royalty",
-    "MC Forest Royalty",
-    "House Rent",
-];
-
 function getFyRange(year) {
-    const from = new Date(year, 3, 1);
-    const to = new Date(year + 1, 2, 31);
+    const from = new Date(Date.UTC(year, 3, 1, 0, 0, 0, 0));
+    const to = new Date(Date.UTC(year + 1, 2, 31, 23, 59, 59, 999));
     return { from, to };
 }
 
@@ -88,7 +74,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
 
         const isStateSector = sector === "STATE";
         const isConsolidated = sector === "CONSOLIDATED";
-        const isCouncilSector = sector === "COUNCIL";
 
         logger.info(`Cashbook fetch started`, {
             year,
@@ -110,7 +95,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             challanTwoRows,
             expenditures,
             stateChallans,
-            stateAmountTypeRowsForCouncil,
         ] = await Promise.all([
             // ── CashReceipt: has sector field (default COUNCIL) ─────
             // Filter by sector unless CONSOLIDATED
@@ -174,24 +158,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                     orderBy: { challanDate: "asc" },
                 })
                 : Promise.resolve([]),
-
-            // ── ChallanFromBill (STATE amountType) — COUNCIL view only ──
-            // sector hardcoded to STATE since that's where the record
-            // actually lives. Only fetched for COUNCIL — CONSOLIDATED
-            // already gets these rows via the unfiltered main
-            // challanFromBills query above, so fetching them again here
-            // would double-count them there.
-            isCouncilSector
-                ? prisma.challanFromBill.findMany({
-                    where: {
-                        voucharDate: { gte: from, lte: to },
-                        isActive: true,
-                        sector: "STATE",
-                        amountType: { in: STATE_AMOUNT_TYPES_FOR_COUNCIL },
-                    },
-                    orderBy: { voucharDate: "asc" },
-                })
-                : Promise.resolve([]),
         ]);
 
         logger.info(`[CASHBOOK] Raw fetch counts`, {
@@ -201,8 +167,39 @@ export const getCashbookRowsByFy = async (year, sector) => {
             challanTwoRows: challanTwoRows.length,
             expenditures: expenditures.length,
             stateChallans: stateChallans.length,
-            stateAmountTypeRowsForCouncil: stateAmountTypeRowsForCouncil.length,
         });
+
+        // ── DEBUG: dump every fetched table ─────────────────────────
+        console.log("[CASHBOOK DEBUG] ===== RAW TABLE DUMPS =====");
+        console.log("[CASHBOOK DEBUG] sector param:", JSON.stringify(sector));
+        console.log("[CASHBOOK DEBUG] year param:", year);
+
+        console.log(
+            `[CASHBOOK DEBUG] cashReceipts (${cashReceipts.length}):`,
+            JSON.stringify(cashReceipts, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] challans (${challans.length}):`,
+            JSON.stringify(challans, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] challanFromBills (${challanFromBills.length}):`,
+            JSON.stringify(challanFromBills, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] challanTwoRows (${challanTwoRows.length}):`,
+            JSON.stringify(challanTwoRows, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] expenditures (${expenditures.length}):`,
+            JSON.stringify(expenditures, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] stateChallans (${stateChallans.length}):`,
+            JSON.stringify(stateChallans, null, 2)
+        );
+        console.log("[CASHBOOK DEBUG] ===== END RAW TABLE DUMPS =====");
+        // ── END DEBUG ────────────────────────────────────────────
 
         const challansWithoutCounterfoil = challans.filter(
             (c) => !c.counterfoilNo || c.counterfoilNo.trim() === ""
@@ -211,12 +208,60 @@ export const getCashbookRowsByFy = async (year, sector) => {
             (c) => c.counterfoilNo && c.counterfoilNo.trim() !== ""
         );
 
-        const cfbPlaRows = challanFromBills.filter((cfb) =>
+        // STATE-sector challanFromBill rows have no cash-column activity:
+        // every amountType (all 23 types — the old PLA_AMOUNT_TYPES +
+        // CASH_AMOUNT_TYPES combined) posts to the receipt PLA column,
+        // and to the disbursement PLA column too EXCEPT "Advance
+        // Payment", which is receipt-side only.
+        // Non-STATE (COUNCIL) rows keep the original split: PLA types go
+        // to the receipt PLA column only, cash types go to both cash
+        // columns.
+        const cfbStateRows = challanFromBills.filter(
+            (cfb) => cfb.sector === "STATE"
+        );
+        const cfbNonStateRows = challanFromBills.filter(
+            (cfb) => cfb.sector !== "STATE"
+        );
+
+        const cfbPlaRows = cfbNonStateRows.filter((cfb) =>
             PLA_AMOUNT_TYPES.includes(cfb.amountType)
         );
-        const cfbCashRows = challanFromBills.filter((cfb) =>
+        const cfbCashRows = cfbNonStateRows.filter((cfb) =>
             CASH_AMOUNT_TYPES.includes(cfb.amountType)
         );
+
+        // ── DEBUG: derived challanFromBill buckets ──────────────────
+        console.log("[CASHBOOK DEBUG] ===== DERIVED CFB BUCKETS =====");
+        console.log(
+            `[CASHBOOK DEBUG] cfbStateRows (${cfbStateRows.length}):`,
+            JSON.stringify(cfbStateRows, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] cfbNonStateRows (${cfbNonStateRows.length}):`,
+            JSON.stringify(cfbNonStateRows, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] cfbPlaRows (non-state, ${cfbPlaRows.length}):`,
+            JSON.stringify(cfbPlaRows, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] cfbCashRows (non-state, ${cfbCashRows.length}):`,
+            JSON.stringify(cfbCashRows, null, 2)
+        );
+        console.log(
+            `[CASHBOOK DEBUG] FY date bounds -> from: ${from.toISOString()} to: ${to.toISOString()}`
+        );
+        if (cfbStateRows.length > 0) {
+            const dates = cfbStateRows
+                .map((cfb) => cfb.voucharDate)
+                .filter(Boolean)
+                .sort((a, b) => a - b);
+            console.log(
+                `[CASHBOOK DEBUG] cfbStateRows voucharDate range -> min: ${dates[0]?.toISOString()} max: ${dates[dates.length - 1]?.toISOString()}`
+            );
+        }
+        console.log("[CASHBOOK DEBUG] ===== END DERIVED CFB BUCKETS =====");
+        // ── END DEBUG ────────────────────────────────────────────
 
         const rows = [];
 
@@ -333,34 +378,61 @@ export const getCashbookRowsByFy = async (year, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 3C: ChallanFromBill (STATE amountType, COUNCIL view)
-        // sector = STATE, amountType in STATE_AMOUNT_TYPES_FOR_COUNCIL
-        // Only populated for the COUNCIL cashbook (see fetch above) —
-        // CONSOLIDATED already carries these rows via CONDITION 3A.
+        // DR + CR SIDE — CONDITION 3C: ChallanFromBill (STATE-sector rows)
+        // STATE has no cash-column activity. Every STATE-sector
+        // amountType posts to the receipt PLA column. All types also
+        // post to the disbursement PLA column EXCEPT "Advance Payment",
+        // which is receipt-side only.
         // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        let c3cTotal = 0;
-        stateAmountTypeRowsForCouncil.forEach((cfb) => {
-            const row = createEmptyRow();
-            row.id = `CFB-DR-STATE-PLA-${cfb.id}`;
-            row.receiptDate = cfb.voucharDate
+        let c3cDrTotal = 0;
+        let c3cCrTotal = 0;
+        cfbStateRows.forEach((cfb) => {
+            const cfbDate = cfb.voucharDate
                 ? cfb.voucharDate.toISOString().slice(0, 10)
                 : null;
-            row.receiptItemNo = cfb.challanNo ?? null;
-            row.receiptCounterfoilNo = null;
-            row.receiptParticulars = cfb.amountType ?? null;
-            row.receiptCashAmount = null;
-            row.receiptPlaColumn = cfb.amount
-                ? parseFloat(cfb.amount.toString())
-                : null;
-            row.receiptClassification = buildClassification(
+            const classification = buildClassification(
                 cfb.majorHead,
                 cfb.subMajor,
                 cfb.minorHead
             );
-            c3cTotal += row.receiptPlaColumn ?? 0;
-            rows.push(row);
+            const amount = cfb.amount
+                ? parseFloat(cfb.amount.toString())
+                : null;
+
+            // Receipt side — always, for every STATE amountType
+            const drRow = createEmptyRow();
+            drRow.id = `CFB-DR-STATE-${cfb.id}`;
+            drRow.receiptDate = cfbDate;
+            drRow.receiptItemNo = cfb.challanNo ?? null;
+            drRow.receiptCounterfoilNo = null;
+            drRow.receiptParticulars = cfb.amountType ?? null;
+            drRow.receiptCashAmount = null;
+            drRow.receiptPlaColumn = amount;
+            drRow.receiptClassification = classification;
+            c3cDrTotal += amount ?? 0;
+            rows.push(drRow);
+
+            // Disbursement side — every STATE amountType EXCEPT
+            // "Advance Payment"
+            if (cfb.amountType !== "Advance Payment") {
+                const crRow = createEmptyRow();
+                crRow.id = `CFB-CR-STATE-${cfb.id}`;
+                crRow.disbursementDate = cfbDate;
+                crRow.voucherNo = cfb.challanNo ?? null;
+                crRow.disbursementCounterfoilNo = null;
+                crRow.disbursementDetails = cfb.amountType ?? null;
+                crRow.disbursementCashAmount = null;
+                crRow.chequeNo = cfb.chequeNo ?? null;
+                crRow.plaColumnPayment = amount;
+                crRow.treasuryClassification = classification;
+                c3cCrTotal += amount ?? 0;
+                rows.push(crRow);
+            }
         });
+        console.log(
+            `[CASHBOOK] Total amount from Challan From Bill -> Receipt PLA: ${c3cDrTotal}, Disbursement PLA: ${c3cCrTotal}`
+        );
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 4: Challan WITH counterfoilNo (DR + CR pair)
@@ -471,6 +543,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
             c6Total += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
+        console.log(`[CASHBOOK] Total amount from State Challan -> Receipt PLA: ${c6Total}`);
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 2: Expenditure (has sector field — filtered correctly)
@@ -503,6 +576,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
             crETotal += row.plaColumnPayment ?? 0;
             rows.push(row);
         });
+        console.log(`[CASHBOOK] Total amount from Expenditure (CR side) -> Disbursement PLA: ${crETotal}`);
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 3: ChallanFromBill (Cash types)
@@ -531,6 +605,11 @@ export const getCashbookRowsByFy = async (year, sector) => {
             crCfbTotal += row.disbursementCashAmount ?? 0;
             rows.push(row);
         });
+
+        console.log(
+            `[CASHBOOK] CR side total (Challan From Bill PLA + Expenditure): ${c3cCrTotal + crETotal
+            } (Challan From Bill: ${c3cCrTotal}, Expenditure: ${crETotal})`
+        );
 
         // ════════════════════════════════════════════════════════
         // SORT all rows by date

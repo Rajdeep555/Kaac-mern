@@ -4,7 +4,8 @@ import logger from "../../utils/logger.js";
 // ─────────────────────────────────────────────────────────────
 // FORM 4 - Register of Remittances to Treasury (PLA)
 // Data comes from 4 tables: challan, challanTwo, challanFromBill,
-// stateChallan (STATE sector only)
+// stateChallan
+// (STATE sector: only from StateChallan table — see getForm4Data)
 // ─────────────────────────────────────────────────────────────
 
 const ALLOWED_AMOUNT_TYPES = [
@@ -127,7 +128,7 @@ const getForm4ChallanFromBillRows = async (sector) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// NEW — StateChallan rows (STATE sector only)
+// StateChallan rows (STATE sector)
 // Amount is stored in lakhs → multiply by 100000
 // Classification spans all 7 head levels
 // isActive check: StateChallan has no isActive field in the
@@ -172,36 +173,57 @@ const getForm4StateChallanRows = async () => {
 
 // ─────────────────────────────────────────────────────────────
 // Main Form 4 function
-// Fetches all tables in parallel, merges and sorts by date
-// StateChallan is only fetched when sector is STATE or CONSOLIDATED
+//
+// SECTOR RULES:
+// - sector === "STATE"        → StateChallan ONLY (challan, challanTwo,
+//                                 challanFromBill are skipped)
+// - sector === "CONSOLIDATED" → Challan + ChallanTwo + ChallanFromBill
+//                                 (all sectors) + StateChallan
+// - any other sector          → Challan + ChallanTwo + ChallanFromBill
+//                                 (that sector only), no StateChallan
 // ─────────────────────────────────────────────────────────────
 export const getForm4Data = async (sector) => {
     try {
         logger.info(`Fetching Form 4 data for sector: ${sector ?? "ALL"}`);
 
+        const isStateSector = sector === "STATE";
         const includeStateChallans =
             !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-        const [
-            challanRows,
-            challanTwoRows,
-            challanFromBillRows,
-            stateChallanRows,       // ← NEW
-        ] = await Promise.all([
-            getForm4ChallanRows(sector),
-            getForm4ChallanTwoRows(sector),
-            getForm4ChallanFromBillRows(sector),
-            includeStateChallans            // ← only runs when relevant
-                ? getForm4StateChallanRows()
-                : Promise.resolve([]),
-        ]);
+        let challanRows = [];
+        let challanTwoRows = [];
+        let challanFromBillRows = [];
+        let stateChallanRows = [];
+
+        if (isStateSector) {
+            // ── STATE sector: ONLY StateChallan table ────────────
+            logger.info(
+                `Form4: sector=STATE → skipping Challan, ChallanTwo & ChallanFromBill, using StateChallan only`
+            );
+            stateChallanRows = await getForm4StateChallanRows();
+        } else {
+            // ── Non-STATE sectors: original 4-table logic ────────
+            [challanRows, challanTwoRows, challanFromBillRows, stateChallanRows] =
+                await Promise.all([
+                    getForm4ChallanRows(sector),
+                    getForm4ChallanTwoRows(sector),
+                    getForm4ChallanFromBillRows(sector),
+                    includeStateChallans
+                        ? getForm4StateChallanRows()
+                        : Promise.resolve([]),
+                ]);
+        }
 
         const allRows = [
             ...challanRows,
             ...challanTwoRows,
             ...challanFromBillRows,
-            ...stateChallanRows,            // ← NEW
+            ...stateChallanRows,
         ];
+
+        logger.info(
+            `Form4: Rows going into merge — challan: ${challanRows.length}, challanTwo: ${challanTwoRows.length}, challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
+        );
 
         const sorted = allRows.sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -214,13 +236,12 @@ export const getForm4Data = async (sector) => {
     }
 };
 
-
 // ----------------------------------------------------------
-
 // ─────────────────────────────────────────────────────────────
 // FORM 5A - Classified Abstract of Receipts
-// Data comes from 3 tables: challan, challanFromBill,
-// stateChallan (STATE sector only)
+// Data comes from 3 tables: challan, challanFromBill, stateChallan
+// (STATE sector: only from StateChallan, filtered to majorHead 2011–3999
+//  — see getForm5AData)
 // ─────────────────────────────────────────────────────────────
 
 const FORM5A_ALLOWED_AMOUNT_TYPES = [
@@ -282,14 +303,20 @@ const getForm5AChallanFromBillRows = async (sector) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// NEW — StateChallan rows (STATE sector only)
+// StateChallan rows (STATE sector)
 // Amount stored in lakhs → multiply by 100000
 // Classification uses all head levels, but Form 5A groups
 // by majorHead so only majorHead drives the grouping key.
-// subMajor → subMajorHead, minorHead → minorHead (direct fields)
 // No isActive field on StateChallan model — filter by sector only
+//
+// majorHeadRangeOnly: when true, restricts rows to majorHead
+// numeric value in [2011, 3999] inclusive — used only for the
+// STATE-sector path in getForm5AData. majorHead is stored as a
+// string, so we parse to int rather than doing a DB-level string
+// range comparison (which would sort lexicographically and give
+// wrong results).
 // ─────────────────────────────────────────────────────────────
-const getForm5AStateChallanRows = async () => {
+const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}) => {
     const rows = await prisma.stateChallan.findMany({
         where: {
             sector: "STATE",
@@ -298,10 +325,41 @@ const getForm5AStateChallanRows = async () => {
     });
 
     logger.info(
-        `Form5A: Fetched ${rows.length} rows from StateChallan`
+        `Form5A: Fetched ${rows.length} rows from StateChallan (pre majorHead-range filter)`
     );
 
-    return rows.map((row) => ({
+    const isInRange = (majorHead) => {
+        if (!majorHead) return false;
+        const num = parseInt(majorHead, 10);
+        return !Number.isNaN(num) && num >= 2011 && num <= 3999;
+    };
+
+    const filteredRows = majorHeadRangeOnly
+        ? rows.filter((row) => isInRange(row.majorHead))
+        : rows;
+
+    if (majorHeadRangeOnly) {
+        const excludedCount = rows.length - filteredRows.length;
+        logger.info(
+            `Form5A: StateChallan rows after majorHead 2011-3999 filter: ${filteredRows.length} (excluded ${excludedCount})`
+        );
+        if (excludedCount > 0) {
+            logger.info(
+                `Form5A: Sample excluded majorHeads`,
+                {
+                    sample: [
+                        ...new Set(
+                            rows
+                                .filter((row) => !isInRange(row.majorHead))
+                                .map((row) => row.majorHead)
+                        ),
+                    ].slice(0, 20),
+                }
+            );
+        }
+    }
+
+    return filteredRows.map((row) => ({
         majorHead: row.majorHead ?? "Unknown",
         subMajor: row.subMajorHead ?? "-",
         minorHead: row.minorHead ?? "-",
@@ -319,30 +377,59 @@ const getForm5AStateChallanRows = async () => {
 // Groups rows by majorHead
 // If multiple rows share the same majorHead → show each as detail + total row
 // If only one row for a majorHead → show just that row
+//
+// SECTOR RULES:
+// - sector === "STATE"        → StateChallan ONLY, restricted to
+//                                 majorHead in [2011, 3999]. Challan
+//                                 and ChallanFromBill are skipped.
+// - sector === "CONSOLIDATED" → Challan + ChallanFromBill (all sectors)
+//                                 + StateChallan (full, no majorHead
+//                                 range restriction)
+// - any other sector          → Challan + ChallanFromBill (that sector
+//                                 only), no StateChallan
 // ─────────────────────────────────────────────────────────────
 export const getForm5AData = async (sector) => {
     try {
         logger.info(`Fetching Form 5A data for sector: ${sector ?? "ALL"}`);
 
+        const isStateSector = sector === "STATE";
         const includeStateChallans =
             !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-        // Fetch all tables in parallel
-        const [challanRows, challanFromBillRows, stateChallanRows] =
-            await Promise.all([
-                getForm5AChallanRows(sector),
-                getForm5AChallanFromBillRows(sector),
-                includeStateChallans            // ← only runs when relevant
-                    ? getForm5AStateChallanRows()
-                    : Promise.resolve([]),
-            ]);
+        let challanRows = [];
+        let challanFromBillRows = [];
+        let stateChallanRows = [];
+
+        if (isStateSector) {
+            // ── STATE sector: ONLY StateChallan, majorHead 2011-3999 ──
+            logger.info(
+                `Form5A: sector=STATE → skipping Challan & ChallanFromBill, using StateChallan (majorHead 2011-3999) only`
+            );
+            stateChallanRows = await getForm5AStateChallanRows({
+                majorHeadRangeOnly: true,
+            });
+        } else {
+            // ── Non-STATE sectors: original 3-table logic ────────
+            [challanRows, challanFromBillRows, stateChallanRows] =
+                await Promise.all([
+                    getForm5AChallanRows(sector),
+                    getForm5AChallanFromBillRows(sector),
+                    includeStateChallans
+                        ? getForm5AStateChallanRows()
+                        : Promise.resolve([]),
+                ]);
+        }
 
         // Merge all rows
         const allRows = [
             ...challanRows,
             ...challanFromBillRows,
-            ...stateChallanRows,               // ← NEW
+            ...stateChallanRows,
         ];
+
+        logger.info(
+            `Form5A: Rows going into grouping — challan: ${challanRows.length}, challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
+        );
 
         // Group rows by majorHead
         const grouped = allRows.reduce((acc, row) => {
@@ -374,14 +461,14 @@ export const getForm5AData = async (sector) => {
     }
 };
 
-
 // ─────────────────────────────────────────────────────────────
 
 
 // ─────────────────────────────────────────────────────────────
 // FORM 5B - Classified Abstract of Expenditure
 // Data comes from: Expenditure table
-// Filter: expenditureType = "REVENUE"
+// Filter (non-STATE sectors): expenditureType = "REVENUE"
+// Filter (STATE sector):      majorHead in range 2011–3999
 // Grouped by majorHead — total row if multiple entries
 // ─────────────────────────────────────────────────────────────
 
@@ -389,19 +476,49 @@ export const getForm5BData = async (sector) => {
     try {
         logger.info(`Fetching Form 5B data for sector: ${sector ?? "ALL"}`);
 
+        const isStateSector = sector === "STATE";
+
         const where = {
             isActive: true,
-            expenditureType: "REVENUE", // only REVENUE type
         };
 
-        // Filter by sector if not CONSOLIDATED
-        if (sector && sector !== "CONSOLIDATED") {
-            where.sector = sector;
+        if (isStateSector) {
+            // ── STATE sector: no expenditureType filter — filtered
+            // by majorHead numeric range (2011-3999) in JS below,
+            // since majorHead is a string field and a DB-level
+            // string range comparison would sort lexicographically
+            // and give wrong results.
+            where.sector = "STATE";
+        } else {
+            // ── Non-STATE sectors: original REVENUE-type filter ──
+            where.expenditureType = "REVENUE";
+
+            if (sector && sector !== "CONSOLIDATED") {
+                where.sector = sector;
+            }
         }
 
-        const rows = await prisma.expenditure.findMany({ where });
+        let rows = await prisma.expenditure.findMany({ where });
 
-        logger.info(`Form5B: Fetched ${rows.length} rows from Expenditure table`);
+        logger.info(
+            `Form5B: Fetched ${rows.length} rows from Expenditure table (pre majorHead-range filter)`
+        );
+
+        if (isStateSector) {
+            const isInRange = (majorHead) => {
+                if (!majorHead) return false;
+                const num = parseInt(majorHead, 10);
+                return !Number.isNaN(num) && num >= 2011 && num <= 3999;
+            };
+
+            const preFilterCount = rows.length;
+            rows = rows.filter((row) => isInRange(row.majorHead));
+
+            const excludedCount = preFilterCount - rows.length;
+            logger.info(
+                `Form5B: STATE rows after majorHead 2011-3999 filter: ${rows.length} (excluded ${excludedCount})`
+            );
+        }
 
         // Group rows by majorHead
         const grouped = rows.reduce((acc, row) => {
@@ -474,28 +591,59 @@ export const getForm5BData = async (sector) => {
     }
 };
 
-
 // ─────────────────────────────────────────────────────────────
 // FORM 5C - Classified Abstract of Capital Expenditure
-// Same as Form 5B but expenditureType = "CAPITAL"
+// Same as Form 5B but expenditureType = "CAPITAL" (non-STATE sectors)
+// For STATE sector: filtered by majorHead range 4001–5999 instead
 // ─────────────────────────────────────────────────────────────
 
 export const getForm5CData = async (sector) => {
     try {
         logger.info(`Fetching Form 5C data for sector: ${sector ?? "ALL"}`);
 
+        const isStateSector = sector === "STATE";
+
         const where = {
             isActive: true,
-            expenditureType: "CAPITAL", // only CAPITAL type (5B uses REVENUE)
         };
 
-        if (sector && sector !== "CONSOLIDATED") {
-            where.sector = sector;
+        if (isStateSector) {
+            // ── STATE sector: no expenditureType filter — filtered
+            // by majorHead numeric range (4001-5999) in JS below,
+            // since majorHead is a string field and a DB-level
+            // string range comparison would sort lexicographically
+            // and give wrong results.
+            where.sector = "STATE";
+        } else {
+            // ── Non-STATE sectors: original CAPITAL-type filter ──
+            where.expenditureType = "CAPITAL"; // only CAPITAL type (5B uses REVENUE)
+
+            if (sector && sector !== "CONSOLIDATED") {
+                where.sector = sector;
+            }
         }
 
-        const rows = await prisma.expenditure.findMany({ where });
+        let rows = await prisma.expenditure.findMany({ where });
 
-        logger.info(`Form5C: Fetched ${rows.length} rows from Expenditure table`);
+        logger.info(
+            `Form5C: Fetched ${rows.length} rows from Expenditure table (pre majorHead-range filter)`
+        );
+
+        if (isStateSector) {
+            const isInRange = (majorHead) => {
+                if (!majorHead) return false;
+                const num = parseInt(majorHead, 10);
+                return !Number.isNaN(num) && num >= 4001 && num <= 5999;
+            };
+
+            const preFilterCount = rows.length;
+            rows = rows.filter((row) => isInRange(row.majorHead));
+
+            const excludedCount = preFilterCount - rows.length;
+            logger.info(
+                `Form5C: STATE rows after majorHead 4001-5999 filter: ${rows.length} (excluded ${excludedCount})`
+            );
+        }
 
         // Group by majorHead
         const grouped = rows.reduce((acc, row) => {
@@ -563,23 +711,138 @@ export const getForm5CData = async (sector) => {
 };
 
 
+
+
 // ─────────────────────────────────────────────────────────────
-// FORM 5D - Classified cum Consolidated Abstract
-//           Receipts and Payments — Debt Head
-//
-// Receipt side rows come from TWO sources (shown together):
-//   1. ChallanTwo  → loansReceivedGovt, loansReceivedOther
-//   2. Expenditure → loanAdvances (BUILDING_LOAN, CAR_LOAN),
-//                    houseRent + otherDeductions + advanceRecovery
-//
-// Payment side rows come from ONE source:
-//   1. Expenditure → loanRepayGovt, loanRepayOther, loansAdvances
+// FORM 5D - Register of Loans/Advances & Related Recoveries
+// Data comes from: ChallanTwo, Expenditure (non-STATE sectors)
+// For STATE sector: from ChallanFromBill only (see logic below)
 // ─────────────────────────────────────────────────────────────
+
+// STATE-sector amount types for Form 5D — all 23 challanFromBill
+// types EXCEPT "Advance Payment" (excluded from both receipt and
+// payment side per spec)
+const FORM5D_STATE_AMOUNT_TYPES = [
+    "CGST",
+    "SGST",
+    "IGST",
+    "ITAX",
+    "MDRRF",
+    "DMFT",
+    "Labour Cess",
+    "IT Forest Royalty",
+    "VAT",
+    "CPF Council Share",
+    "CPF Contribution",
+    "CPF Advance",
+    "Earnest Money",
+    "Professional Tax",
+    "Car Loan",
+    "Building Loan",
+    "House Rent",
+    "Security Deposits",
+    "Monopoly",
+    "Forest Royalty",
+    "MC Forest Royalty",
+    "Other Deductions",
+    // "Advance Payment" — intentionally excluded
+];
 
 export const getForm5DData = async (sector) => {
     try {
         logger.info(`Fetching Form 5D data for sector: ${sector ?? "ALL"}`);
 
+        const isStateSector = sector === "STATE";
+
+        const safe = (v) => {
+            if (v === null || v === undefined) return 0;
+            const n = parseFloat(v.toString());
+            return isNaN(n) ? 0 : n;
+        };
+
+        // ════════════════════════════════════════════════════════
+        // STATE SECTOR — ChallanFromBill only
+        // Receipt side: "Other categories" column = challanFromBill amount
+        // Payment side: "Total Payment" column = challanFromBill amount
+        // All other columns (loansGovt, loansOther, hbLoan, carLoan,
+        // repayGovt, repayOther, loansAdvances) are nil (0)
+        // ════════════════════════════════════════════════════════
+        if (isStateSector) {
+            const challanFromBillRows = await prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: "STATE",
+                    amountType: { in: FORM5D_STATE_AMOUNT_TYPES },
+                },
+                orderBy: { voucharDate: "asc" },
+            });
+
+            logger.info(
+                `Form5D (STATE): Fetched ${challanFromBillRows.length} rows from ChallanFromBill`
+            );
+
+            // ── Receipt rows — "Other categories" column only ────
+            const receiptRows = challanFromBillRows.map((row) => {
+                const amount = safe(row.amount);
+                return {
+                    id: `CFB-RCPT-${row.id}`,
+                    source: "challanFromBill",
+                    cashBookItemNo: row.challanNo ?? "-",
+                    loansGovt: 0,
+                    loansOther: 0,
+                    hbLoan: 0,
+                    carLoan: 0,
+                    otherReceipts: amount,
+                    totalReceipts: amount,
+                };
+            });
+
+            // ── Payment rows — "Total Payment" column only ───────
+            const paymentRows = challanFromBillRows.map((row) => {
+                const amount = safe(row.amount);
+                return {
+                    id: `CFB-PMT-${row.id}`,
+                    vrNo: row.challanNo ?? "-",
+                    repayGovt: 0,
+                    repayOther: 0,
+                    loansAdvances: 0,
+                    totalPayments: amount,
+                };
+            });
+
+            // ── Column grand totals ───────────────────────────────
+            const receiptTotals = receiptRows.reduce(
+                (acc, r) => ({
+                    loansGovt: acc.loansGovt + r.loansGovt,
+                    loansOther: acc.loansOther + r.loansOther,
+                    hbLoan: acc.hbLoan + r.hbLoan,
+                    carLoan: acc.carLoan + r.carLoan,
+                    otherReceipts: acc.otherReceipts + r.otherReceipts,
+                    totalReceipts: acc.totalReceipts + r.totalReceipts,
+                }),
+                { loansGovt: 0, loansOther: 0, hbLoan: 0, carLoan: 0, otherReceipts: 0, totalReceipts: 0 }
+            );
+
+            const paymentTotals = paymentRows.reduce(
+                (acc, r) => ({
+                    repayGovt: acc.repayGovt + r.repayGovt,
+                    repayOther: acc.repayOther + r.repayOther,
+                    loansAdvances: acc.loansAdvances + r.loansAdvances,
+                    totalPayments: acc.totalPayments + r.totalPayments,
+                }),
+                { repayGovt: 0, repayOther: 0, loansAdvances: 0, totalPayments: 0 }
+            );
+
+            logger.info(
+                `Form5D (STATE) done: receiptRows=${receiptRows.length}, paymentRows=${paymentRows.length}, receiptTotal=${receiptTotals.totalReceipts}, paymentTotal=${paymentTotals.totalPayments}`
+            );
+
+            return { receiptRows, paymentRows, receiptTotals, paymentTotals };
+        }
+
+        // ════════════════════════════════════════════════════════
+        // NON-STATE SECTORS — original ChallanTwo + Expenditure logic
+        // ════════════════════════════════════════════════════════
         const sectorFilter =
             sector && sector !== "CONSOLIDATED" ? { sector } : {};
 
@@ -617,12 +880,6 @@ export const getForm5DData = async (sector) => {
         logger.info(
             `Form5D raw: challanTwo=${challanTwoRows.length}, expenditure=${expenditureRows.length}`
         );
-
-        const safe = (v) => {
-            if (v === null || v === undefined) return 0;
-            const n = parseFloat(v.toString());
-            return isNaN(n) ? 0 : n;
-        };
 
         // ── Receipt rows from ChallanTwo ─────────────────────────
         const receiptRowsChallanTwo = challanTwoRows.map((row) => {

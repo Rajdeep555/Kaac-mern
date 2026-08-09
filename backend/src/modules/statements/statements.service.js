@@ -113,6 +113,7 @@ export const getStatement6Data = async ({ sector } = {}) => {
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 5 - Detailed Account of Revenue Receipt by Minor Heads
 // Data comes from 2 tables: challan, challanFromBill
+// (STATE sector: only from StateChallan table — see getStatement5Data)
 // ─────────────────────────────────────────────────────────────
 
 // Amount types allowed from challanFromBill for Statement 5
@@ -175,13 +176,12 @@ const getStatement5ChallanFromBillRows = async (sector) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// NEW — Get rows from StateChallan table
-// Only fetched when sector is STATE or CONSOLIDATED
+// Get rows from StateChallan table
+// Fetched whenever sector is STATE or CONSOLIDATED
 // No isActive field on model — but spec says check isActive:
 // If you add isActive to StateChallan model later, add it to where
 // heads = majorHead → subMajorHead → minorHead → subHead →
 //         subSubHead → detailHead → subDetailHead
-// amount = totalAmount * 100000 (stored in lakhs)
 // ─────────────────────────────────────────────────────────────
 const getStatement5StateChallanRows = async () => {
     const rows = await prisma.stateChallan.findMany({
@@ -223,28 +223,52 @@ const getStatement5StateChallanRows = async () => {
 
 // ─────────────────────────────────────────────────────────────
 // Main Statement 5 function
+//
+// SECTOR RULES:
+// - sector === "STATE"        → StateChallan ONLY (challan + challanFromBill skipped)
+// - sector === "CONSOLIDATED" → Challan + ChallanFromBill (all sectors) + StateChallan
+// - any other sector          → Challan + ChallanFromBill (that sector only), no StateChallan
 // ─────────────────────────────────────────────────────────────
 export const getStatement5Data = async (sector) => {
     try {
         logger.info(`Fetching Statement 5 data for sector: ${sector ?? "ALL"}`);
 
+        const isStateSector = sector === "STATE";
         const includeStateChallans =
             !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-        const [challanRows, challanFromBillRows, stateChallanRows] =
-            await Promise.all([
-                getStatement5ChallanRows(sector),
-                getStatement5ChallanFromBillRows(sector),
-                includeStateChallans
-                    ? getStatement5StateChallanRows()
-                    : Promise.resolve([]),
-            ]);
+        let challanRows = [];
+        let challanFromBillRows = [];
+        let stateChallanRows = [];
+
+        if (isStateSector) {
+            // ── STATE sector: ONLY StateChallan table ────────────
+            logger.info(
+                `Statement5: sector=STATE → skipping Challan & ChallanFromBill, using StateChallan only`
+            );
+            stateChallanRows = await getStatement5StateChallanRows();
+        } else {
+            // ── Non-STATE sectors: original Challan + ChallanFromBill
+            // logic, plus StateChallan when CONSOLIDATED ────────────
+            [challanRows, challanFromBillRows, stateChallanRows] =
+                await Promise.all([
+                    getStatement5ChallanRows(sector),
+                    getStatement5ChallanFromBillRows(sector),
+                    includeStateChallans
+                        ? getStatement5StateChallanRows()
+                        : Promise.resolve([]),
+                ]);
+        }
 
         const allRows = [
             ...challanRows,
             ...challanFromBillRows,
-            ...stateChallanRows,            // ← NEW
+            ...stateChallanRows,
         ];
+
+        logger.info(
+            `Statement5: Total rows going into grouping — challan: ${challanRows.length}, challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
+        );
 
         // ── Group by full head chain ─────────────────────────────
         // Challan / ChallanFromBill group on majorHead-minorHead (2 parts)
@@ -286,7 +310,6 @@ export const getStatement5Data = async (sector) => {
         throw error;
     }
 };
-
 
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 4 - Loans and Advances by the Council
@@ -391,7 +414,6 @@ export const getStatement4Data = async (sector) => {
 // Data source: Expenditure table
 // Groups by full head of account chain
 // ─────────────────────────────────────────────────────────────
-
 export const getStatement2Data = async (sector, financialYear) => {
     try {
         logger.info(
@@ -403,10 +425,13 @@ export const getStatement2Data = async (sector, financialYear) => {
 
         const fyFilter = financialYear ? { financialYear } : {};
 
+        // ── Fetch all active expenditures matching sector + FY ──────
+        // (expenditureType filter removed — now filtering by majorHead
+        // range below, since "Capital" heads are defined by major-head
+        // code range 4001–5999, not by the expenditureType field)
         const expenditures = await prisma.expenditure.findMany({
             where: {
                 isActive: true,
-                expenditureType: "CAPITAL", // ← only capital expenditures
                 ...sectorFilter,
                 ...fyFilter,
             },
@@ -427,9 +452,50 @@ export const getStatement2Data = async (sector, financialYear) => {
             },
         });
 
+        logger.info(`[STATEMENT2] Raw expenditure rows fetched: ${expenditures.length}`);
+
+        // ════════════════════════════════════════════════════════
+        // Filter to Capital heads: majorHead numeric value in
+        // [4001, 5999] inclusive. majorHead is stored as a string,
+        // so parse to int rather than doing a string range compare
+        // (string comparison would sort lexicographically and give
+        // wrong results, e.g. "600" vs "5999").
+        // ════════════════════════════════════════════════════════
+        const isCapitalHead = (majorHead) => {
+            if (!majorHead) return false;
+            const num = parseInt(majorHead, 10);
+            return !Number.isNaN(num) && num >= 4001 && num <= 5999;
+        };
+
+        const capitalExpenditures = expenditures.filter((item) =>
+            isCapitalHead(item.majorHead)
+        );
+
+        // ── DEBUG: log rows excluded due to non-numeric / out-of-range majorHead ──
+        const excludedRows = expenditures.filter(
+            (item) => !isCapitalHead(item.majorHead)
+        );
+        if (excludedRows.length > 0) {
+            logger.info(
+                `[STATEMENT2] Excluded ${excludedRows.length} rows (majorHead outside 4001-5999 or non-numeric)`,
+                {
+                    sampleExcludedMajorHeads: [
+                        ...new Set(excludedRows.map((r) => r.majorHead)),
+                    ].slice(0, 20),
+                }
+            );
+        }
+
+        logger.info(
+            `[STATEMENT2] Capital expenditure rows after majorHead filter: ${capitalExpenditures.length}`
+        );
+
+        // ════════════════════════════════════════════════════════
+        // Group by full head classification chain
+        // ════════════════════════════════════════════════════════
         const groupMap = new Map();
 
-        for (const item of expenditures) {
+        for (const item of capitalExpenditures) {
             const headKey = [
                 item.majorHead,
                 item.subMajorHead,
@@ -476,7 +542,9 @@ export const getStatement2Data = async (sector, financialYear) => {
         );
         const grandTotal = grandTotalPreviousYear + grandTotalCurrentYear;
 
-        logger.info(`Statement 2 total rows returned: ${rows.length}`);
+        logger.info(`[STATEMENT2] Total rows returned: ${rows.length}`, {
+            grandTotalCurrentYear,
+        });
 
         return {
             rows,
@@ -487,7 +555,9 @@ export const getStatement2Data = async (sector, financialYear) => {
             },
         };
     } catch (error) {
-        logger.error(`Error fetching Statement 2 data: ${error.message}`);
+        logger.error(`Error fetching Statement 2 data: ${error.message}`, {
+            stack: error.stack,
+        });
         throw error;
     }
 };
@@ -582,7 +652,9 @@ const FY_MONTHS = [
     { month: "March", num: 3 },
 ];
 
-const CHALLAN_FROM_BILL_AMOUNT_TYPES = [
+// ── ChallanFromBill amountType lists ─────────────────────────
+// PLA-side types
+const CHALLAN_FROM_BILL_PLA_AMOUNT_TYPES = [
     "Professional Tax",
     "Forest Royalty",
     "MC Forest Royalty",
@@ -596,6 +668,35 @@ const CHALLAN_FROM_BILL_AMOUNT_TYPES = [
     "Other Deductions",
 ];
 
+// Cash-side types
+const CHALLAN_FROM_BILL_CASH_AMOUNT_TYPES = [
+    "CGST",
+    "SGST",
+    "IGST",
+    "ITAX",
+    "MDRRF",
+    "DMFT",
+    "Labour Cess",
+    "IT Forest Royalty",
+    "VAT",
+    "CPF Council Share",
+    "CPF Contribution",
+    "CPF Advance",
+];
+
+// Full combined list (23 types) — used for the receipt-side query
+// and as the base for the STATE disbursement-side list below
+const CHALLAN_FROM_BILL_AMOUNT_TYPES = [
+    ...CHALLAN_FROM_BILL_PLA_AMOUNT_TYPES,
+    ...CHALLAN_FROM_BILL_CASH_AMOUNT_TYPES,
+];
+
+// STATE-only disbursement list: all 23 types EXCEPT "Advance Payment"
+// (Advance Payment is receipt-side only for STATE, same rule as the
+// cashbook's ChallanFromBill STATE handling)
+const CHALLAN_FROM_BILL_DISBURSEMENT_AMOUNT_TYPES =
+    CHALLAN_FROM_BILL_AMOUNT_TYPES.filter((t) => t !== "Advance Payment");
+
 export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
     try {
         logger.info(
@@ -603,6 +704,7 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
         );
 
         const isChallanConsolidated = !sector || sector === "CONSOLIDATED";
+        const isStateSector = sector === "STATE";
 
         const challanSectorFilter = isChallanConsolidated ? {} : { challanType: sector };
         const challanFromBillSectorFilter = isChallanConsolidated ? {} : { sector };
@@ -618,7 +720,7 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
             challanFromBills,
             challanTwos,
             expenditures,
-            stateChallans,              // ← NEW
+            stateChallans,
         ] = await Promise.all([
             prisma.openingBalance.findMany({
                 where: { isActive: true, ...(isChallanConsolidated ? {} : { sector }) },
@@ -628,13 +730,16 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                 where: { isActive: true, ...challanSectorFilter },
                 select: { challanDate: true, amount: true },
             }),
+            // Fetch ALL 23 amountTypes here — receipt/disbursement split
+            // happens in JS below, since STATE uses different type lists
+            // for each side.
             prisma.challanFromBill.findMany({
                 where: {
                     isActive: true,
                     amountType: { in: CHALLAN_FROM_BILL_AMOUNT_TYPES },
                     ...challanFromBillSectorFilter,
                 },
-                select: { createdAt: true, amount: true },
+                select: { createdAt: true, amount: true, amountType: true },
             }),
             prisma.challanTwo.findMany({
                 where: { isActive: true, ...challanTwoSectorFilter },
@@ -645,9 +750,7 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                 select: { voucherDate: true, grossAmount: true },
             }),
 
-            // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
-            // No isActive field on model — filter by sector = "STATE"
-            // Only challanDate + totalAmount needed for receipt grouping
+            // StateChallan (STATE / CONSOLIDATED only) — no isActive field
             includeStateChallans
                 ? prisma.stateChallan.findMany({
                     where: { sector: "STATE" },
@@ -658,6 +761,62 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                 })
                 : Promise.resolve([]),
         ]);
+
+        // ── DEBUG: raw fetch counts ──────────────────────────────
+        console.log("[STATEMENT3 DEBUG] ===== RAW TABLE DUMPS =====");
+        console.log("[STATEMENT3 DEBUG] sector param:", JSON.stringify(sector));
+        console.log("[STATEMENT3 DEBUG] financialYear param:", JSON.stringify(financialYear));
+        console.log("[STATEMENT3 DEBUG] isStateSector:", isStateSector);
+
+        console.log(
+            `[STATEMENT3 DEBUG] openingBalances (${openingBalances.length}):`,
+            JSON.stringify(openingBalances, null, 2)
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] challans (${challans.length}):`,
+            JSON.stringify(challans, null, 2)
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] challanFromBills (${challanFromBills.length}):`,
+            JSON.stringify(challanFromBills, null, 2)
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] challanTwos (${challanTwos.length}):`,
+            JSON.stringify(challanTwos, null, 2)
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] expenditures (${expenditures.length}):`,
+            JSON.stringify(expenditures, null, 2)
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] stateChallans (${stateChallans.length}):`,
+            JSON.stringify(stateChallans, null, 2)
+        );
+
+        // ── DEBUG: raw total amounts per table (unscoped by month) ──
+        const rawTotal = (records, amountField) =>
+            records.reduce((s, r) => s + Number(r[amountField] ?? 0), 0);
+
+        console.log(
+            `[STATEMENT3 DEBUG] openingBalances total amount: ${rawTotal(openingBalances, "amount")}`
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] challans total amount: ${rawTotal(challans, "amount")}`
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] challanFromBills total amount (ALL 23 types): ${rawTotal(challanFromBills, "amount")}`
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] challanTwos total amount: ${rawTotal(challanTwos, "amount")}`
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] expenditures total grossAmount: ${rawTotal(expenditures, "grossAmount")}`
+        );
+        console.log(
+            `[STATEMENT3 DEBUG] stateChallans total totalAmount: ${rawTotal(stateChallans, "totalAmount")}`
+        );
+        console.log("[STATEMENT3 DEBUG] ===== END RAW TABLE DUMPS =====");
+        // ── END DEBUG ────────────────────────────────────────────
 
         // ── Helper: get month number from date ───────────────────
         const getMonthNum = (date) =>
@@ -680,15 +839,28 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
         );
 
         const challanByMonth = sumByMonth(challans, "challanDate", "amount");
-        const challanFromBillByMonth = sumByMonth(challanFromBills, "createdAt", "amount");
         const challanTwoByMonth = sumByMonth(challanTwos, "createdAt", "amount");
         const expenditureByMonth = sumByMonth(expenditures, "voucherDate", "grossAmount");
 
-        // ─────────────────────────────────────────────────────────
-        // NEW — StateChallan: sum converted amount by month
-        // totalAmount is in lakhs → multiply by 100000
-        // Uses challanDate as the date field
-        // ─────────────────────────────────────────────────────────
+        // ── ChallanFromBill — RECEIPT side (ALL 23 types, all sectors) ──
+        const challanFromBillReceiptByMonth = sumByMonth(
+            challanFromBills,
+            "createdAt",
+            "amount"
+        );
+
+        // ── ChallanFromBill — DISBURSEMENT side (STATE only, 22 types —
+        // excludes "Advance Payment") ────────────────────────────────
+        const challanFromBillDisbursementRows = challanFromBills.filter(
+            (cfb) => CHALLAN_FROM_BILL_DISBURSEMENT_AMOUNT_TYPES.includes(cfb.amountType)
+        );
+        const challanFromBillDisbursementByMonth = sumByMonth(
+            challanFromBillDisbursementRows,
+            "createdAt",
+            "amount"
+        );
+
+        // ── StateChallan (receipt side, STATE/CONSOLIDATED only) ─────
         const stateChallanByMonth = (() => {
             const map = new Map();
             for (const r of stateChallans) {
@@ -703,6 +875,20 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
             return map;
         })();
 
+        // ── DEBUG: month-wise maps for each table ────────────────
+        const mapToObj = (map) => Object.fromEntries([...map.entries()].sort((a, b) => a[0] - b[0]));
+
+        console.log("[STATEMENT3 DEBUG] ===== MONTH-WISE AGGREGATES =====");
+        console.log("[STATEMENT3 DEBUG] openingByMonth:", JSON.stringify(mapToObj(openingByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] challanByMonth:", JSON.stringify(mapToObj(challanByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] challanFromBillReceiptByMonth (all 23 types):", JSON.stringify(mapToObj(challanFromBillReceiptByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] challanFromBillDisbursementByMonth (22 types, no Advance Payment):", JSON.stringify(mapToObj(challanFromBillDisbursementByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] challanTwoByMonth:", JSON.stringify(mapToObj(challanTwoByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] expenditureByMonth:", JSON.stringify(mapToObj(expenditureByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] stateChallanByMonth:", JSON.stringify(mapToObj(stateChallanByMonth), null, 2));
+        console.log("[STATEMENT3 DEBUG] ===== END MONTH-WISE AGGREGATES =====");
+        // ── END DEBUG ────────────────────────────────────────────
+
         // ── Build rows with carry-forward logic ──────────────────
         let carryForward = 0;
 
@@ -712,13 +898,30 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                     ? (openingByMonth.get(num) ?? 0)
                     : carryForward;
 
-            const receipt =
-                (challanByMonth.get(num) ?? 0) +
-                (challanFromBillByMonth.get(num) ?? 0) +
-                (challanTwoByMonth.get(num) ?? 0) +
-                (stateChallanByMonth.get(num) ?? 0);  // ← NEW
+            let receipt;
+            let disbursement;
 
-            const disbursement = expenditureByMonth.get(num) ?? 0;
+            if (isStateSector) {
+                // ── STATE: Receipt = challanFromBill (ALL types) + stateChallan
+                receipt =
+                    (challanFromBillReceiptByMonth.get(num) ?? 0) +
+                    (stateChallanByMonth.get(num) ?? 0);
+
+                // ── STATE: Disbursement = challanFromBill (excl. Advance
+                // Payment) + expenditure
+                disbursement =
+                    (challanFromBillDisbursementByMonth.get(num) ?? 0) +
+                    (expenditureByMonth.get(num) ?? 0);
+            } else {
+                // ── Non-STATE (COUNCIL / CONSOLIDATED): original logic
+                receipt =
+                    (challanByMonth.get(num) ?? 0) +
+                    (challanFromBillReceiptByMonth.get(num) ?? 0) +
+                    (challanTwoByMonth.get(num) ?? 0) +
+                    (stateChallanByMonth.get(num) ?? 0);
+
+                disbursement = expenditureByMonth.get(num) ?? 0;
+            }
 
             const closingBalance = openingBalance + receipt - disbursement;
 
@@ -733,6 +936,12 @@ export const getStatement3WaysAndMeansData = async (sector, financialYear) => {
                 closingBalance: closingBalance.toFixed(2),
             };
         });
+
+        // ── DEBUG: final row-by-row breakdown ────────────────────
+        console.log("[STATEMENT3 DEBUG] ===== FINAL ROWS =====");
+        console.log(JSON.stringify(rows, null, 2));
+        console.log("[STATEMENT3 DEBUG] ===== END FINAL ROWS =====");
+        // ── END DEBUG ────────────────────────────────────────────
 
         logger.info(`Statement 3 Ways & Means rows built: ${rows.length}`);
 

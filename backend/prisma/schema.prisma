@@ -8,23 +8,23 @@ datasource db {
 }
 
 model User {
-  id             Int              @id @default(autoincrement())
-  name           String
-  email          String           @unique
-  password       String
-  isActive       Boolean          @default(true)
-  role           UserRole         @default(CASHIER)
+  id                  Int              @id @default(autoincrement())
+  name                String
+  email               String           @unique
+  password            String
+  isActive            Boolean          @default(true)
+  role                UserRole         @default(CASHIER)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
   canViewAllEntries   Boolean          @default(false)
   canEditAllEntries   Boolean          @default(false)
   canDeleteAllEntries Boolean          @default(false)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  cashReceipt    CashReceipt[]
-  challans       Challan[]
-  expenditures   Expenditure[]
-  openingBalance OpeningBalance[]
-  treasuryPla    TreasuryPla[]
-  stateChallan   StateChallan[]
+  cashReceipt         CashReceipt[]
+  challans            Challan[]
+  expenditures        Expenditure[]
+  openingBalance      OpeningBalance[]
+  treasuryPla         TreasuryPla[]
+  stateChallan        StateChallan[]
 }
 
 model Division {
@@ -149,35 +149,26 @@ model Heads {
 model ChallanHeads {
   id                   Int      @id @default(autoincrement())
   majorHead            String
-  subMajor             String?   // Sub Major Head name
-  minorHead            String?   // Minor Head name
-  subHead              String?   // Sub Head name
-  subSubHead           String?   // Sub Sub Head name
-  detailHead           String?   // Detail Head name  ← NEW
+  subMajor             String?
+  minorHead            String?
+  subHead              String?
+  subSubHead           String?
+  detailHead           String?
   isActive             Boolean  @default(true)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @default(now()) @updatedAt
   majorHeadCode        String   @default("0")
   subMajorCode         String?  @default("0")
-  subMajorParentCode   String?  @default("0")   // parent: majorHeadCode
-
-  // Level 3 — Minor Head  (was subSubMajor)
+  subMajorParentCode   String?  @default("0")
   minorHeadCode        String?  @default("0")
-  minorHeadParentCode  String?  @default("0")   // parent: subMajorCode
-
-  // Level 4 — Sub Head  (was minorHead)
+  minorHeadParentCode  String?  @default("0")
   subHeadCode          String?  @default("0")
-  subHeadParentCode    String?  @default("0")   // parent: minorHeadCode
-
-  // Level 5 — Sub Sub Head  (was detailHead)
+  subHeadParentCode    String?  @default("0")
   subSubHeadCode       String?  @default("0")
-  subSubHeadParentCode String?  @default("0")   // parent: subHeadCode
-
-  // Level 6 — Detail Head  ← NEW
+  subSubHeadParentCode String?  @default("0")
   detailHeadCode       String?  @default("0")
-  detailHeadParentCode String?  @default("0")   // parent: subSubHeadCode
+  detailHeadParentCode String?  @default("0")
 }
-
 
 model Challan {
   id                  Int         @id @default(autoincrement())
@@ -193,8 +184,6 @@ model Challan {
   majorHead           String
   subMajorHead        String
   minorHead           String
-  subHead             String
-  subSubHead          String
   detailHead          String
   treasuryCode        String?
   treasuryChallanNo   String?
@@ -204,6 +193,8 @@ model Challan {
   isActive            Boolean     @default(true)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
+  subHead             String
+  subSubHead          String
   user                User        @relation(fields: [cashierId], references: [id])
   ddo                 DDO         @relation(fields: [ddoId], references: [id])
   department          Department  @relation(fields: [departmentId], references: [id])
@@ -411,39 +402,39 @@ model cashbookInformations {
 }
 
 model StateChallan {
-  challanNo          String? @unique
-  challanDate        DateTime?
-  cashierId          Int
-  stateNo            String?
-  from               String?
-  to                 String?
-  subject            String?
-  ddo                String?
-  divisionCode       String?
-  grantNo            String?
-  majorHead          String?
-  subMajorHead       String?
-  minorHead          String?
-  subHead            String?
-  subSubHead         String?
-  detailHead         String?
-  subDetailHead      String?
-  purpose            String?
-  remarks            String?
-  totalAmount        Float?
-  amountInWords      String?
-  focNo              String?
-  sanctionLetterNo   String?
-  sanctionLetterDate DateTime?
-  treasuryCode       String?
-  treasuryChallanNo  String?
+  challanNo           String?
+  challanDate         DateTime?
+  cashierId           Int
+  stateNo             String?
+  from                String?
+  to                  String?
+  subject             String?
+  ddo                 String?
+  divisionCode        String?
+  majorHead           String?
+  subMajorHead        String?
+  minorHead           String?
+  subHead             String?
+  subSubHead          String?
+  detailHead          String?
+  subDetailHead       String?
+  purpose             String?
+  remarks             String?
+  totalAmount         Float?
+  amountInWords       String?
+  focNo               String?
+  sanctionLetterNo    String?
+  sanctionLetterDate  DateTime?
+  treasuryCode        String?
+  treasuryChallanNo   String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  sector              Sector
+  id                  Int       @id @default(autoincrement())
+  grantNo             String?
+  isActive            Boolean   @default(true)
   treasuryChallanDate DateTime?
-  isActive           Boolean   @default(true)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  sector             Sector
-  id                 Int       @id @default(autoincrement())
-  user               User      @relation(fields: [cashierId], references: [id])
+  user                User      @relation(fields: [cashierId], references: [id])
 
   @@map("state_challans")
 }
@@ -478,7 +469,3 @@ enum ChallanType {
   COUNCIL
   CSS
 }
-
-
-
-
