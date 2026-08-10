@@ -175,30 +175,38 @@ const ChallanListModal = ({ title, rows, onClose }) => {
 
   const grandTotal = groupedByDate.reduce((sum, g) => sum + g.subtotal, 0);
 
-  // ── Pivot: real distinct head codes present in the data become columns,
-  //    labeled sequentially "Head 01", "Head 02", ... in sorted order (not
-  //    requiring the underlying code itself to literally be "01"-"17").
-  //    Dates become rows; cell = sum of amounts for that date+head, blank
-  //    when none. ──
+  // ── Pivot: fixed 17 columns (Head 01 – Head 17). Each column corresponds
+  //    to the numeric value of majorHead (e.g. "011" -> 11 -> "11"), not
+  //    to the order codes happen to appear in the data. Columns with no
+  //    data for a given date are left blank. Any code that doesn't parse
+  //    to 1-17 is bucketed separately and ignored in the fixed grid. ──
+  const HEAD_COUNT = 17;
+
+  const normalizeHead = (code) => {
+    const num = parseInt(code, 10);
+    if (isNaN(num) || num < 1 || num > HEAD_COUNT) return null;
+    return String(num).padStart(2, "0");
+  };
+
   const { heads, headLabels, pivotRows, headTotals } = useMemo(() => {
-    const distinctCodes = Array.from(new Set(rows.map((r) => headCode(r))));
-    const sortedCodes = distinctCodes.sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true }),
+    // Fixed set of column keys: "01".."17"
+    const fixedHeads = Array.from({ length: HEAD_COUNT }, (_, i) =>
+      String(i + 1).padStart(2, "0"),
     );
 
-    // Map real code -> sequential display label, e.g. "011" -> "Head 01"
     const labelByCode = {};
-    sortedCodes.forEach((code, idx) => {
-      labelByCode[code] = `Head ${String(idx + 1).padStart(2, "0")}`;
+    fixedHeads.forEach((code) => {
+      labelByCode[code] = code;
     });
 
     const byDate = new Map();
     rows.forEach((r) => {
-      const code = headCode(r);
+      const normalized = normalizeHead(headCode(r));
+      if (!normalized) return; // skip codes outside 1-17, or unparsable
       const dateKey = r.challanDate || "Unknown Date";
       if (!byDate.has(dateKey)) byDate.set(dateKey, {});
       const bucket = byDate.get(dateKey);
-      bucket[code] = (bucket[code] || 0) + (r.amount || 0);
+      bucket[normalized] = (bucket[normalized] || 0) + (r.amount || 0);
     });
 
     const sortedDates = Array.from(byDate.keys()).sort((a, b) =>
@@ -212,12 +220,12 @@ const ChallanListModal = ({ title, rows, onClose }) => {
     });
 
     const totalsOut = {};
-    sortedCodes.forEach((code) => {
+    fixedHeads.forEach((code) => {
       totalsOut[code] = rowsOut.reduce((s, r) => s + (r.amounts[code] || 0), 0);
     });
 
     return {
-      heads: sortedCodes,
+      heads: fixedHeads,
       headLabels: labelByCode,
       pivotRows: rowsOut,
       headTotals: totalsOut,
@@ -225,7 +233,6 @@ const ChallanListModal = ({ title, rows, onClose }) => {
   }, [rows]);
 
   const pivotGrandTotal = Object.values(headTotals).reduce((s, v) => s + v, 0);
-
   const handleDownload = () => {
     if (viewMode === "list") {
       downloadChallanCsv(groupedByDate, title);
