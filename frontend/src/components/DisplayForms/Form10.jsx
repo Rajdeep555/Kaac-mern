@@ -50,6 +50,16 @@ const Form10 = ({ sector }) => {
 
   const { rows = [], summary = {} } = form10Data ?? {};
 
+  // Compute totals for the Receipts and Payments columns
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.receipt += Number(row.receipt) || 0;
+      acc.payment += Number(row.payment) || 0;
+      return acc;
+    },
+    { receipt: 0, payment: 0 },
+  );
+
   return (
     <div className="w-full overflow-x-auto bg-white border-2">
       {/* Header */}
@@ -116,6 +126,22 @@ const Form10 = ({ sector }) => {
                 ))}
               </tr>
             ))}
+
+            {/* Total row */}
+            {rows.length > 0 && (
+              <tr className="border bg-gray-100 font-bold">
+                <td colSpan={2} className="border py-2 px-2 text-right pr-4">
+                  TOTAL
+                </td>
+                <td className="border py-2 px-2">
+                  <AmountCell value={totals.receipt} />
+                </td>
+                <td className="border py-2 px-2">
+                  <AmountCell value={totals.payment} />
+                </td>
+                <td className="border py-2 px-2">-</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

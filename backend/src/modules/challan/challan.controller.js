@@ -1,5 +1,6 @@
 import {
     createChallan,
+    deleteChallan,
     getAllChallans,
     getChallanById,
     updateChallan,
@@ -93,6 +94,21 @@ export const getAllChallansController = async (req, res) => {
         });
     } catch (error) {
         return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+
+export const deleteChallanController = async (req, res) => {
+    try {
+        await deleteChallan(req.params.id, req.user.id, req.user.role);
+        return res.status(200).json({
+            success: true,
+            message: "Challan deleted successfully",
+        });
+    } catch (error) {
+        return res.status(403).json({
             success: false,
             message: error.message,
         });

@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DataTable from "../../components/DataTable/DataTable";
-import { getAllChallans } from "../../api/challan.api";
+import { getAllChallans, deleteChallan } from "../../api/challan.api";
 import { useNavigate } from "react-router-dom";
 import { showToast } from "../../utils/toast";
-import { LuDownload } from "react-icons/lu";
+import { LuDownload, LuTrash2 } from "react-icons/lu";
 
 // ── Module-level cache — survives tab switches, cleared on mutation ──
 let _challanCache = null;
@@ -441,6 +441,44 @@ const ChallanListModal = ({ title, rows, onClose }) => {
   );
 };
 
+// ── Delete confirmation modal ──
+const DeleteConfirmModal = ({ challan, onCancel, onConfirm, deleting }) => {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onCancel}>
+      <div
+        className="w-full max-w-sm bg-white rounded-lg shadow-lg p-5"
+        onClick={(e) => e.stopPropagation()}>
+        <h2 className="font-unbounded text-lg font-normal mb-2">
+          Delete Challan
+        </h2>
+        <p className="text-sm text-zinc-500 mb-5">
+          Are you sure you want to delete challan{" "}
+          <span className="font-semibold text-zinc-700">
+            {challan.challanNo}
+          </span>
+          ? This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="px-4 py-2 text-sm rounded border border-zinc-300 text-zinc-600 hover:bg-zinc-50 transition disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="px-4 py-2 text-sm rounded bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50">
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Clickable stat card ──
 const StatCard = ({ label, count, onClick, accent = "blue" }) => {
   const accentClasses =
@@ -467,6 +505,8 @@ const GeneratedChallans = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [activeModal, setActiveModal] = useState(null); // "today" | "filtered" | null
+  const [challanToDelete, setChallanToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
 
   const fetchChallans = async (force = false) => {
@@ -528,6 +568,31 @@ const GeneratedChallans = () => {
     setToDate("");
   };
 
+  // ── Delete handling ──
+  const handleDeleteConfirm = async () => {
+    if (!challanToDelete) return;
+    setDeleting(true);
+    try {
+      const res = await deleteChallan(challanToDelete.id);
+      if (res.data.success) {
+        showToast("Challan deleted", "success");
+        invalidateChallanCache();
+        setChallans((prev) => prev.filter((c) => c.id !== challanToDelete.id));
+        setChallanToDelete(null);
+      } else {
+        showToast(res.data.message || "Failed to delete challan", "error");
+      }
+    } catch (error) {
+      console.error(error);
+      showToast(
+        error?.response?.data?.message || "Failed to delete challan",
+        "error",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const columns = [
     { key: "challanNo", label: "Challan No" },
     { key: "challanDate", label: "Date" },
@@ -540,11 +605,19 @@ const GeneratedChallans = () => {
       key: "action",
       label: "Action",
       render: (_, row) => (
-        <button
-          onClick={() => navigate(`/challan/${row.id}`)}
-          className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
-          Edit
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(`/challan/${row.id}`)}
+            className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
+            Edit
+          </button>
+          <button
+            onClick={() => setChallanToDelete(row)}
+            title="Delete challan"
+            className="flex items-center justify-center w-8 h-8 rounded border border-red-200 text-red-600 hover:bg-red-50 transition">
+            <LuTrash2 size={14} />
+          </button>
+        </div>
       ),
     },
   ];
@@ -661,6 +734,15 @@ const GeneratedChallans = () => {
           title={`Challans (${fromDate || "…"} to ${toDate || "…"})`}
           rows={filteredChallans}
           onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {challanToDelete && (
+        <DeleteConfirmModal
+          challan={challanToDelete}
+          deleting={deleting}
+          onCancel={() => setChallanToDelete(null)}
+          onConfirm={handleDeleteConfirm}
         />
       )}
     </div>

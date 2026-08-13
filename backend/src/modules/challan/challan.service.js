@@ -143,6 +143,17 @@ export const getChallanById = async (id, userId, role, canViewAllEntries) => {
     }
 };
 
+export const deleteChallan = async (id) => {
+    try {
+        const existing = await prisma.challan.findUnique({ where: { id } });
+        if (!existing) throw new Error("Challan not found");
+        return await prisma.challan.delete({ where: { id } });
+    } catch (error) {
+        logger.error("Delete Challan Error:", error);
+        throw error;
+    }
+}
+
 export const getAllChallans = async ({
     page = 1,
     limit = 10,

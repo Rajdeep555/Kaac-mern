@@ -1,13 +1,13 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
+
+
 // ─────────────────────────────────────────────────────────────
 // FORM 7A - Compilation Sheet
 // Data from: Expenditure table
 // Grouped by: majorHead → minorHead → detailHead
 // Shows subtotal after each detailHead, minorHead, majorHead group
 // ─────────────────────────────────────────────────────────────
-
-
 export const getForm7AData = async (sector) => {
     try {
         logger.info(`Fetching Form 7A data for sector: ${sector ?? "ALL"}`);
@@ -138,12 +138,29 @@ export const getForm7AData = async (sector) => {
 };
 
 
+
 // ─────────────────────────────────────────────────────────────
 // FORM 7B - Compilation Sheet (Receipts)
 // Data from 3 tables:
-//   challan         → all active, use challanDate
+//   challan         → use challanDate
+//                     - sector = STATE            → skipped (stateChallan is the only source)
+//                     - sector = COUNCIL/CONSOLIDATED → ALL active rows, no challanType filter
+//                     - any other sector          → filtered by challanType
 //   challanTwo      → grantsInAid amount only, use kaacChallanDate
-//   challanFromBill → only specific amountTypes, use voucharDate
+//                     - sector = STATE / COUNCIL  → skipped
+//                     - sector = CONSOLIDATED     → all rows, no filter
+//                     - any other sector          → filtered by sector
+//   challanFromBill → use voucharDate
+//                     - sector = STATE   → skipped
+//                     - sector = COUNCIL → union of:
+//                         (a) sector = STATE   AND amountType IN allowed 4 types
+//                         (b) sector = COUNCIL AND amountType NOT IN excluded types
+//                     - sector = CONSOLIDATED → union of:
+//                         (a) sector != COUNCIL AND amountType IN allowed 4 types
+//                         (b) sector = COUNCIL AND amountType NOT IN excluded types
+//                     - any other sector → filtered by sector, amountType IN allowed 4 types (unchanged)
+//   stateChallan    → totalAmount * 100000, use challanDate
+//                     (STATE / CONSOLIDATED only; the ONLY source when sector = STATE)
 // Grouped by: majorHead → minorHead
 // Shows subtotal after each minorHead and majorHead group
 // ─────────────────────────────────────────────────────────────
@@ -155,44 +172,118 @@ const FORM7B_ALLOWED_AMOUNT_TYPES = [
     "MC Forest Royalty",
 ];
 
+// Amount types EXCLUDED when pulling COUNCIL-sector challanFromBill rows for Form 7B
+const FORM7B_COUNCIL_EXCLUDED_AMOUNT_TYPES = [
+    "CGST",
+    "SGST",
+    "IGST",
+    "ITAX",
+    "MDRRF",
+    "DMFT",
+    "Labour Cess",
+    "IT Forest Royalty",
+    "VAT",
+    "Advance Payment",
+];
+
+// ── challanFromBill fetch strategy, split out because the rule differs per sector ──
+const getForm7BChallanFromBillRows = (sector, isCouncilOnly, isConsolidated) => {
+    if (isCouncilOnly) {
+        // (a) STATE rows restricted to the 4 allowed amount types
+        // (b) COUNCIL rows excluding the Form7B-specific excluded types
+        return Promise.all([
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: "STATE",
+                    amountType: { in: FORM7B_ALLOWED_AMOUNT_TYPES },
+                },
+            }),
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: "COUNCIL",
+                    amountType: { notIn: FORM7B_COUNCIL_EXCLUDED_AMOUNT_TYPES },
+                },
+            }),
+        ]).then(([stateTypedRows, councilRows]) => [...stateTypedRows, ...councilRows]);
+    }
+
+    if (isConsolidated) {
+        // (a) every non-COUNCIL sector, restricted to the 4 allowed amount types (original rule)
+        // (b) COUNCIL sector, broader rule — excluding only the Form7B-specific excluded types
+        return Promise.all([
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    amountType: { in: FORM7B_ALLOWED_AMOUNT_TYPES },
+                    NOT: { sector: "COUNCIL" },
+                },
+            }),
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: "COUNCIL",
+                    amountType: { notIn: FORM7B_COUNCIL_EXCLUDED_AMOUNT_TYPES },
+                },
+            }),
+        ]).then(([genericAllowedRows, councilRows]) => [...genericAllowedRows, ...councilRows]);
+    }
+
+    // any other specific sector — original, unchanged behaviour
+    return prisma.challanFromBill.findMany({
+        where: {
+            isActive: true,
+            amountType: { in: FORM7B_ALLOWED_AMOUNT_TYPES },
+            sector,
+        },
+    });
+};
+
 export const getForm7BData = async (sector) => {
     try {
         logger.info(`Fetching Form 7B data for sector: ${sector ?? "ALL"}`);
 
+        const isStateOnly = sector === "STATE";
+        const isCouncilOnly = sector === "COUNCIL";
+        const isConsolidated = !sector || sector === "CONSOLIDATED";
+
         // ── Build where clauses ──────────────────────────────────
+        // Challan: COUNCIL/CONSOLIDATED → all rows, no challanType filter
         const challanWhere = { isActive: true };
-        if (sector && sector !== "CONSOLIDATED") {
+        if (!isStateOnly && !isCouncilOnly && !isConsolidated) {
             challanWhere.challanType = sector;
         }
 
+        // ChallanTwo: STATE/COUNCIL → skipped, CONSOLIDATED → no filter
         const challanTwoWhere = { isActive: true };
-        if (sector && sector !== "CONSOLIDATED") {
+        if (sector && sector !== "CONSOLIDATED" && sector !== "STATE") {
             challanTwoWhere.sector = sector;
         }
 
-        const challanFromBillWhere = {
-            isActive: true,
-            amountType: { in: FORM7B_ALLOWED_AMOUNT_TYPES },
-        };
-        if (sector && sector !== "CONSOLIDATED") {
-            challanFromBillWhere.sector = sector;
-        }
-
-        const includeStateChallans =
-            !sector || sector === "CONSOLIDATED" || sector === "STATE";
+        const includeStateChallans = isStateOnly || isConsolidated;
 
         // ── Fetch all tables in parallel ─────────────────────────
         const [
             challanRows,
             challanTwoRows,
             challanFromBillRows,
-            stateChallanRows,               // ← NEW
+            stateChallanRows,
         ] = await Promise.all([
-            prisma.challan.findMany({ where: challanWhere }),
-            prisma.challanTwo.findMany({ where: challanTwoWhere }),
-            prisma.challanFromBill.findMany({ where: challanFromBillWhere }),
+            // Skipped entirely for sector = STATE — StateChallan is the only source
+            isStateOnly
+                ? Promise.resolve([])
+                : prisma.challan.findMany({ where: challanWhere }),
 
-            // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
+            (isStateOnly || isCouncilOnly)
+                ? Promise.resolve([])
+                : prisma.challanTwo.findMany({ where: challanTwoWhere }),
+
+            isStateOnly
+                ? Promise.resolve([])
+                : getForm7BChallanFromBillRows(sector, isCouncilOnly, isConsolidated),
+
+            // StateChallan (STATE / CONSOLIDATED only)
             // No isActive field on model — filter by sector = "STATE"
             includeStateChallans
                 ? prisma.stateChallan.findMany({
@@ -217,7 +308,7 @@ export const getForm7BData = async (sector) => {
 
         // ── Sanitize all rows into same plain shape ───────────────
         const allEntries = [
-            // From challan
+            // From challan (no-op for sector = STATE — challanRows is [])
             ...challanRows.map((row) => ({
                 majorHead: row.majorHead ?? "Unknown",
                 minorHead: row.minorHead ?? "-",
@@ -229,7 +320,7 @@ export const getForm7BData = async (sector) => {
                 source: "challan",
             })),
 
-            // From challanTwo — use grantsInAid as amount
+            // From challanTwo — use grantsInAid as amount (no-op for STATE/COUNCIL)
             ...challanTwoRows
                 .filter((row) => row.grantsInAid && parseFloat(row.grantsInAid.toString()) > 0)
                 .map((row) => ({
@@ -243,7 +334,7 @@ export const getForm7BData = async (sector) => {
                     source: "challanTwo",
                 })),
 
-            // From challanFromBill
+            // From challanFromBill (no-op for sector = STATE — challanFromBillRows is [])
             ...challanFromBillRows.map((row) => ({
                 majorHead: row.majorHead ?? "Unknown",
                 minorHead: row.minorHead ?? "-",
@@ -256,10 +347,11 @@ export const getForm7BData = async (sector) => {
             })),
 
             // ─────────────────────────────────────────────────────
-            // NEW — From stateChallan
+            // From stateChallan
             // amount  = totalAmount * 100000 (stored in lakhs)
             // date    = challanDate
             // Only include rows where converted amount > 0
+            // For sector = STATE, this is the ONLY source contributing entries.
             // ─────────────────────────────────────────────────────
             ...stateChallanRows
                 .filter((row) => row.totalAmount != null && row.totalAmount > 0)
@@ -284,7 +376,6 @@ export const getForm7BData = async (sector) => {
             const mnh = entry.minorHead;
             const amt = entry.amount;
 
-            // Initialize majorHead
             if (!grouped[mh]) {
                 grouped[mh] = {
                     majorHead: mh,
@@ -293,7 +384,6 @@ export const getForm7BData = async (sector) => {
                 };
             }
 
-            // Initialize minorHead
             if (!grouped[mh].minorHeads[mnh]) {
                 grouped[mh].minorHeads[mnh] = {
                     minorHead: mnh,
@@ -302,14 +392,12 @@ export const getForm7BData = async (sector) => {
                 };
             }
 
-            // Push plain entry
             grouped[mh].minorHeads[mnh].entries.push({
                 cashbookNo: entry.cashbookNo,
                 date: entry.date,
                 amount: amt,
             });
 
-            // Accumulate totals
             grouped[mh].minorHeads[mnh].minorTotal += amt;
             grouped[mh].majorTotal += amt;
             grandTotal += amt;
@@ -339,201 +427,292 @@ export const getForm7BData = async (sector) => {
     }
 };
 
+
 // ─────────────────────────────────────────────────────────────
 // FORM 8 - Receipt Schedule (Revenue Head)
-// Data from 3 tables: challan, challanTwo, challanFromBill
 //
-// Column logic:
-//   challan:
-//     departmentId 8001–8016 → councilRevenue
-//     departmentId 8017      → grantsInAid
-//     else                   → miscReceipt
-//   challanTwo:
-//     grantsInAid field      → grantsInAid column
-//   challanFromBill:
-//     amount                 → councilRevenue column
+// SECTOR RULES:
+// - sector === "STATE"        → UNCHANGED. StateChallan ONLY, mapped
+//                                 to grantsInAid. Extracted verbatim
+//                                 into getForm8StateRows() below.
+// - sector === "COUNCIL"      → REBUILT.
+//                                 • Name of Deptt: head code chain
+//                                   (+ amountType for ChallanFromBill
+//                                   rows) as nomenclature.
+//                                 • Revenue Receipt (councilRevenue):
+//                                   (a) Challan table, majorHead
+//                                       numeric range 1–16, NO sector
+//                                       filter.
+//                                   (b) ChallanFromBill, sector IN
+//                                       [COUNCIL, STATE], amountType
+//                                       in the 4 treasury types
+//                                       (Professional Tax, Forest
+//                                       Royalty, MC Forest Royalty,
+//                                       Monopoly) — cross-sector pull
+//                                       from STATE is intentional.
+//                                 • Grants in Aid (grantsInAid):
+//                                       Challan table, majorHead =
+//                                       "017", NO sector filter.
+//                                 • Other Misc Receipt (miscReceipt):
+//                                       ChallanFromBill, sector =
+//                                       COUNCIL, amountType in
+//                                       ["House Rent",
+//                                       "Other Deductions"].
+//                                 • ChallanTwo is no longer used at
+//                                   all for COUNCIL.
+// - sector === "CONSOLIDATED" → STATE's rows + COUNCIL's rows,
+//                                 merged before computing totals.
+// - any other sector          → no rule defined, empty result.
 // ─────────────────────────────────────────────────────────────
 
-const FORM8_ALLOWED_AMOUNT_TYPES = [
+const FORM8_COUNCIL_REVENUE_TREASURY_TYPES = [
     "Professional Tax",
-    "Monopoly",
     "Forest Royalty",
     "MC Forest Royalty",
+    "Monopoly",
 ];
+
+const FORM8_COUNCIL_MISC_TYPES = ["House Rent", "Other Deductions"];
+
+const isMajorHeadInCouncilRevenueRangeForm8 = (majorHead) => {
+    if (!majorHead) return false;
+    const num = parseInt(majorHead, 10);
+    return !Number.isNaN(num) && num >= 1 && num <= 16;
+};
+
+const buildChallanNomenclatureForm8 = (row) =>
+    [
+        row.majorHead,
+        row.subMajorHead,
+        row.minorHead,
+        row.subHead,
+        row.subSubHead,
+        row.detailHead,
+    ]
+        .filter((p) => p && p.toString().trim() !== "")
+        .join(" - ") || "-";
+
+// ════════════════════════════════════════════════════════════
+// STATE — UNCHANGED logic, extracted verbatim into its own
+// function so CONSOLIDATED can call it alongside COUNCIL.
+// ════════════════════════════════════════════════════════════
+const getForm8StateRows = async () => {
+    const stateChallanRows = await prisma.stateChallan.findMany({
+        where: { sector: "STATE" },
+        select: {
+            id: true,
+            challanNo: true,
+            totalAmount: true,
+            majorHead: true,
+            subMajorHead: true,
+            minorHead: true,
+            subHead: true,
+            subSubHead: true,
+            detailHead: true,
+            subDetailHead: true,
+        },
+        orderBy: { challanDate: "asc" },
+    });
+
+    logger.info(`Form8 (STATE): stateChallan=${stateChallanRows.length}`);
+
+    const rows = [];
+
+    stateChallanRows.forEach((row) => {
+        if (row.totalAmount == null || row.totalAmount === 0) return;
+
+        const amount = parseFloat((row.totalAmount).toFixed(2));
+
+        const nomenclature = [
+            row.majorHead,
+            row.subMajorHead,
+            row.minorHead,
+            row.subHead,
+            row.subSubHead,
+            row.detailHead,
+            row.subDetailHead,
+        ]
+            .filter((p) => p && p.trim() !== "")
+            .join(" - ") || "-";
+
+        rows.push({
+            cbItemNo: row.challanNo ?? "-",
+            nomenclature,
+            councilRevenue: 0,
+            grantsInAid: amount,
+            miscReceipt: 0,
+            total: amount,
+            source: "stateChallan",
+        });
+    });
+
+    return rows;
+};
+
+// ════════════════════════════════════════════════════════════
+// COUNCIL — REBUILT logic.
+// ════════════════════════════════════════════════════════════
+const getForm8CouncilRows = async () => {
+    const [challanRows, challanFromBillTreasuryRows, challanFromBillMiscRows] =
+        await Promise.all([
+            // ALL Challan rows, no sector/challanType filter — split
+            // into revenue (majorHead 1-16) and grants (majorHead
+            // "017") buckets in JS below.
+            prisma.challan.findMany({
+                where: { isActive: true },
+                select: {
+                    id: true,
+                    challanNo: true,
+                    majorHead: true,
+                    subMajorHead: true,
+                    minorHead: true,
+                    subHead: true,
+                    subSubHead: true,
+                    detailHead: true,
+                    amount: true,
+                },
+                orderBy: { challanDate: "asc" },
+            }),
+            // Cross-sector: COUNCIL's own + STATE's treasury-type rows
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: { in: ["COUNCIL", "STATE"] },
+                    amountType: { in: FORM8_COUNCIL_REVENUE_TREASURY_TYPES },
+                },
+                select: {
+                    id: true,
+                    challanNo: true,
+                    amountType: true,
+                    amount: true,
+                },
+                orderBy: { voucharDate: "asc" },
+            }),
+            // COUNCIL-only misc receipt types
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: "COUNCIL",
+                    amountType: { in: FORM8_COUNCIL_MISC_TYPES },
+                },
+                select: {
+                    id: true,
+                    challanNo: true,
+                    amountType: true,
+                    amount: true,
+                },
+                orderBy: { voucharDate: "asc" },
+            }),
+        ]);
+
+    logger.info(
+        `Form8 (COUNCIL): challan=${challanRows.length}, challanFromBillTreasury=${challanFromBillTreasuryRows.length}, ` +
+        `challanFromBillMisc=${challanFromBillMiscRows.length}`
+    );
+
+    const revenueChallanRows = challanRows.filter((row) =>
+        isMajorHeadInCouncilRevenueRangeForm8(row.majorHead)
+    );
+    const grantsChallanRows = challanRows.filter(
+        (row) => row.majorHead?.toString().trim() === "017"
+    );
+
+    const rows = [];
+
+    // 1. Revenue Receipt — Challan majorHead 1-16
+    revenueChallanRows.forEach((row) => {
+        const amount = parseFloat(row.amount?.toString() ?? "0");
+        if (!amount) return;
+
+        rows.push({
+            cbItemNo: row.challanNo ?? "-",
+            nomenclature: buildChallanNomenclatureForm8(row),
+            councilRevenue: amount,
+            grantsInAid: 0,
+            miscReceipt: 0,
+            total: amount,
+            source: "challan-revenue",
+        });
+    });
+
+    // 2. Revenue Receipt — ChallanFromBill treasury types, COUNCIL + STATE
+    challanFromBillTreasuryRows.forEach((row) => {
+        const amount = parseFloat(row.amount?.toString() ?? "0");
+        if (!amount) return;
+
+        rows.push({
+            cbItemNo: row.challanNo ?? "-",
+            nomenclature: row.amountType ?? "-",
+            councilRevenue: amount,
+            grantsInAid: 0,
+            miscReceipt: 0,
+            total: amount,
+            source: "challanFromBill-revenue",
+        });
+    });
+
+    // 3. Grants in Aid — Challan majorHead = "017"
+    grantsChallanRows.forEach((row) => {
+        const amount = parseFloat(row.amount?.toString() ?? "0");
+        if (!amount) return;
+
+        rows.push({
+            cbItemNo: row.challanNo ?? "-",
+            nomenclature: buildChallanNomenclatureForm8(row),
+            councilRevenue: 0,
+            grantsInAid: amount,
+            miscReceipt: 0,
+            total: amount,
+            source: "challan-grants",
+        });
+    });
+
+    // 4. Other Misc Receipt — ChallanFromBill, COUNCIL only, House Rent / Other Deductions
+    challanFromBillMiscRows.forEach((row) => {
+        const amount = parseFloat(row.amount?.toString() ?? "0");
+        if (!amount) return;
+
+        rows.push({
+            cbItemNo: row.challanNo ?? "-",
+            nomenclature: row.amountType ?? "-",
+            councilRevenue: 0,
+            grantsInAid: 0,
+            miscReceipt: amount,
+            total: amount,
+            source: "challanFromBill-misc",
+        });
+    });
+
+    logger.info(`Form8 (COUNCIL): total rows=${rows.length}`);
+
+    return rows;
+};
 
 export const getForm8Data = async (sector) => {
     try {
         logger.info(`Fetching Form 8 data for sector: ${sector ?? "ALL"}`);
 
-        const challanWhere = { isActive: true };
-        if (sector && sector !== "CONSOLIDATED") {
-            challanWhere.challanType = sector;
+        const isStateSector = sector === "STATE";
+        const isCouncilSector = sector === "COUNCIL";
+        const isConsolidated = sector === "CONSOLIDATED";
+
+        let rows = [];
+
+        if (isStateSector) {
+            rows = await getForm8StateRows();
+        } else if (isCouncilSector) {
+            rows = await getForm8CouncilRows();
+        } else if (isConsolidated) {
+            const [stateRows, councilRows] = await Promise.all([
+                getForm8StateRows(),
+                getForm8CouncilRows(),
+            ]);
+            rows = [...stateRows, ...councilRows];
+        } else {
+            logger.info(
+                `Form8: no rule defined for sector "${sector}" — returning empty result`
+            );
         }
-
-        const challanTwoWhere = { isActive: true };
-        if (sector && sector !== "CONSOLIDATED") {
-            challanTwoWhere.sector = sector;
-        }
-
-        const challanFromBillWhere = {
-            isActive: true,
-            amountType: { in: FORM8_ALLOWED_AMOUNT_TYPES },
-        };
-        if (sector && sector !== "CONSOLIDATED") {
-            challanFromBillWhere.sector = sector;
-        }
-
-        const includeStateChallans =
-            !sector || sector === "CONSOLIDATED" || sector === "STATE";
-
-        const [
-            challanRows,
-            challanTwoRows,
-            challanFromBillRows,
-            stateChallanRows,               // ← NEW
-        ] = await Promise.all([
-            prisma.challan.findMany({
-                where: challanWhere,
-                include: {
-                    department: {
-                        select: {
-                            id: true,
-                            name: true,
-                            code: true,
-                        },
-                    },
-                },
-            }),
-            prisma.challanTwo.findMany({ where: challanTwoWhere }),
-            prisma.challanFromBill.findMany({ where: challanFromBillWhere }),
-
-            // ── NEW: StateChallan (STATE / CONSOLIDATED only) ────
-            // No isActive field on model — filter by sector = "STATE"
-            includeStateChallans
-                ? prisma.stateChallan.findMany({
-                    where: { sector: "STATE" },
-                    select: {
-                        id: true,
-                        challanNo: true,
-                        totalAmount: true,
-                        majorHead: true,
-                        subMajorHead: true,
-                        minorHead: true,
-                        subHead: true,
-                        subSubHead: true,
-                        detailHead: true,
-                        subDetailHead: true,
-                    },
-                    orderBy: { challanDate: "asc" },
-                })
-                : Promise.resolve([]),
-
-        ]);
-
-        logger.info(
-            `Form8: challan=${challanRows.length}, challanTwo=${challanTwoRows.length}, ` +
-            `challanFromBill=${challanFromBillRows.length}, stateChallan=${stateChallanRows.length}`
-        );
-
-        const rows = [];
-
-        // 1. Challan rows — column logic based on department.code
-        challanRows.forEach((row) => {
-            const deptCode = row.department?.code ?? "";
-            const deptName = row.department?.name ?? "-";
-            const amount = parseFloat(row.amount?.toString() ?? "0");
-
-            let councilRevenue = 0;
-            let grantsInAid = 0;
-            let miscReceipt = 0;
-
-            const codeNum = parseInt(deptCode, 10);
-
-            if (!isNaN(codeNum) && codeNum >= 8001 && codeNum <= 8016) {
-                councilRevenue = amount;
-            } else if (!isNaN(codeNum) && codeNum === 8017) {
-                grantsInAid = amount;
-            } else {
-                miscReceipt = amount;
-            }
-
-            rows.push({
-                cbItemNo: row.challanNo ?? "-",
-                nomenclature: `${row.majorHead ?? ""} - ${deptCode} ${deptName}`.trim(),
-                councilRevenue,
-                grantsInAid,
-                miscReceipt,
-                total: amount,
-                source: "challan",
-            });
-        });
-
-        // 2. ChallanTwo rows — grantsInAid column
-        challanTwoRows.forEach((row) => {
-            const amount = parseFloat(row.grantsInAid?.toString() ?? "0");
-            if (!amount) return;
-
-            rows.push({
-                cbItemNo: row.kaacChallanNo ?? "-",
-                nomenclature: "Grants in Aid from Govt.",
-                councilRevenue: 0,
-                grantsInAid: amount,
-                miscReceipt: 0,
-                total: amount,
-                source: "challanTwo",
-            });
-        });
-
-        // 3. ChallanFromBill rows — councilRevenue column
-        challanFromBillRows.forEach((row) => {
-            const amount = parseFloat(row.amount?.toString() ?? "0");
-
-            rows.push({
-                cbItemNo: row.challanNo ?? "-",
-                nomenclature: row.amountType ?? "-",
-                councilRevenue: amount,
-                grantsInAid: 0,
-                miscReceipt: 0,
-                total: amount,
-                source: "challanFromBill",
-            });
-        });
-
-        // ─────────────────────────────────────────────────────────
-        // 4. NEW — StateChallan rows
-        //    Maps to grantsInAid column:
-        //    "Grants-in-aid received from the Govt"
-        //    amount = totalAmount * 100000 (stored in lakhs)
-        //    Skip rows where totalAmount is null or zero
-        // ─────────────────────────────────────────────────────────
-        stateChallanRows.forEach((row) => {
-            if (row.totalAmount == null || row.totalAmount === 0) return;
-
-            const amount = parseFloat((row.totalAmount).toFixed(2));
-
-            // Build nomenclature from all 7 head levels — skip null/empty parts
-            const nomenclature = [
-                row.majorHead,
-                row.subMajorHead,
-                row.minorHead,
-                row.subHead,
-                row.subSubHead,
-                row.detailHead,
-                row.subDetailHead,
-            ]
-                .filter((p) => p && p.trim() !== "")
-                .join(" - ") || "-";
-
-            rows.push({
-                cbItemNo: row.challanNo ?? "-",
-                nomenclature,                       // ← full head chain
-                councilRevenue: 0,
-                grantsInAid: amount,
-                miscReceipt: 0,
-                total: amount,
-                source: "stateChallan",
-            });
-        });
 
         // Column totals
         const totals = rows.reduce(
@@ -554,8 +733,6 @@ export const getForm8Data = async (sector) => {
         throw error;
     }
 };
-
-
 
 
 // ─────────────────────────────────────────────────────────────
@@ -663,16 +840,142 @@ export const getForm9Data = async (sector) => {
 
 // ─────────────────────────────────────────────────────────────
 // FORM 10 - Receipts and Payment Schedules (Dept-Deposit Heads)
-// Data from: Expenditure table
-// Receipt  = securityDepositsDeduction
-// Payment  = grossAmount where grantNo IN ['63', '64']
-// Columns: voucherNo, workName, receipt, payment, remarks
+//
+// COUNCIL / CONSOLIDATED (unchanged):
+//   Data from: Expenditure table only
+//   Receipt  = securityDepositsDeduction
+//   Payment  = grossAmount where grantNo IN ['63', '64']
+//   Columns: voucherNo, workName, receipt, payment, remarks
+//
+// STATE (new):
+//   Cash book item no = challanNo (StateChallan rows) / voucherNo (Expenditure rows)
+//   Name of Work/Scheme = head code, majorHead → detailHead (subDetailHead excluded)
+//   Receipt  = StateChallan.totalAmount
+//   Payment  = Expenditure.grossAmount
+//   Remarks  = remarks (from whichever table the row came from)
 // ─────────────────────────────────────────────────────────────
+
+// Build "majorHead - subMajorHead - ... - detailHead" skipping empty parts.
+// Deliberately excludes subDetailHead per Form 10 STATE spec.
+const buildForm10HeadCode = (row) =>
+    [
+        row.majorHead,
+        row.subMajorHead,
+        row.minorHead,
+        row.subHead,
+        row.subSubHead,
+        row.detailHead,
+    ]
+        .filter((p) => p && p.toString().trim() !== "")
+        .join(" - ") || "-";
 
 export const getForm10Data = async (sector) => {
     try {
         logger.info(`Fetching Form 10 data for sector: ${sector ?? "ALL"}`);
 
+        const isStateOnly = sector === "STATE";
+
+        // ═══════════════════════════════════════════════════════
+        // STATE — Receipt from StateChallan, Payment from Expenditure
+        // ═══════════════════════════════════════════════════════
+        if (isStateOnly) {
+            const [stateChallanRows, expenditureRows] = await Promise.all([
+                prisma.stateChallan.findMany({
+                    where: { sector: "STATE", isActive: true },
+                    select: {
+                        id: true,
+                        challanNo: true,
+                        totalAmount: true,
+                        majorHead: true,
+                        subMajorHead: true,
+                        minorHead: true,
+                        subHead: true,
+                        subSubHead: true,
+                        detailHead: true,
+                        remarks: true,
+                    },
+                    orderBy: { challanDate: "asc" },
+                }),
+                prisma.expenditure.findMany({
+                    where: { isActive: true, sector: "STATE" },
+                    select: {
+                        id: true,
+                        voucherNo: true,
+                        majorHead: true,
+                        subMajorHead: true,
+                        minorHead: true,
+                        subHead: true,
+                        subSubHead: true,
+                        detailHead: true,
+                        grossAmount: true,
+                        remarks: true,
+                    },
+                    orderBy: { voucherDate: "asc" },
+                }),
+            ]);
+
+            logger.info(
+                `Form10 (STATE): stateChallan=${stateChallanRows.length}, expenditure=${expenditureRows.length}`
+            );
+
+            const rows = [];
+
+            // Receipt rows — from StateChallan
+            stateChallanRows.forEach((row) => {
+                const receipt =
+                    row.totalAmount != null
+                        ? parseFloat((row.totalAmount).toFixed(2))
+                        : 0;
+
+                if (receipt === 0) return;
+
+                rows.push({
+                    id: `SC-${row.id}`,
+                    cashBookItemNo: row.challanNo ?? "-",
+                    workScheme: buildForm10HeadCode(row),
+                    receipt,
+                    payment: 0,
+                    remarks: row.remarks ?? "-",
+                    source: "stateChallan",
+                });
+            });
+
+            // Payment rows — from Expenditure (grossAmount)
+            expenditureRows.forEach((row) => {
+                const payment = parseFloat(row.grossAmount?.toString() ?? "0");
+
+                if (payment === 0) return;
+
+                rows.push({
+                    id: `E-${row.id}`,
+                    cashBookItemNo: row.voucherNo ?? "-",
+                    workScheme: buildForm10HeadCode(row),
+                    receipt: 0,
+                    payment,
+                    remarks: row.remarks ?? "-",
+                    source: "expenditure",
+                });
+            });
+
+            const totalReceipts = rows.reduce((sum, r) => sum + r.receipt, 0);
+            const totalPayments = rows.reduce((sum, r) => sum + r.payment, 0);
+            const netAmount = totalReceipts - totalPayments;
+
+            logger.info(`Form 10 (STATE) total rows: ${rows.length}`);
+
+            return {
+                rows,
+                summary: {
+                    totalReceipts,
+                    totalPayments,
+                    netAmount,
+                },
+            };
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // COUNCIL / CONSOLIDATED — original logic, unchanged
+        // ═══════════════════════════════════════════════════════
         const where = { isActive: true };
         if (sector && sector !== "CONSOLIDATED") {
             where.sector = sector;

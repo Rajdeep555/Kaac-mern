@@ -8,6 +8,7 @@ import {
     updateChallanController,
     getAllChallansController,
     getChallanByIdController,
+    deleteChallanController
 } from "./challan.controller.js";
 
 const router = Router();
@@ -54,6 +55,17 @@ router.get(
     authMiddleware,
     authorize(ROLES.CASHIER, ROLES.ADMIN),
     getChallanByIdController
+);
+
+/**
+ * DELETE CHALLAN
+ * Only Cashier
+ */
+router.delete(
+    "/delete/:id",
+    authMiddleware,
+    authorize(ROLES.CASHIER),
+    deleteChallanController
 );
 
 export default router;
