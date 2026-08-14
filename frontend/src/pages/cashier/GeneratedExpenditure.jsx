@@ -24,6 +24,31 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // the main table's "codes" column)
 const headCode = (row) => row.majorHead || "-";
 
+// ── Amount Type — derived from which amount-breakup field on the
+//    expenditure is populated (mirrors the backend's deductionFields
+//    idea, but for the AMOUNT BREAKUP block instead of DEDUCTIONS) ──
+const AMOUNT_TYPE_FIELDS = {
+  payOfficers: "Pay of Officer",
+  payEstablishment: "Pay of Establishment",
+  allowanceHonorary: "Allowance/Honorarium",
+  contingencies: "Contingencies",
+  grantsInAid: "Grants-in-Aid",
+  works: "Works",
+  loansAdvances: "Loans & Advances",
+  loanRepayGovt: "Loan Repayment (Govt)",
+  loanRepayOther: "Loan Repayment (Other)",
+  securityDeposit: "Security Deposit",
+  earnestMoney: "Earnest Money",
+  transferPayment: "Transfer Payment",
+};
+
+const getAmountType = (row) => {
+  for (const [field, label] of Object.entries(AMOUNT_TYPE_FIELDS)) {
+    if (Number(row[field]) > 0) return label;
+  }
+  return "-";
+};
+
 // ── CSV export — no external dependency, plain Blob download ──
 const csvField = (value) => {
   const str = value === null || value === undefined ? "" : String(value);
@@ -32,7 +57,7 @@ const csvField = (value) => {
 
 const downloadExpenditureCsv = (groupedByDate, title) => {
   const lines = [
-    ["#", "Date", "Head Code", "Voucher No", "Gross Amount"]
+    ["#", "Date", "Head Code", "Voucher No", "Gross Amount", "Amount Type"]
       .map(csvField)
       .join(","),
   ];
@@ -44,20 +69,27 @@ const downloadExpenditureCsv = (groupedByDate, title) => {
     headGroups.forEach(({ head, rows: headRows, headSubtotal }) => {
       headRows.forEach((r) => {
         lines.push(
-          [srNo, date, head, r.voucherNo, r.grossAmountNum.toFixed(2)]
+          [
+            srNo,
+            date,
+            head,
+            r.voucherNo,
+            r.grossAmountNum.toFixed(2),
+            r.amountTypeLabel,
+          ]
             .map(csvField)
             .join(","),
         );
         srNo++;
       });
       lines.push(
-        ["", "", "", `Total for Head ${head}`, headSubtotal.toFixed(2)]
+        ["", "", "", `Total for Head ${head}`, headSubtotal.toFixed(2), ""]
           .map(csvField)
           .join(","),
       );
     });
     lines.push(
-      ["", "", "", `Total for ${date}`, subtotal.toFixed(2)]
+      ["", "", "", `Total for ${date}`, subtotal.toFixed(2), ""]
         .map(csvField)
         .join(","),
     );
@@ -65,7 +97,9 @@ const downloadExpenditureCsv = (groupedByDate, title) => {
   });
 
   lines.push(
-    ["", "", "", "GRAND TOTAL", grandTotal.toFixed(2)].map(csvField).join(","),
+    ["", "", "", "GRAND TOTAL", grandTotal.toFixed(2), ""]
+      .map(csvField)
+      .join(","),
   );
 
   const csv = lines.join("\n");
@@ -83,8 +117,9 @@ const downloadExpenditureCsv = (groupedByDate, title) => {
 };
 
 // ── Modal: rows grouped by date, then by head code within each date — Sr No,
-//    Date, Head Code, Voucher No, Gross Amount — with a semibold subtotal
-//    row per head code, a bold total row per date, and a grand total ──
+//    Date, Head Code, Voucher No, Gross Amount, Amount Type — with a
+//    semibold subtotal row per head code, a bold total row per date, and a
+//    grand total ──
 const ExpenditureListModal = ({ title, rows, onClose }) => {
   const groupedByDate = useMemo(() => {
     const byDate = new Map();
@@ -106,7 +141,7 @@ const ExpenditureListModal = ({ title, rows, onClose }) => {
       groupRows.forEach((r) => {
         const key = headCode(r);
         if (!byHead.has(key)) byHead.set(key, []);
-        byHead.get(key).push(r);
+        byHead.get(key).push({ ...r, amountTypeLabel: getAmountType(r) });
       });
 
       const headGroups = Array.from(byHead.entries()).map(
@@ -175,7 +210,8 @@ const ExpenditureListModal = ({ title, rows, onClose }) => {
                   <th className="py-2 pr-2">Date</th>
                   <th className="py-2 pr-2">Head Code</th>
                   <th className="py-2 pr-2">Voucher No</th>
-                  <th className="py-2 text-right">Gross Amount</th>
+                  <th className="py-2 pr-2 text-right">Gross Amount</th>
+                  <th className="py-2 pr-2">Amount Type</th>
                 </tr>
               </thead>
               <tbody>
@@ -195,9 +231,10 @@ const ExpenditureListModal = ({ title, rows, onClose }) => {
                               <td className="py-2 pr-2 font-medium">
                                 {r.voucherNo}
                               </td>
-                              <td className="py-2 text-right">
+                              <td className="py-2 pr-2 text-right">
                                 {r.grossAmountNum.toLocaleString("en-IN")}
                               </td>
+                              <td className="py-2">{r.amountTypeLabel}</td>
                             </tr>
                           );
                         })}
@@ -208,9 +245,10 @@ const ExpenditureListModal = ({ title, rows, onClose }) => {
                             className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
                             Total for Head {hg.head}
                           </td>
-                          <td className="py-1.5 text-right font-semibold text-zinc-700">
+                          <td className="py-1.5 pr-2 text-right font-semibold text-zinc-700">
                             ₹{hg.headSubtotal.toLocaleString("en-IN")}
                           </td>
+                          <td className="py-1.5"></td>
                         </tr>
                       </React.Fragment>
                     ))}
@@ -221,9 +259,10 @@ const ExpenditureListModal = ({ title, rows, onClose }) => {
                         className="py-1.5 pr-2 text-right font-bold text-zinc-700">
                         Total for {group.date}
                       </td>
-                      <td className="py-1.5 text-right font-bold text-zinc-900">
+                      <td className="py-1.5 pr-2 text-right font-bold text-zinc-900">
                         ₹{group.subtotal.toLocaleString("en-IN")}
                       </td>
+                      <td className="py-1.5"></td>
                     </tr>
                   </React.Fragment>
                 ))}
