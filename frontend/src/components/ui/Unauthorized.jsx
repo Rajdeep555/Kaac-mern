@@ -6,7 +6,10 @@ const Unauthorized = () => {
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center"
-      style={{ background: "#f7f8fa", fontFamily: "'Georgia', serif" }}>
+      style={{
+        background: "#f7f8fa",
+        fontFamily: "'Merriweather', sans-serif",
+      }}>
       {/* Card */}
       <div
         className="flex flex-col items-center text-center px-10 py-12 rounded-xl"

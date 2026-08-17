@@ -53,7 +53,7 @@ const TopBar = () => {
   return (
     <div
       className="flex-shrink-0 relative z-40"
-      style={{ fontFamily: "'Georgia', serif" }}>
+      style={{ fontFamily: "'Merriweather',sans-serif" }}>
       {/* ── Main TopBar ── */}
       <div
         className="w-full flex items-center justify-between px-6"
@@ -98,7 +98,7 @@ const TopBar = () => {
             style={{
               background: "#f9fafb",
               borderColor: search ? "#1a3a5c" : "#d1d5db",
-              fontFamily: "'Georgia', serif",
+              fontFamily: "'Merriweather',sans-serif",
               fontSize: "12px",
             }}
           />
@@ -229,7 +229,7 @@ const TopBar = () => {
                       ? "3px solid #c9a84c"
                       : "3px solid transparent",
                   color: idx === index ? "#0f2744" : "#374151",
-                  fontFamily: "'Georgia', serif",
+                  fontFamily: "'Merriweather',sans-serif",
                   fontSize: "12px",
                 }}>
                 <span className="font-medium">{item.label}</span>

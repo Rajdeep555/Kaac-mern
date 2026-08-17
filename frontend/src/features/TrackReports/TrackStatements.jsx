@@ -55,7 +55,7 @@ const TrackStatements = () => {
         <head>
           <title>Statement ${activeStep} — ${STATEMENT_LABELS[activeStep] || ""} ${sectorType ? `(${sectorType})` : ""}</title>
           <style>
-            body { font-family: 'Georgia', serif; margin: 24px; color: #111; }
+            body { font-family: 'Merriweather', sans-serif; margin: 24px; color: #111; }
             table { border-collapse: collapse; width: 100%; }
             th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; }
             th { background: #f3f4f6; font-weight: 700; }
@@ -113,7 +113,7 @@ const TrackStatements = () => {
       style={{
         minHeight: "100vh",
         backgroundColor: "#f0f2f5",
-        fontFamily: "'Georgia', serif",
+        fontFamily: "'Merriweather', sans-serif",
       }}>
       {/* ── Top Government Header Bar ── */}
       <div
@@ -517,7 +517,7 @@ const TrackStatements = () => {
                       fontWeight: "700",
                       color: isActive ? "#c9a84c" : "#374151",
                       lineHeight: 1,
-                      fontFamily: "'Georgia', serif",
+                      fontFamily: "'Merriweather', sans-serif",
                     }}>
                     {row}
                   </span>

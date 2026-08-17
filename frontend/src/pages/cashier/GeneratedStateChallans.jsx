@@ -267,6 +267,10 @@ const GeneratedStateChallans = () => {
         challanDate: item.challanDate
           ? new Date(item.challanDate).toLocaleDateString("en-GB")
           : "",
+        // ── Format treasury challan date the same way (date only, no time) ──
+        treasuryChallanDate: item.treasuryChallanDate
+          ? new Date(item.treasuryChallanDate).toLocaleDateString("en-GB")
+          : "",
         codes: [
           item.majorHead,
           item.subMajorHead,
@@ -337,6 +341,7 @@ const GeneratedStateChallans = () => {
     { key: "codes", label: "Major - Detail Head" },
     { key: "ddo", label: "DDO" },
     { key: "treasuryChallanNo", label: "Treasury Challan No" },
+    { key: "treasuryChallanDate", label: "Treasury Challan Date" },
     { key: "totalAmount", label: "Amount" },
     {
       key: "actions",
@@ -440,6 +445,7 @@ const GeneratedStateChallans = () => {
           "treasuryChallanNo",
           "totalAmount",
           "codes",
+          "treasuryChallanDate",
         ]}
         statusKey="treasuryChallanNo"
         pageSize={200}

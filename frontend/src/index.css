@@ -12,16 +12,16 @@
     --color-card: #daeaea;
 
     /* font families */
-    --font-sans: Arial, Helvetica, sans-serif;
-    --font-inter: Arial, Helvetica, sans-serif;
-    --font-unbounded: Arial, Helvetica, sans-serif;
+    --font-sans: Arial, sans-serif;
+    --font-inter: Arial, sans-serif;
+    --font-unbounded: Arial, sans-serif;
 }
 
 @layer base {
 
     html,
     body {
-        font-family: Arial, Helvetica, sans-serif;
+        font-family: Arial, sans-serif;
     }
 
     *,

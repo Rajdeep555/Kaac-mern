@@ -144,15 +144,31 @@ export const getChallanById = async (id, userId, role, canViewAllEntries) => {
 };
 
 export const deleteChallan = async (id) => {
+    const challanId = Number(id);
+
+    if (!Number.isInteger(challanId)) {
+        const err = new Error("Invalid challan id");
+        err.statusCode = 400;
+        throw err;
+    }
+
     try {
-        const existing = await prisma.challan.findUnique({ where: { id } });
-        if (!existing) throw new Error("Challan not found");
-        return await prisma.challan.delete({ where: { id } });
+        const existing = await prisma.challan.findUnique({
+            where: { id: challanId },
+        });
+
+        if (!existing) {
+            const err = new Error("Challan not found");
+            err.statusCode = 404;
+            throw err;
+        }
+
+        return await prisma.challan.delete({ where: { id: challanId } });
     } catch (error) {
         logger.error("Delete Challan Error:", error);
         throw error;
     }
-}
+};
 
 export const getAllChallans = async ({
     page = 1,

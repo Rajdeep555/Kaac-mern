@@ -21,7 +21,7 @@ export const CashierDashboardCard = ({
         borderColor: accent ? "#1a3a5c" : "#e5e7eb",
         boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
         minHeight: "110px",
-        fontFamily: "'Georgia', serif",
+        fontFamily: "'Merriweather', sans-serif",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.boxShadow = "0 4px 14px rgba(15,39,68,0.15)";

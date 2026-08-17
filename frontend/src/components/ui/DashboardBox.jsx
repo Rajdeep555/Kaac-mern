@@ -18,7 +18,7 @@ const DashboardBox = ({
           borderColor: "#e5e7eb",
           boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
           minHeight: "220px",
-          fontFamily: "'Georgia', serif",
+          fontFamily: "'Merriweather', sans-serif",
         }}>
         <div
           className="px-4 py-3 border-b flex items-center gap-2"
@@ -47,7 +47,7 @@ const DashboardBox = ({
         background: "#ffffff",
         borderColor: "#e5e7eb",
         boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-        fontFamily: "'Georgia', serif",
+        fontFamily: "'Merriweather', sans-serif",
       }}>
       {/* Section Header */}
       {title && (
@@ -135,7 +135,10 @@ export const StatCell = ({
         <div className="flex items-end gap-2">
           <span
             className="text-3xl font-bold leading-none"
-            style={{ color: style.text, fontFamily: "'Georgia', serif" }}>
+            style={{
+              color: style.text,
+              fontFamily: "'Merriweather', sans-serif",
+            }}>
             {typeof count === "number" ? count.toLocaleString() : count}
           </span>
 

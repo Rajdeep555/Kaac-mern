@@ -6,6 +6,21 @@ import logger from "../../utils/logger.js";
 // Data comes from 4 tables: challan, challanTwo, challanFromBill,
 // stateChallan
 // (STATE sector: only from StateChallan table — see getForm4Data)
+//
+// COUNCIL — matches Form 1 (Cashbook) Receipt side Treasury PLA
+// column: in addition to COUNCIL's own ChallanFromBill rows, also
+// pulls ChallanFromBill rows where sector = STATE and amountType is
+// one of the 4 treasury types below — same cross-sector pull as
+// councilCrossStateTreasuryRows in cashbookService.js. STATE's own
+// fetching/handling is completely untouched.
+//
+// `year` is optional. When passed, every table is filtered to the
+// same financial-year window (April 1 → March 31) that
+// getCashbookRowsByFy uses, on the same date field per table
+// (challanDate / kaacChallanDate / voucharDate), so COUNCIL's Form 4
+// total reconciles against Form 1's COUNCIL Receipt Treasury PLA
+// total. If omitted, date filtering is skipped (old all-time
+// behavior) for backward compatibility.
 // ─────────────────────────────────────────────────────────────
 
 const ALLOWED_AMOUNT_TYPES = [
@@ -22,7 +37,23 @@ const ALLOWED_AMOUNT_TYPES = [
     "Other Deductions",
 ];
 
-// Helper — now variadic to support any number of head levels
+// Same cross-sector addition as cashbookService.js's
+// COUNCIL_STATE_TREASURY_TYPES — only applies when sector = COUNCIL.
+const COUNCIL_STATE_TREASURY_TYPES = [
+    "Professional Tax",
+    "Monopoly",
+    "Forest Royalty",
+    "MC Forest Royalty",
+];
+
+// Same financial-year window Cashbook uses (April 1 → March 31).
+function getFyRange(year) {
+    const from = new Date(Date.UTC(year, 3, 1, 0, 0, 0, 0));
+    const to = new Date(Date.UTC(year + 1, 2, 31, 23, 59, 59, 999));
+    return { from, to };
+}
+
+// Helper — variadic to support any number of head levels
 const buildClassification = (...parts) => {
     return (
         parts.filter((part) => part && part.trim() !== "").join(" / ") || "-"
@@ -31,11 +62,15 @@ const buildClassification = (...parts) => {
 
 // ─────────────────────────────────────────────────────────────
 
-const getForm4ChallanRows = async (sector) => {
+const getForm4ChallanRows = async (sector, dateRange) => {
     const where = { isActive: true };
 
     if (sector && sector !== "CONSOLIDATED") {
         where.challanType = sector;
+    }
+
+    if (dateRange) {
+        where.challanDate = { gte: dateRange.from, lte: dateRange.to };
     }
 
     const rows = await prisma.challan.findMany({ where });
@@ -62,11 +97,15 @@ const getForm4ChallanRows = async (sector) => {
     }));
 };
 
-const getForm4ChallanTwoRows = async (sector) => {
+const getForm4ChallanTwoRows = async (sector, dateRange) => {
     const where = { isActive: true };
 
     if (sector && sector !== "CONSOLIDATED") {
         where.sector = sector;
+    }
+
+    if (dateRange) {
+        where.kaacChallanDate = { gte: dateRange.from, lte: dateRange.to };
     }
 
     const rows = await prisma.challanTwo.findMany({ where });
@@ -93,7 +132,7 @@ const getForm4ChallanTwoRows = async (sector) => {
     }));
 };
 
-const getForm4ChallanFromBillRows = async (sector) => {
+const getForm4ChallanFromBillRows = async (sector, dateRange) => {
     const where = {
         isActive: true,
         amountType: { in: ALLOWED_AMOUNT_TYPES },
@@ -101,6 +140,10 @@ const getForm4ChallanFromBillRows = async (sector) => {
 
     if (sector && sector !== "CONSOLIDATED") {
         where.sector = sector;
+    }
+
+    if (dateRange) {
+        where.voucharDate = { gte: dateRange.from, lte: dateRange.to };
     }
 
     const rows = await prisma.challanFromBill.findMany({ where });
@@ -128,12 +171,55 @@ const getForm4ChallanFromBillRows = async (sector) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// StateChallan rows (STATE sector)
+// ChallanFromBill rows where sector = STATE and amountType is one of
+// the 4 treasury types, shown under COUNCIL. Only ever called when
+// sector = "COUNCIL". Same row shape as getForm4ChallanFromBillRows;
+// distinct id prefix so the source is traceable; `sector` on the row
+// stays "STATE" (the record's real sector) rather than "COUNCIL".
+// ─────────────────────────────────────────────────────────────
+const getForm4CouncilCrossStateTreasuryRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        sector: "STATE",
+        amountType: { in: COUNCIL_STATE_TREASURY_TYPES },
+    };
+
+    if (dateRange) {
+        where.voucharDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.challanFromBill.findMany({ where });
+
+    logger.info(
+        `Fetched ${rows.length} STATE-sector treasury rows from ChallanFromBill for COUNCIL's Form 4`
+    );
+
+    return rows.map((row) => ({
+        id: `challanFromBill-state-for-council-${row.id}`,
+        clnNo: row.challanNo ?? "-",
+        date: row.voucharDate ?? row.createdAt,
+        treasury: row.treasuryCode ?? "-",
+        amount: row.amount ? parseFloat(row.amount.toString()) : 0,
+        refItemNo: row.treasuryChallanNo ?? "-",
+        classification: buildClassification(
+            row.majorHead,
+            row.subMajor,
+            row.minorHead
+        ),
+        remarks: row.amountType ?? "-",
+        sector: row.sector ?? null, // "STATE" — the record's real sector
+        source: "challanFromBill-stateForCouncil",
+    }));
+};
+
+// ─────────────────────────────────────────────────────────────
+// StateChallan rows (STATE sector) — COMPLETELY UNCHANGED
 // Amount is stored in lakhs → multiply by 100000
 // Classification spans all 7 head levels
 // isActive check: StateChallan has no isActive field in the
 // schema above, so we filter by sector = "STATE" only.
 // If you add isActive to the model later, add it to `where`.
+// No date filter here either — left exactly as it was.
 // ─────────────────────────────────────────────────────────────
 const getForm4StateChallanRows = async () => {
     const rows = await prisma.stateChallan.findMany({
@@ -176,40 +262,63 @@ const getForm4StateChallanRows = async () => {
 //
 // SECTOR RULES:
 // - sector === "STATE"        → StateChallan ONLY (challan, challanTwo,
-//                                 challanFromBill are skipped)
+//                                 challanFromBill are skipped) — UNCHANGED
+// - sector === "COUNCIL"      → Challan + ChallanTwo + ChallanFromBill
+//                                 (COUNCIL only), PLUS ChallanFromBill
+//                                 rows where sector = STATE and
+//                                 amountType is one of the 4 treasury
+//                                 types (matches Cashbook's COUNCIL
+//                                 Receipt Treasury PLA column)
 // - sector === "CONSOLIDATED" → Challan + ChallanTwo + ChallanFromBill
-//                                 (all sectors) + StateChallan
+//                                 (all sectors, unfiltered — already
+//                                 includes the STATE treasury rows via
+//                                 the unfiltered ChallanFromBill fetch,
+//                                 so the cross-rows helper does NOT run
+//                                 here — no double counting) + StateChallan
 // - any other sector          → Challan + ChallanTwo + ChallanFromBill
 //                                 (that sector only), no StateChallan
 // ─────────────────────────────────────────────────────────────
-export const getForm4Data = async (sector) => {
+export const getForm4Data = async (sector, year) => {
     try {
-        logger.info(`Fetching Form 4 data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 4 data for sector: ${sector ?? "ALL"}, year: ${year ?? "ALL-TIME"}`
+        );
 
         const isStateSector = sector === "STATE";
+        const isCouncilSector = sector === "COUNCIL";
         const includeStateChallans =
             !sector || sector === "CONSOLIDATED" || sector === "STATE";
+
+        const dateRange = year != null ? getFyRange(year) : null;
 
         let challanRows = [];
         let challanTwoRows = [];
         let challanFromBillRows = [];
         let stateChallanRows = [];
+        let councilCrossStateTreasuryRows = [];
 
         if (isStateSector) {
-            // ── STATE sector: ONLY StateChallan table ────────────
+            // ── STATE sector: ONLY StateChallan table, UNCHANGED ──
             logger.info(
                 `Form4: sector=STATE → skipping Challan, ChallanTwo & ChallanFromBill, using StateChallan only`
             );
             stateChallanRows = await getForm4StateChallanRows();
         } else {
-            // ── Non-STATE sectors: original 4-table logic ────────
-            [challanRows, challanTwoRows, challanFromBillRows, stateChallanRows] =
+            // ── Non-STATE sectors ─────────────────────────────────
+            [challanRows, challanTwoRows, challanFromBillRows, stateChallanRows, councilCrossStateTreasuryRows] =
                 await Promise.all([
-                    getForm4ChallanRows(sector),
-                    getForm4ChallanTwoRows(sector),
-                    getForm4ChallanFromBillRows(sector),
+                    getForm4ChallanRows(sector, dateRange),
+                    getForm4ChallanTwoRows(sector, dateRange),
+                    getForm4ChallanFromBillRows(sector, dateRange),
                     includeStateChallans
                         ? getForm4StateChallanRows()
+                        : Promise.resolve([]),
+                    // Only fires for sector = COUNCIL — CONSOLIDATED
+                    // already gets these rows via the unfiltered
+                    // getForm4ChallanFromBillRows("CONSOLIDATED") call
+                    // above, so running this too would double-count.
+                    isCouncilSector
+                        ? getForm4CouncilCrossStateTreasuryRows(dateRange)
                         : Promise.resolve([]),
                 ]);
         }
@@ -219,10 +328,13 @@ export const getForm4Data = async (sector) => {
             ...challanTwoRows,
             ...challanFromBillRows,
             ...stateChallanRows,
+            ...councilCrossStateTreasuryRows,
         ];
 
         logger.info(
-            `Form4: Rows going into merge — challan: ${challanRows.length}, challanTwo: ${challanTwoRows.length}, challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
+            `Form4: Rows going into merge — challan: ${challanRows.length}, challanTwo: ${challanTwoRows.length}, ` +
+            `challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}, ` +
+            `councilCrossStateTreasuryRows: ${councilCrossStateTreasuryRows.length}`
         );
 
         const sorted = allRows.sort((a, b) => new Date(a.date) - new Date(b.date));

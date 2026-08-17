@@ -234,7 +234,10 @@ const Sidebar = () => {
   return (
     <div
       className="flex flex-col h-screen w-64 flex-shrink-0"
-      style={{ background: "#0f2744", fontFamily: "'Georgia', serif" }}>
+      style={{
+        background: "#0f2744",
+        fontFamily: "'Merriweather',sans-serif",
+      }}>
       {/* ── Tricolor top stripe ── */}
       <div
         className="h-1.5 w-full flex-shrink-0"

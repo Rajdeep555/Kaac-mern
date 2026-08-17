@@ -11,6 +11,18 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
+// "2210-80-004-0000-000-03-01 (Some Head - Some Sub Head)"
+// Falls back gracefully when the code or the name couldn't be resolved.
+const formatHeadLabel = (group) => {
+  if (group.codeChain && group.nameChain) {
+    return `${group.codeChain} (${group.nameChain})`;
+  }
+  if (group.codeChain) {
+    return group.codeChain;
+  }
+  return group.nameChain || group.heads;
+};
+
 const Statement5 = ({ sector }) => {
   const { statement5Data, loading, error } = useStatement5({ sector });
 
@@ -74,30 +86,26 @@ const Statement5 = ({ sector }) => {
               </tr>
             )}
 
+            {/* One row per unique head chain — identical codes are
+               already summed into group.total on the backend, so
+               duplicates never appear as separate lines here. */}
             {statement5Data?.map((group, groupIndex) => (
-              <React.Fragment key={`group-${groupIndex}-${group.heads}`}>
-                {/* Detail rows */}
-                {group.rows.map((row, index) => (
-                  <tr key={`${groupIndex}-row-${index}`} className="border">
-                    <td className="border px-4 py-2 text-left">
-                      {[row.majorHead, row.minorHead]
-                        .filter((p) => p && p !== "-")
-                        .join("-")}
-                    </td>
-                    <AmountCell value={row.amount} />
-                  </tr>
-                ))}
-
-                {/* Subtotal row — only when multiple rows share same head */}
-                {group.hasMultiple && (
-                  <tr className="bg-gray-100 font-bold border">
-                    <td className="border px-4 py-2 text-left">
-                      Total — {group.heads}
-                    </td>
-                    <AmountCell value={group.total} bold />
-                  </tr>
-                )}
-              </React.Fragment>
+              <tr key={`group-${groupIndex}-${group.heads}`} className="border">
+                <td className="border px-4 py-2 text-left">
+                  <span>{formatHeadLabel(group)}</span>
+                  {!group.matched && (
+                    <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-700">
+                      Unmapped
+                    </span>
+                  )}
+                  {group.hasMultiple && (
+                    <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">
+                      {group.rows.length} combined
+                    </span>
+                  )}
+                </td>
+                <AmountCell value={group.total} bold={group.hasMultiple} />
+              </tr>
             ))}
 
             {/* Grand Total */}

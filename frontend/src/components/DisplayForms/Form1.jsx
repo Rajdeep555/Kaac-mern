@@ -244,6 +244,9 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
     <div className="w-full bg-white border-2">
       {/* Header */}
       <div className="py-4 text-center font-semibold">
+        <b className="text-start underline mb-3">
+          PART-II MONTHLY AND SUBSIDIARY ACCOUNTS
+        </b>
         <h1 className="text-xl font-bold">Form No. 1</h1>
         {sector && <p className="text-sm text-gray-600">Sector: {sector}</p>}
         <p>{getTitle()}</p>

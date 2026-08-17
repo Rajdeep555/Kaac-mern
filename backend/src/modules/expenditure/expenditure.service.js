@@ -107,11 +107,25 @@ export const createExpenditure = async (data) => {
             "CPF Advance": { major: "662", sub_major: "01", minor: "05" },
         };
 
+        // 🔥 Overrides applied only when sector === "STATE"
+        const stateHeadCodeOverrides = {
+            "Earnest Money": { major: "8443", sub_major: "00", minor: "120" },
+            "Security Deposits": { major: "8443", sub_major: "00", minor: "120" },
+        };
+
+        // 🔥 Sector-aware head code lookup
+        const getHeadCodes = (sectorValue, amountType) => {
+            if (sectorValue === "STATE" && stateHeadCodeOverrides[amountType]) {
+                return stateHeadCodeOverrides[amountType];
+            }
+            return headCodeMapping[amountType] || { major: "", sub_major: "", minor: "" };
+        };
+
         const challanData = [];
         for (const [dbField, amountType] of Object.entries(deductionFields)) {
             const amount = data[dbField];
             if (amount && amount > 0) {
-                const headCodes = headCodeMapping[amountType] || { major: "", sub_major: "", minor: "" };
+                const headCodes = getHeadCodes(sector, amountType); // 🔥 sector-aware
                 challanData.push({
                     challanNo: expenditure.voucherNo,
                     idFromExpenditure: expenditure.id,

@@ -116,6 +116,141 @@ export const getStatement6Data = async ({ sector } = {}) => {
 // (STATE sector: only from StateChallan table — see getStatement5Data)
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// Head-code lookup for ChallanFromBill (keyed by amountType)
+// ChallanFromBill rows already store descriptive head NAMES, so
+// here we only need to resolve the CODE side.
+// ─────────────────────────────────────────────────────────────
+const CHALLAN_FROM_BILL_HEAD_CODES = {
+    "Professional Tax": { major: "001", subMajor: "01", minor: "02" },
+    "Building Loan": { major: "661", subMajor: "01", minor: "02" },
+    "Car Loan": { major: "661", subMajor: "02", minor: "01" },
+    "Earnest Money": { major: "664", subMajor: "01", minor: "01" },
+    "House Rent": { major: "007", subMajor: "01", minor: "00" },
+    "Security Deposits": { major: "664", subMajor: "01", minor: "01" },
+    "Forest Royalty": { major: "013", subMajor: "01", minor: "01" },
+    "MC Forest Royalty": { major: "013", subMajor: "01", minor: "01" },
+    "Monopoly": { major: "013", subMajor: "01", minor: "01" },
+    "Advance Payment": { major: "8443", subMajor: "00", minor: "120" },
+    "Other Deductions": { major: "8443", subMajor: "00", minor: "120" },
+    "CGST": { major: "8443", subMajor: "00", minor: "120" },
+    "SGST": { major: "8443", subMajor: "00", minor: "120" },
+    "IGST": { major: "8443", subMajor: "00", minor: "120" },
+    "ITAX": { major: "8443", subMajor: "01", minor: "120" },
+    "MDRRF": { major: "8443", subMajor: "00", minor: "120" },
+    "DMFT": { major: "8443", subMajor: "00", minor: "120" },
+    "Labour Cess": { major: "8443", subMajor: "00", minor: "120" },
+    "IT Forest Royalty": { major: "8443", subMajor: "00", minor: "120" },
+    "VAT": { major: "8443", subMajor: "00", minor: "120" },
+    "CPF Council Share": { major: "662", subMajor: "01", minor: "01" },
+    "CPF Contribution": { major: "662", subMajor: "01", minor: "02" },
+    "CPF Advance": { major: "662", subMajor: "01", minor: "05" },
+};
+
+// 🔥 Overrides applied only when the ROW's own sector is STATE
+const CHALLAN_FROM_BILL_STATE_OVERRIDES = {
+    "Earnest Money": { major: "8443", subMajor: "00", minor: "120" },
+    "Security Deposits": { major: "8443", subMajor: "00", minor: "120" },
+};
+
+const getChallanFromBillHeadCode = (amountType, rowSector) => {
+    const overrides =
+        rowSector === "STATE" ? CHALLAN_FROM_BILL_STATE_OVERRIDES : null;
+    const match =
+        (overrides && overrides[amountType]) ||
+        CHALLAN_FROM_BILL_HEAD_CODES[amountType] ||
+        null;
+
+    if (!match) return {};
+
+    return {
+        majorHeadCode: match.major,
+        subMajorCode: match.subMajor,
+        minorHeadCode: match.minor,
+    };
+};
+
+// ─────────────────────────────────────────────────────────────
+// Head-code ⇄ head-name resolution via the Heads table
+//
+// StateChallan stores the CODE chain directly in majorHead /
+// subMajorHead / minorHead / subHead / subSubHead / detailHead /
+// subDetailHead — those are NOT names. To show names we look them
+// up in Heads by matching on Heads' *Code columns, then read back
+// Heads' name columns.
+//
+// Matching is done on normalized (leading-zero-stripped) segments,
+// since StateChallan and Heads may pad codes differently
+// (e.g. "004" vs "4", "0000" vs "0").
+// ─────────────────────────────────────────────────────────────
+const HEAD_CODE_LEVELS = [
+    "majorHeadCode",
+    "subMajorCode",
+    "minorHeadCode",
+    "subHeadCode",
+    "subSubHeadCode",
+    "detailHeadCode",
+    "subDetailHeadCode",
+];
+
+const HEAD_NAME_LEVELS = [
+    "majorHead",
+    "subMajor",
+    "minorHead",
+    "subHead",
+    "subSubHead",
+    "detailHead",
+    "subDetailHead",
+];
+
+// "004" -> "4", "0000" -> "0", "" / null / undefined -> ""
+const normalizeCodeSegment = (value) => {
+    if (value === null || value === undefined) return "";
+    const str = String(value).trim();
+    if (str === "") return "";
+    return /^\d+$/.test(str) ? String(parseInt(str, 10)) : str;
+};
+
+const buildNormalizedCodeKey = (codes) =>
+    HEAD_CODE_LEVELS.map((level) => normalizeCodeSegment(codes[level])).join("|");
+
+// sector param is optional — pass a specific sector to scope the lookup,
+// or omit it to load codes across all sectors.
+const getHeadsNameMap = async (sector) => {
+    const where = { isActive: true };
+    if (sector) where.sector = sector;
+
+    const rows = await prisma.heads.findMany({ where });
+
+    const map = new Map();
+    for (const row of rows) {
+        const key = buildNormalizedCodeKey({
+            majorHeadCode: row.majorHeadCode,
+            subMajorCode: row.subMajorCode,
+            minorHeadCode: row.minorHeadCode,
+            subHeadCode: row.subHeadCode,
+            subSubHeadCode: row.subSubHeadCode,
+            detailHeadCode: row.detailHeadCode,
+            subDetailHeadCode: row.subDetailHeadCode,
+        });
+        map.set(key, {
+            majorHead: row.majorHead ?? null,
+            subMajor: row.subMajor ?? null,
+            minorHead: row.minorHead ?? null,
+            subHead: row.subHead ?? null,
+            subSubHead: row.subSubHead ?? null,
+            detailHead: row.detailHead ?? null,
+            subDetailHead: row.subDetailHead ?? null,
+        });
+    }
+
+    logger.info(
+        `Statement5: Loaded ${map.size} head-code → head-name entries for sector: ${sector ?? "ALL"}`
+    );
+
+    return map;
+};
+
 // Amount types allowed from challanFromBill for Statement 5
 const STATEMENT5_ALLOWED_AMOUNT_TYPES = [
     "Professional Tax",
@@ -138,6 +273,9 @@ const getStatement5ChallanRows = async (sector) => {
         `Statement5: Fetched ${rows.length} rows from Challan for sector: ${sector ?? "ALL"}`
     );
 
+    // NOTE: no code source was supplied for the Challan table, so these
+    // rows carry no code/name-resolution fields — they render as
+    // name-only (unmatched) on the frontend.
     return rows.map((row) => ({
         majorHead: row.majorHead ?? "Unknown",
         subMajor: row.subMajorHead ?? "-",
@@ -165,14 +303,26 @@ const getStatement5ChallanFromBillRows = async (sector) => {
         `Statement5: Fetched ${rows.length} rows from ChallanFromBill for sector: ${sector ?? "ALL"}`
     );
 
-    return rows.map((row) => ({
-        majorHead: row.majorHead ?? "Unknown",
-        subMajor: row.subMajor ?? "-",
-        minorHead: row.minorHead ?? "-",
-        amount: row.amount ? parseFloat(row.amount.toString()) : 0,
-        sector: row.sector ?? null,
-        source: "challanFromBill",
-    }));
+    return rows.map((row) => {
+        const rowSector = row.sector ?? null;
+        const codes = getChallanFromBillHeadCode(row.amountType, rowSector);
+
+        return {
+            majorHead: row.majorHead ?? "Unknown",
+            subMajor: row.subMajor ?? "-",
+            minorHead: row.minorHead ?? "-",
+            amount: row.amount ? parseFloat(row.amount.toString()) : 0,
+            sector: rowSector,
+            source: "challanFromBill",
+            amountType: row.amountType ?? null,
+            // resolved names = the row's own name fields (already have them)
+            majorHeadName: row.majorHead ?? null,
+            subMajorName: row.subMajor ?? null,
+            minorHeadName: row.minorHead ?? null,
+            // resolved codes = looked up from amountType above (may be empty)
+            ...codes,
+        };
+    });
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -182,6 +332,7 @@ const getStatement5ChallanFromBillRows = async (sector) => {
 // If you add isActive to StateChallan model later, add it to where
 // heads = majorHead → subMajorHead → minorHead → subHead →
 //         subSubHead → detailHead → subDetailHead
+// (these fields hold CODES, not names — see getHeadsNameMap above)
 // ─────────────────────────────────────────────────────────────
 const getStatement5StateChallanRows = async () => {
     const rows = await prisma.stateChallan.findMany({
@@ -204,21 +355,53 @@ const getStatement5StateChallanRows = async () => {
         `Statement5: Fetched ${rows.length} rows from StateChallan`
     );
 
-    return rows.map((row) => ({
-        majorHead: row.majorHead ?? "Unknown",
-        subMajor: row.subMajorHead ?? "-",
-        minorHead: row.minorHead ?? "-",
-        subHead: row.subHead ?? "-",
-        subSubHead: row.subSubHead ?? "-",
-        detailHead: row.detailHead ?? "-",
-        subDetailHead: row.subDetailHead ?? "-",
-        amount:
-            row.totalAmount != null
-                ? parseFloat((row.totalAmount).toFixed(2))
-                : 0,
-        sector: "STATE",
-        source: "stateChallan",
-    }));
+    const headsNameMap = await getHeadsNameMap("STATE");
+
+    return rows.map((row) => {
+        const codeKey = buildNormalizedCodeKey({
+            majorHeadCode: row.majorHead,
+            subMajorCode: row.subMajorHead,
+            minorHeadCode: row.minorHead,
+            subHeadCode: row.subHead,
+            subSubHeadCode: row.subSubHead,
+            detailHeadCode: row.detailHead,
+            subDetailHeadCode: row.subDetailHead,
+        });
+        const names = headsNameMap.get(codeKey) ?? {};
+
+        return {
+            // kept as-is: these are CODES, grouping/display relies on them
+            majorHead: row.majorHead ?? "Unknown",
+            subMajor: row.subMajorHead ?? "-",
+            minorHead: row.minorHead ?? "-",
+            subHead: row.subHead ?? "-",
+            subSubHead: row.subSubHead ?? "-",
+            detailHead: row.detailHead ?? "-",
+            subDetailHead: row.subDetailHead ?? "-",
+            amount:
+                row.totalAmount != null
+                    ? parseFloat((row.totalAmount).toFixed(2))
+                    : 0,
+            sector: "STATE",
+            source: "stateChallan",
+            // explicit code fields (same values, named for display formatting)
+            majorHeadCode: row.majorHead ?? null,
+            subMajorCode: row.subMajorHead ?? null,
+            minorHeadCode: row.minorHead ?? null,
+            subHeadCode: row.subHead ?? null,
+            subSubHeadCode: row.subSubHead ?? null,
+            detailHeadCode: row.detailHead ?? null,
+            subDetailHeadCode: row.subDetailHead ?? null,
+            // resolved names (null/partial when Heads has no matching code)
+            majorHeadName: names.majorHead ?? null,
+            subMajorName: names.subMajor ?? null,
+            minorHeadName: names.minorHead ?? null,
+            subHeadName: names.subHead ?? null,
+            subSubHeadName: names.subSubHead ?? null,
+            detailHeadName: names.detailHead ?? null,
+            subDetailHeadName: names.subDetailHead ?? null,
+        };
+    });
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -270,10 +453,11 @@ export const getStatement5Data = async (sector) => {
             `Statement5: Total rows going into grouping — challan: ${challanRows.length}, challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
         );
 
-        // ── Group by full head chain ─────────────────────────────
-        // Challan / ChallanFromBill group on majorHead-minorHead (2 parts)
-        // StateChallan groups on all 7 parts — extra parts are included
-        // when present so finer head codes get their own group
+        // ── Group identical head chains together (unchanged logic) ──
+        // Rows with the exact same head chain (code chain, for
+        // stateChallan) are merged into one group/one displayed row
+        // with a summed total. Rows whose chain differs even by the
+        // last segment stay in their own separate group.
         const grouped = allRows.reduce((acc, row) => {
             const key = [
                 row.majorHead,
@@ -294,8 +478,49 @@ export const getStatement5Data = async (sector) => {
 
         const result = Object.entries(grouped).map(([heads, rows]) => {
             const total = rows.reduce((sum, row) => sum + row.amount, 0);
+            const [sample] = rows;
+
+            // Build the display code chain / name chain from the
+            // group's representative row (all rows in a group share
+            // the same head identity).
+            const codeChain = HEAD_CODE_LEVELS
+                .map((f) => sample[f])
+                .filter((c) => c && c !== "-")
+                .join("-");
+
+            // Names live on *Name fields for stateChallan/challanFromBill rows.
+            const NAME_FIELD_MAP = [
+                "majorHeadName",
+                "subMajorName",
+                "minorHeadName",
+                "subHeadName",
+                "subSubHeadName",
+                "detailHeadName",
+                "subDetailHeadName",
+            ];
+            const resolvedNameChain = NAME_FIELD_MAP
+                .map((f) => sample[f])
+                .filter((n) => n && n !== "-")
+                .join(" - ");
+
+            // Plain Challan rows (no code/name resolution) fall back to
+            // their raw majorHead/minorHead labels.
+            const fallbackNameChain = [
+                sample.majorHead,
+                sample.subMajor,
+                sample.minorHead,
+            ]
+                .filter((n) => n && n !== "-")
+                .join(" - ");
+
+            const displayNameChain = resolvedNameChain || (!codeChain ? fallbackNameChain : "");
+            const matched = Boolean(codeChain) && Boolean(resolvedNameChain);
+
             return {
                 heads,
+                codeChain: codeChain || null,
+                nameChain: displayNameChain || null,
+                matched,
                 rows,
                 total: parseFloat(total.toFixed(2)),
                 hasMultiple: rows.length > 1,
@@ -310,6 +535,9 @@ export const getStatement5Data = async (sector) => {
         throw error;
     }
 };
+
+
+
 
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 4 - Loans and Advances by the Council

@@ -6,7 +6,10 @@ const MainSection = () => {
   return (
     <div
       className="h-screen max-w-full flex overflow-hidden"
-      style={{ fontFamily: "'Georgia', serif", background: "#f0f2f5" }}>
+      style={{
+        fontFamily: "'Merriweather',sans-serif",
+        background: "#f0f2f5",
+      }}>
       {/* ── Sidebar ── */}
       <Sidebar />
 

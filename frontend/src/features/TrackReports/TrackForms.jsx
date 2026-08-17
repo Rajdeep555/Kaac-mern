@@ -51,22 +51,22 @@ const SECTOR_META = {
 const FORM_LABELS = {
   1: "Cash Book",
   2: "Ledger",
-  3: "Cheque Register",
-  4: "Bill Register",
-  "5A": "Abstract A",
-  "5B": "Abstract B",
-  "5C": "Abstract C",
-  "5D": "Abstract D",
-  "5E": "Abstract E",
-  6: "Schedule VI",
-  7: "Schedule VII",
-  "7A": "Schedule VIIA",
-  "7B": "Schedule VIIB",
-  8: "Schedule VIII",
-  9: "Schedule IX",
-  10: "Schedule X",
-  11: "Schedule XI",
-  12: "Schedule XII",
+  3: "Cheque Drawn",
+  4: "",
+  "5A": "",
+  "5B": "",
+  "5C": "",
+  "5D": "",
+  "5E": "",
+  6: "",
+  7: "",
+  "7A": "",
+  "7B": "",
+  8: "",
+  9: "",
+  10: "",
+  11: "",
+  12: "",
 };
 
 const TrackForms = () => {
@@ -119,7 +119,7 @@ const TrackForms = () => {
         <head>
           <title>Form ${activeStep} — ${FORM_LABELS[activeStep] || ""} ${sectorType ? `(${sectorType})` : ""}</title>
           <style>
-            body { font-family: 'Georgia', serif; margin: 24px; color: #111; }
+            body { font-family: 'Merriweather', sans-serif; margin: 24px; color: #111; }
             table { border-collapse: collapse; width: 100%; }
             th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; }
             th { background: #f3f4f6; font-weight: 700; }
@@ -188,7 +188,7 @@ const TrackForms = () => {
       style={{
         minHeight: "100vh",
         backgroundColor: "#f0f2f5",
-        fontFamily: "'Georgia', serif",
+        fontFamily: "'Merriweather', sans-serif",
       }}>
       {/* ── Top Government Header Bar ── */}
       <div
@@ -259,7 +259,7 @@ const TrackForms = () => {
                   color: "#c9a84c",
                   letterSpacing: "2px",
                   textTransform: "uppercase",
-                  fontFamily: "'Georgia', serif",
+                  fontFamily: "'Merriweather', sans-serif",
                 }}>
                 Government of India
               </p>
@@ -270,7 +270,7 @@ const TrackForms = () => {
                   fontWeight: "700",
                   color: "#ffffff",
                   letterSpacing: "0.5px",
-                  fontFamily: "'Georgia', serif",
+                  fontFamily: "'Merriweather', sans-serif",
                 }}>
                 Financial Management System
               </h1>
@@ -399,7 +399,7 @@ const TrackForms = () => {
                   fontSize: "20px",
                   fontWeight: "700",
                   color: "#0f2744",
-                  fontFamily: "'Georgia', serif",
+                  fontFamily: "'Merriweather', sans-serif",
                 }}>
                 Official Register of Forms
               </h2>
@@ -570,7 +570,7 @@ const TrackForms = () => {
                       fontWeight: "700",
                       color: isActive ? "#c9a84c" : "#374151",
                       lineHeight: 1,
-                      fontFamily: "'Georgia', serif",
+                      fontFamily: "'Merriweather', sans-serif",
                     }}>
                     {row}
                   </span>

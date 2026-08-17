@@ -108,9 +108,10 @@ export const deleteChallanController = async (req, res) => {
             message: "Challan deleted successfully",
         });
     } catch (error) {
-        return res.status(403).json({
+        const statusCode = error.statusCode || 500;
+        return res.status(statusCode).json({
             success: false,
-            message: error.message,
+            message: error.message || "Failed to delete challan",
         });
     }
 };

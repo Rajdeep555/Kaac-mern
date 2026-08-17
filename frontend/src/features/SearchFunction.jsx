@@ -180,7 +180,7 @@ const SearchFunction = ({ onFilter, onDownload, onPrint }) => {
               background: "#f9fafb",
               borderColor: "#d1d5db",
               color: "#111827",
-              fontFamily: "'Georgia', serif",
+              fontFamily: "'Merriweather', sans-serif",
               minWidth: "180px",
             }}>
             {FIXED_FY.label}
