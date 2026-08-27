@@ -183,15 +183,15 @@ export const getExpenditureById = async (id) => {
     };
 };
 
-export const updateExpenditure = async (id, data) => {
-    return prisma.$transaction(async (tx) => {
-        // ✅ Strip voucherNo so it is NEVER overwritten on update
-        const { voucherNo: _ignored, ...cleanData } = data;
 
+export const updateExpenditure = async (id, data) => {
+    const { voucherNo: _ignored, ...cleanData } = data;
+
+    return prisma.$transaction(async (tx) => {
         const updatedExpenditure = await tx.expenditure.update({
             where: { id: Number(id) },
             data: {
-                ...cleanData,  // ✅ cleanData, not data
+                ...cleanData,
                 voucherDate: cleanData.voucherDate ? new Date(cleanData.voucherDate) : null,
                 requisitionDate: cleanData.requisitionDate ? new Date(cleanData.requisitionDate) : null,
                 chequeIssueDate: cleanData.chequeIssueDate ? new Date(cleanData.chequeIssueDate) : null,
@@ -209,9 +209,143 @@ export const updateExpenditure = async (id, data) => {
             });
         }
 
+        const deductionFields = {
+            earnestMoneyDeduction: "Earnest Money",
+            ptax: "Professional Tax",
+            carLoanRecovery: "Car Loan",
+            houseLoanRecovery: "Building Loan",
+            houseRent: "House Rent",
+            securityDepositsDeduction: "Security Deposits",
+            monopoly: "Monopoly",
+            forestRoyalty: "Forest Royalty",
+            mcForestRoyalty: "MC Forest Royalty",
+            advanceRecovery: "Advance Payment",
+            otherDeductions: "Other Deductions",
+            cgst: "CGST",
+            sgst: "SGST",
+            igst: "IGST",
+            itax: "ITAX",
+            mdrrf: "MDRRF",
+            dmft: "DMFT",
+            labourCess: "Labour Cess",
+            itForestRoyalty: "IT Forest Royalty",
+            vat: "VAT",
+            cpfCouncil: "CPF Council Share",
+            cpfContribution: "CPF Contribution",
+            cpfRecovery: "CPF Advance",
+        };
+
+        const headCodeMapping = {
+            "Professional Tax": { major: "001", sub_major: "01", minor: "02" },
+            "Building Loan": { major: "661", sub_major: "01", minor: "02" },
+            "Car Loan": { major: "661", sub_major: "02", minor: "01" },
+            "Earnest Money": { major: "664", sub_major: "01", minor: "01" },
+            "House Rent": { major: "007", sub_major: "01", minor: "00" },
+            "Security Deposits": { major: "664", sub_major: "01", minor: "01" },
+            "Forest Royalty": { major: "013", sub_major: "01", minor: "01" },
+            "MC Forest Royalty": { major: "013", sub_major: "01", minor: "01" },
+            "Monopoly": { major: "013", sub_major: "01", minor: "01" },
+            "Advance Payment": { major: "8443", sub_major: "00", minor: "120" },
+            "Other Deductions": { major: "8443", sub_major: "00", minor: "120" },
+            "CGST": { major: "8443", sub_major: "00", minor: "120" },
+            "SGST": { major: "8443", sub_major: "00", minor: "120" },
+            "IGST": { major: "8443", sub_major: "00", minor: "120" },
+            "ITAX": { major: "8443", sub_major: "01", minor: "120" },
+            "MDRRF": { major: "8443", sub_major: "00", minor: "120" },
+            "DMFT": { major: "8443", sub_major: "00", minor: "120" },
+            "Labour Cess": { major: "8443", sub_major: "00", minor: "120" },
+            "IT Forest Royalty": { major: "8443", sub_major: "00", minor: "120" },
+            "VAT": { major: "8443", sub_major: "00", minor: "120" },
+            "CPF Council Share": { major: "662", sub_major: "01", minor: "01" },
+            "CPF Contribution": { major: "662", sub_major: "01", minor: "02" },
+            "CPF Advance": { major: "662", sub_major: "01", minor: "05" },
+        };
+
+        const stateHeadCodeOverrides = {
+            "Earnest Money": { major: "8443", sub_major: "00", minor: "120" },
+            "Security Deposits": { major: "8443", sub_major: "00", minor: "120" },
+        };
+
+        const getHeadCodes = (sectorValue, amountType) => {
+            if (sectorValue === "STATE" && stateHeadCodeOverrides[amountType]) {
+                return stateHeadCodeOverrides[amountType];
+            }
+            return headCodeMapping[amountType] || { major: "", sub_major: "", minor: "" };
+        };
+
+        // 🔥 Fetch existing challans ONCE instead of per-field
+        const existingChallans = await tx.challanFromBill.findMany({
+            where: { idFromExpenditure: Number(id) },
+        });
+        const existingMap = new Map(existingChallans.map((c) => [c.amountType, c]));
+
+        const typesToDelete = [];
+        const rowsToCreate = [];
+        const updatePromises = [];
+
+        for (const [dbField, amountType] of Object.entries(deductionFields)) {
+            if (!(dbField in cleanData)) continue;
+
+            const amount = cleanData[dbField];
+            const existing = existingMap.get(amountType);
+
+            if (!amount || Number(amount) <= 0) {
+                if (existing) typesToDelete.push(amountType);
+                continue;
+            }
+
+            const headCodes = getHeadCodes(updatedExpenditure.sector, amountType);
+            const commonData = {
+                amount: Number(amount),
+                majorHead: headCodes.major,
+                subMajor: headCodes.sub_major,
+                minorHead: headCodes.minor,
+                treasuryCode: updatedExpenditure.treasuryName || "",
+                voucharDate: updatedExpenditure.voucherDate || new Date(),
+                chequeNo: updatedExpenditure.chequeNo ?? null,
+                chequeDate: updatedExpenditure.chequeIssueDate || new Date(),
+                salaryNonSalary: updatedExpenditure.salaryType,
+                expenditureType: updatedExpenditure.expenditureType,
+                treasuryChallanNo: updatedExpenditure.treasuryVoucherNo ?? null,
+                treasuryChallanDate: updatedExpenditure.treasuryDate || new Date(),
+            };
+
+            if (existing) {
+                updatePromises.push(
+                    tx.challanFromBill.update({ where: { id: existing.id }, data: commonData })
+                );
+            } else {
+                rowsToCreate.push({
+                    challanNo: updatedExpenditure.voucherNo,
+                    idFromExpenditure: updatedExpenditure.id,
+                    sector: updatedExpenditure.sector,
+                    departmentId: updatedExpenditure.departmentId,
+                    ddoId: updatedExpenditure.ddoId,
+                    amountType,
+                    ...commonData,
+                });
+            }
+        }
+
+        // 🔥 Bulk operations instead of N sequential round-trips
+        if (typesToDelete.length > 0) {
+            await tx.challanFromBill.deleteMany({
+                where: { idFromExpenditure: Number(id), amountType: { in: typesToDelete } },
+            });
+        }
+        if (rowsToCreate.length > 0) {
+            await tx.challanFromBill.createMany({ data: rowsToCreate });
+        }
+        if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+        }
+
         return updatedExpenditure;
-    });
+    }, { timeout: 15000 }); // 🔥 safety net in case of slow connections
 };
+
+
+
 export const getVoucherNo = async (type) => {
     if (!type || !["COUNCIL", "STATE"].includes(type)) {
         logger.error("Invalid type");
