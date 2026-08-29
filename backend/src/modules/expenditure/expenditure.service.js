@@ -183,16 +183,10 @@ export const getExpenditureById = async (id) => {
     };
 };
 
-<<<<<<< HEAD
-export const updateExpenditure = async (id, data) => {
-    const { voucherNo: _ignored, ...cleanData } = data;
-
-=======
 
 export const updateExpenditure = async (id, data) => {
     const { voucherNo: _ignored, ...cleanData } = data;
 
->>>>>>> 28882511b052322125176284e90174774ddbe1a6
     return prisma.$transaction(async (tx) => {
         const updatedExpenditure = await tx.expenditure.update({
             where: { id: Number(id) },
@@ -350,11 +344,8 @@ export const updateExpenditure = async (id, data) => {
     }, { timeout: 15000 }); // 🔥 safety net in case of slow connections
 };
 
-<<<<<<< HEAD
-=======
 
 
->>>>>>> 28882511b052322125176284e90174774ddbe1a6
 export const getVoucherNo = async (type) => {
     if (!type || !["COUNCIL", "STATE"].includes(type)) {
         logger.error("Invalid type");
