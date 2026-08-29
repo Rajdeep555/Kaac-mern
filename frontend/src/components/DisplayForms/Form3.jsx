@@ -1,14 +1,17 @@
 import React from "react";
 import { useExpenditure } from "../../hooks/admin/useExpenditure";
 
-const Form3 = ({ data: dataProp = [], title, sector }) => {
+const Form3 = ({ data: dataProp = [], title, sector, dateRange }) => {
+  const fromDate = dateRange?.from;
+  const toDate = dateRange?.to;
+
   // Fetch COUNCIL data
   const {
     expenditures: councilData,
     loading: councilLoading,
     error: councilError,
   } = useExpenditure(
-    { sector: "COUNCIL" },
+    { sector: "COUNCIL", from: fromDate, to: toDate },
     { enabled: sector === "COUNCIL" || sector === "CONSOLIDATED" },
   );
 
@@ -18,25 +21,46 @@ const Form3 = ({ data: dataProp = [], title, sector }) => {
     loading: stateLoading,
     error: stateError,
   } = useExpenditure(
-    { sector: "STATE" },
+    { sector: "STATE", from: fromDate, to: toDate },
     { enabled: sector === "STATE" || sector === "CONSOLIDATED" },
+  );
+
+  // ── Client-side safety filter — guarantees correctness even if the
+  //    backend /expenditure/admin route doesn't yet filter by date ──
+  const filterByDateRange = React.useCallback(
+    (rows) => {
+      if (!fromDate && !toDate) return rows;
+      const from = fromDate ? new Date(fromDate) : null;
+      const to = toDate ? new Date(toDate) : null;
+      if (to) to.setHours(23, 59, 59, 999);
+
+      return (rows ?? []).filter((r) => {
+        if (!r.chequeIssueDate) return false;
+        const d = new Date(r.chequeIssueDate);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      });
+    },
+    [fromDate, toDate],
   );
 
   // Determine which data to display
   const data = React.useMemo(() => {
     if (sector === "COUNCIL") {
-      return councilData ?? [];
+      return filterByDateRange(councilData ?? []);
     } else if (sector === "STATE") {
-      return stateData ?? [];
+      return filterByDateRange(stateData ?? []);
     } else if (sector === "CONSOLIDATED") {
-      // Combine both datasets and sort by date
-      return [...(councilData ?? []), ...(stateData ?? [])].sort(
+      // Combine both datasets, filter, then sort by date
+      const combined = [...(councilData ?? []), ...(stateData ?? [])];
+      return filterByDateRange(combined).sort(
         (a, b) => new Date(a.chequeIssueDate) - new Date(b.chequeIssueDate),
       );
     }
 
-    return dataProp;
-  }, [sector, councilData, stateData, dataProp]);
+    return filterByDateRange(dataProp);
+  }, [sector, councilData, stateData, dataProp, filterByDateRange]);
 
   const loading =
     sector === "COUNCIL"

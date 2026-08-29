@@ -4,24 +4,24 @@ import logger from "../../utils/logger.js";
 
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 1 - Summary of Transactions
-// Two columns: previous FY + current FY
+// Two columns: previous period + current period (based on from/to)
+//
+// Date column per table (confirmed against schema):
+//   challan          → challanDate
+//   cashReceipt      → date
+//   expenditure      → voucherDate
+//   challanTwo       → kaacChallanDate
+//   challanFromBill  → voucharDate   (NOT voucherDate — no 'e')
+//   stateChallan     → challanDate
 // ─────────────────────────────────────────────────────────────
 
-const parseFY = (financialYear) => {
-    if (!financialYear) return { startYear: null, endYear: null };
-    const parts = financialYear.split("-");
-    return {
-        startYear: parseInt(parts[0]),
-        endYear: parseInt(parts[1]),
-    };
-};
-
-const getFYDateRange = (startYear, endYear) => {
-    if (!startYear || !endYear) return null;
-    return {
-        gte: new Date(`${startYear}-04-01T00:00:00.000Z`),
-        lte: new Date(`${endYear}-03-31T23:59:59.999Z`),
-    };
+// Builds a Prisma-style { gte, lte } range from raw from/to date strings
+const getDateRangeFromParams = (from, to) => {
+    if (!from && !to) return null;
+    const range = {};
+    if (from) range.gte = new Date(`${from}T00:00:00.000Z`);
+    if (to) range.lte = new Date(`${to}T23:59:59.999Z`);
+    return range;
 };
 
 const safeNum = (val) => Number(val ?? 0);
@@ -65,7 +65,7 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
                         ],
                     },
                     ...(!isConsolidated ? { sector } : {}),
-                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                    ...(dateRange ? { voucharDate: dateRange } : {}),
                 },
                 select: {
                     amount: true,
@@ -475,7 +475,7 @@ const getOtherRecoveries = async (sector, dateRange) => {
                             "Forest Royalty",
                         ],
                     },
-                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                    ...(dateRange ? { voucharDate: dateRange } : {}),
                 },
                 select: {
                     amount: true,
@@ -534,7 +534,7 @@ const getOtherDeposits = async (sector, dateRange) => {
                             "Forest Royalty",
                         ],
                     },
-                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                    ...(dateRange ? { voucharDate: dateRange } : {}),
                 },
                 select: {
                     amount: true,
@@ -585,14 +585,17 @@ const getSecurityDepositsRefunded = async (sector, dateRange) => {
 };
 
 // 31. Opening Cash Balance
-const getOpeningCashBalance = async (sector, startYear) => {
+// Approximated from the year of the `from` date (the old FY logic used
+// the financial year's start year); if `from` isn't the start of a real
+// financial year, this is a best-effort match, not an exact one.
+const getOpeningCashBalance = async (sector, openingYear) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
     const rows = await prisma.openingBalance.findMany({
         where: {
             isActive: true,
             month: 4,
-            ...(startYear ? { year: startYear } : {}),
+            ...(openingYear ? { year: openingYear } : {}),
             ...(!isConsolidated ? { sector } : {}),
         },
         select: { amount: true },
@@ -768,14 +771,17 @@ const buildColumn = ({
 // MAIN SERVICE FUNCTION
 // ─────────────────────────────────────────────────────────────
 
-export const getStatement1Data = async (sector, financialYear) => {
+export const getStatement1Data = async (sector, from, to) => {
     try {
         logger.info(
-            `Fetching Statement 1 for sector: ${sector ?? "ALL"}, FY: ${financialYear ?? "ALL"}`
+            `Fetching Statement 1 for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL"}, to: ${to ?? "ALL"}`
         );
 
-        const { startYear, endYear } = parseFY(financialYear);
-        const currentDateRange = getFYDateRange(startYear, endYear);
+        const currentDateRange = getDateRangeFromParams(from, to);
+
+        // Best-effort year for the opening-balance lookup — see comment
+        // on getOpeningCashBalance above.
+        const openingYear = from ? new Date(from).getFullYear() : null;
 
         const [
             currRevenueReceipts,        // ← includes stateChallanTotal now
@@ -811,7 +817,7 @@ export const getStatement1Data = async (sector, financialYear) => {
             getOtherRecoveries(sector, currentDateRange),
             getSecurityDepositsRefunded(sector, currentDateRange),
             getOtherDeposits(sector, currentDateRange),
-            getOpeningCashBalance(sector, startYear),
+            getOpeningCashBalance(sector, openingYear),
             getClosingCashBalance(sector, currentDateRange),
         ]);
 
@@ -860,19 +866,14 @@ export const getStatement1Data = async (sector, financialYear) => {
         const fmt = (n) => Number(n ?? 0).toFixed(2);
         const pair = (key) => [fmt(prevColumn[key]), fmt(currColumn[key])];
 
-        const prevStartYear = startYear ? startYear - 1 : null;
-        const prevEndYear = endYear ? endYear - 1 : null;
-
         logger.info(
             `Statement 1 built successfully for sector: ${sector ?? "ALL"}`
         );
 
         return {
             financialYear: {
-                current: financialYear ?? "Current Year",
-                previous: prevStartYear
-                    ? `${prevStartYear}-${prevEndYear}`
-                    : "Previous Year",
+                current: from && to ? `${from} to ${to}` : "Current Period",
+                previous: "Previous Period",
             },
             revenueReceipts: pair("revenueReceipts"),
             revenueExpenditure: pair("revenueExpenditure"),

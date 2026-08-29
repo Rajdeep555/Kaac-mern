@@ -6,9 +6,9 @@ import { getForm12Data } from "./form12.service.js";
 // GET /forms/form4?sector=COUNCIL
 export const getForm4 = async (req, res) => {
     try {
-        const { sector } = req.query;
-        logger.info(`Form4 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm4Data(sector);
+        const { sector, from, to } = req.query;
+        logger.info(`Form4 controller hit — sector: ${sector ?? "ALL"}, from: ${from ?? "-"}, to: ${to ?? "-"}`);
+        const data = await getForm4Data(sector, from, to);
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form4 controller error: ${error.message}`);
@@ -19,9 +19,9 @@ export const getForm4 = async (req, res) => {
 // GET /forms/form5a?sector=COUNCIL
 export const getForm5A = async (req, res) => {
     try {
-        const { sector } = req.query;
-        logger.info(`Form5A controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm5AData(sector);
+        const { sector, from, to } = req.query;
+        logger.info(`Form5A controller hit — sector: ${sector ?? "ALL"}, from: ${from ?? "-"}, to: ${to ?? "-"}`);
+        const data = await getForm5AData(sector, from, to);
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form5A controller error: ${error.message}`);
@@ -29,18 +29,19 @@ export const getForm5A = async (req, res) => {
     }
 };
 
-// GET /forms/form5b?sector=COUNCIL
+// GET /forms/form5b?sector=COUNCIL&from=2025-04-01&to=2026-08-29
 export const getForm5B = async (req, res) => {
     try {
-        const { sector } = req.query;
-        logger.info(`Form5B controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm5BData(sector);
+        const { sector, from, to } = req.query;
+        logger.info(`Form5B controller hit — sector: ${sector ?? "ALL"}, from: ${from ?? "-"}, to: ${to ?? "-"}`);
+        const data = await getForm5BData(sector, from, to);
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form5B controller error: ${error.message}`);
         return res.status(500).json({ message: "Failed to fetch Form 5B data", error: error.message });
     }
 };
+
 
 // GET /forms/form5c?sector=COUNCIL
 export const getForm5C = async (req, res) => {

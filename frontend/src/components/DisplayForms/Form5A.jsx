@@ -3,7 +3,7 @@ import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm5A } from "../../hooks/admin/useForm5A";
 
 const AmountCell = ({ value, bold = false }) => (
-  <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
+  <td className={`border px-4 py-2 align-top ${bold ? "font-bold" : ""}`}>
     <span className="flex items-center justify-center gap-1">
       <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
@@ -11,8 +11,24 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-const Form5A = ({ sector }) => {
-  const { form5AData, loading, error } = useForm5A({ sector });
+// row.classification is [{ level, code, name }] resolved on the
+// backend (ChallanHeads for source="challan", Heads otherwise).
+// Renders each level on its own line — "code - name" when resolved,
+// else just the code.
+const HeadCodeCell = ({ classification }) => (
+  <td className="border px-4 py-2 text-left align-top">
+    {!classification || classification.length === 0
+      ? "-"
+      : classification.map((line, idx) => (
+          <div key={idx}>
+            {line.name ? `${line.code} - ${line.name}` : line.code}
+          </div>
+        ))}
+  </td>
+);
+
+const Form5A = ({ sector, dateRange }) => {
+  const { form5AData, loading, error } = useForm5A({ sector, dateRange });
 
   if (loading) {
     return (
@@ -80,14 +96,10 @@ const Form5A = ({ sector }) => {
               <React.Fragment key={`group-${groupIndex}-${group.majorHead}`}>
                 {group.rows.map((row, index) => (
                   <tr key={`${groupIndex}-row-${index}`} className="border">
-                    <td className="border px-4 py-2 text-left">
-                      {[row.majorHead, row.subMajor, row.minorHead]
-                        .filter((p) => p && p !== "-")
-                        .join("-")}
-                    </td>
-                    <td className="border px-4 py-2">00</td>
-                    <td className="border px-4 py-2">00</td>
-                    <td className="border px-4 py-2">00</td>
+                    <HeadCodeCell classification={row.classification} />
+                    <td className="border px-4 py-2 align-top">00</td>
+                    <td className="border px-4 py-2 align-top">00</td>
+                    <td className="border px-4 py-2 align-top">00</td>
                     <AmountCell value={row.amount} />
                   </tr>
                 ))}

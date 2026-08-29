@@ -2,12 +2,31 @@ import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useStatement6 } from "../../hooks/admin/useStatement6";
 
-const AmountCell = ({ value, bold = false }) => (
-  <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
+const AmountCell = ({ value, isTotal = false }) => (
+  <td
+    className={`border px-4 py-2 align-top ${isTotal ? "font-bold text-gray-900" : ""}`}>
     <span className="flex items-center justify-center gap-1">
       <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
     </span>
+  </td>
+);
+
+// major → bold, subMajor → semi-bold, minor → normal, total → bold + darker
+const LEVEL_CLASS = {
+  major: "font-bold",
+  subMajor: "font-semibold",
+  minor: "font-normal text-gray-700",
+  total: "font-bold text-gray-900",
+};
+
+const HeadsCell = ({ lines }) => (
+  <td className="border px-4 py-2 text-left align-top">
+    {lines.map((line, idx) => (
+      <div key={idx} className={LEVEL_CLASS[line.level] ?? ""}>
+        {line.text}
+      </div>
+    ))}
   </td>
 );
 
@@ -75,23 +94,24 @@ const Statement6 = ({ sector }) => {
             )}
 
             {rows?.map((item) => (
-              <tr key={item.id} className="border">
-                <td className="border px-4 py-2 text-left">{item.heads}</td>
-                <AmountCell value={item.nonPlan} />
-                <AmountCell value={item.plan} />
-                <AmountCell value={item.total} />
+              <tr
+                key={item.id}
+                className={`border ${item.isTotal ? "bg-gray-200" : ""}`}>
+                <HeadsCell lines={item.heads} />
+                <AmountCell value={item.nonPlan} isTotal={item.isTotal} />
+                <AmountCell value={item.plan} isTotal={item.isTotal} />
+                <AmountCell value={item.total} isTotal={item.isTotal} />
               </tr>
             ))}
 
-            {/* Grand Total */}
             {rows && rows.length > 0 && (
-              <tr className="bg-gray-300 border">
+              <tr className="bg-gray-400 border">
                 <td
                   colSpan={3}
-                  className="border px-4 py-3 text-right font-bold tracking-wider text-sm">
+                  className="border px-4 py-3 text-right font-bold tracking-wider text-sm text-gray-900">
                   GRAND TOTAL
                 </td>
-                <AmountCell value={grandTotal} bold />
+                <AmountCell value={grandTotal} isTotal />
               </tr>
             )}
           </tbody>

@@ -46,12 +46,15 @@ const DEFAULT_DATA = {
 };
 
 export const useStatement1 = (
-    { sector, financialYear } = {},
+    { sector, dateRange } = {},
     { enabled = true } = {}
 ) => {
     const [statement1Data, setStatement1Data] = useState(DEFAULT_DATA);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const from = dateRange?.from;
+    const to = dateRange?.to;
 
     const fetchData = useCallback(async () => {
         if (!enabled) return;
@@ -60,7 +63,8 @@ export const useStatement1 = (
         try {
             const params = {};
             if (sector) params.sector = sector;
-            if (financialYear) params.financialYear = financialYear;
+            if (from) params.from = from;
+            if (to) params.to = to;
 
             const { data } = await getStatement1(params);
             setStatement1Data(data?.data ?? DEFAULT_DATA);
@@ -71,7 +75,7 @@ export const useStatement1 = (
         } finally {
             setLoading(false);
         }
-    }, [sector, financialYear, enabled]);
+    }, [sector, from, to, enabled]);
 
     useEffect(() => {
         fetchData();

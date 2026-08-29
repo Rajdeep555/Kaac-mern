@@ -1,10 +1,30 @@
 import React from "react";
 import { useForm4 } from "../../hooks/admin/useForm4";
 
-const Form4 = ({ sector }) => {
-  // Single hook — pass sector directly to backend
+// classification is now an array of { level, code, name } from the
+// backend (see getForm4Data) instead of a "/"-joined string. Render
+// each level on its own line: "code - name" when resolved, else just
+// the code — matches the vertical mock-up format.
+const ClassificationCell = ({ classification }) => {
+  if (!classification || classification.length === 0) {
+    return <td className="border py-1 align-top">-</td>;
+  }
+
+  return (
+    <td className="border py-1 text-left px-2 align-top">
+      {classification.map((line, idx) => (
+        <div key={idx}>
+          {line.name ? `${line.code} - ${line.name}` : line.code}
+        </div>
+      ))}
+    </td>
+  );
+};
+
+const Form4 = ({ sector, dateRange }) => {
+  // Single hook — pass sector + date range directly to backend
   // Backend handles COUNCIL, STATE, CONSOLIDATED filtering
-  const { form4Data, loading, error } = useForm4({ sector });
+  const { form4Data, loading, error } = useForm4({ sector, dateRange });
 
   const getTitle = () => {
     switch (sector) {
@@ -104,21 +124,23 @@ const Form4 = ({ sector }) => {
 
               return (
                 <tr key={id} className="border font-small">
-                  <td className="border py-1">{clnNo ?? "-"}</td>
-                  <td className="border py-1">
+                  <td className="border py-1 align-top">{clnNo ?? "-"}</td>
+                  <td className="border py-1 align-top">
                     {date ? new Date(date).toLocaleDateString() : "-"}
                   </td>
-                  <td className="border py-1">{treasury ?? "-"}</td>
-                  <td className="border py-1">
+                  <td className="border py-1 align-top">{treasury ?? "-"}</td>
+                  <td className="border py-1 align-top">
                     ₹{Number(amount ?? 0).toFixed(2)}
                   </td>
-                  <td className="border py-1">{refItemNo ?? "-"}</td>
-                  <td className="border py-1">{classification ?? "-"}</td>
+                  <td className="border py-1 align-top">{refItemNo ?? "-"}</td>
+                  <ClassificationCell classification={classification} />
                   {/* Sector cell only for CONSOLIDATED */}
                   {sector === "CONSOLIDATED" && (
-                    <td className="border py-1">{itemSector ?? "-"}</td>
+                    <td className="border py-1 align-top">
+                      {itemSector ?? "-"}
+                    </td>
                   )}
-                  <td className="border py-1">{remarks ?? "-"}</td>
+                  <td className="border py-1 align-top">{remarks ?? "-"}</td>
                 </tr>
               );
             })}

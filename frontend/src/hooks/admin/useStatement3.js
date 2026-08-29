@@ -5,7 +5,10 @@ import {
 } from "../../api/statements.api.js";
 
 // Hook for Part 1 — Debt Position
-export const useStatement3Debt = ({ sector } = {}, { enabled = true } = {}) => {
+export const useStatement3Debt = (
+    { sector, dateRange } = {},
+    { enabled = true } = {}
+) => {
     const [debtData, setDebtData] = useState({
         rows: [],
         total: {
@@ -19,34 +22,8 @@ export const useStatement3Debt = ({ sector } = {}, { enabled = true } = {}) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const fetchData = useCallback(async () => {
-        if (!enabled) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const params = sector ? { sector } : {};
-            const { data } = await getStatement3Debt(params);
-            setDebtData(data?.data ?? { rows: [], total: {} });
-        } catch (err) {
-            setError(err?.response?.data?.message ?? "Failed to fetch debt data");
-        } finally {
-            setLoading(false);
-        }
-    }, [sector, enabled]);
-
-    useEffect(() => { fetchData(); }, [fetchData]);
-
-    return { debtData, loading, error, refetch: fetchData };
-};
-
-// Hook for Part 2 — Ways and Means
-export const useStatement3WaysAndMeans = (
-    { sector, financialYear } = {},
-    { enabled = true } = {}
-) => {
-    const [waysAndMeansData, setWaysAndMeansData] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const from = dateRange?.from;
+    const to = dateRange?.to;
 
     const fetchData = useCallback(async () => {
         if (!enabled) return;
@@ -55,7 +32,43 @@ export const useStatement3WaysAndMeans = (
         try {
             const params = {};
             if (sector) params.sector = sector;
-            if (financialYear) params.financialYear = financialYear;
+            if (from) params.from = from;
+            if (to) params.to = to;
+            const { data } = await getStatement3Debt(params);
+            setDebtData(data?.data ?? { rows: [], total: {} });
+        } catch (err) {
+            setError(err?.response?.data?.message ?? "Failed to fetch debt data");
+        } finally {
+            setLoading(false);
+        }
+    }, [sector, from, to, enabled]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    return { debtData, loading, error, refetch: fetchData };
+};
+
+// Hook for Part 2 — Ways and Means
+export const useStatement3WaysAndMeans = (
+    { sector, dateRange } = {},
+    { enabled = true } = {}
+) => {
+    const [waysAndMeansData, setWaysAndMeansData] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const from = dateRange?.from;
+    const to = dateRange?.to;
+
+    const fetchData = useCallback(async () => {
+        if (!enabled) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const params = {};
+            if (sector) params.sector = sector;
+            if (from) params.from = from;
+            if (to) params.to = to;
             const { data } = await getStatement3WaysAndMeans(params);
             setWaysAndMeansData(data?.data ?? []);
         } catch (err) {
@@ -63,7 +76,7 @@ export const useStatement3WaysAndMeans = (
         } finally {
             setLoading(false);
         }
-    }, [sector, financialYear, enabled]);
+    }, [sector, from, to, enabled]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 

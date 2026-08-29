@@ -73,8 +73,8 @@ const TrackForms = () => {
   const { sector } = useParams();
   const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState("1");
-  const [selectedFY, setSelectedFY] = useState(null); // ✅ FY filter state
-
+  // const [dateRange, setdateRange] = useState(null); // ✅ FY filter state
+  const [dateRange, setDateRange] = useState(null); // ✅ { from, to } date filter state
   // ✅ Ref on the form display area for targeted print
   const formAreaRef = useRef(null);
 
@@ -104,8 +104,8 @@ const TrackForms = () => {
   ];
 
   // ✅ Handle FY filter from SearchFunction
-  const handleFilter = useCallback((fy) => {
-    setSelectedFY(fy);
+  const handleFilter = useCallback((range) => {
+    setDateRange(range); // { from, to }
   }, []);
 
   // ✅ Print only the form content div
@@ -161,26 +161,26 @@ const TrackForms = () => {
 
   const stepComponents = useMemo(
     () => ({
-      1: <Form1 sector={sectorType} financialYear={selectedFY} />,
-      2: <Form2 sector={sectorType} financialYear={selectedFY} />,
-      3: <Form3 sector={sectorType} financialYear={selectedFY} />,
-      4: <Form4 sector={sectorType} financialYear={selectedFY} />,
-      "5A": <Form5A sector={sectorType} financialYear={selectedFY} />,
-      "5B": <Form5B sector={sectorType} financialYear={selectedFY} />,
-      "5C": <Form5C sector={sectorType} financialYear={selectedFY} />,
-      "5D": <Form5D sector={sectorType} financialYear={selectedFY} />,
-      "5E": <Form5E sector={sectorType} financialYear={selectedFY} />,
-      6: <Form6 sector={sectorType} financialYear={selectedFY} />,
-      7: <Form7 sector={sectorType} financialYear={selectedFY} />,
-      "7A": <Form7A sector={sectorType} financialYear={selectedFY} />,
-      "7B": <Form7B sector={sectorType} financialYear={selectedFY} />,
-      8: <Form8 sector={sectorType} financialYear={selectedFY} />,
-      9: <Form9 sector={sectorType} financialYear={selectedFY} />,
-      10: <Form10 sector={sectorType} financialYear={selectedFY} />,
-      11: <Form11 sector={sectorType} financialYear={selectedFY} />,
-      12: <Form12 sector={sectorType} financialYear={selectedFY} />,
+      1: <Form1 sector={sectorType} dateRange={dateRange} />,
+      2: <Form2 sector={sectorType} dateRange={dateRange} />,
+      3: <Form3 sector={sectorType} dateRange={dateRange} />,
+      4: <Form4 sector={sectorType} dateRange={dateRange} />,
+      "5A": <Form5A sector={sectorType} dateRange={dateRange} />,
+      "5B": <Form5B sector={sectorType} dateRange={dateRange} />,
+      "5C": <Form5C sector={sectorType} dateRange={dateRange} />,
+      "5D": <Form5D sector={sectorType} dateRange={dateRange} />,
+      "5E": <Form5E sector={sectorType} dateRange={dateRange} />,
+      6: <Form6 sector={sectorType} dateRange={dateRange} />,
+      7: <Form7 sector={sectorType} dateRange={dateRange} />,
+      "7A": <Form7A sector={sectorType} dateRange={dateRange} />,
+      "7B": <Form7B sector={sectorType} dateRange={dateRange} />,
+      8: <Form8 sector={sectorType} dateRange={dateRange} />,
+      9: <Form9 sector={sectorType} dateRange={dateRange} />,
+      10: <Form10 sector={sectorType} dateRange={dateRange} />,
+      11: <Form11 sector={sectorType} dateRange={dateRange} />,
+      12: <Form12 sector={sectorType} dateRange={dateRange} />,
     }),
-    [sectorType, selectedFY], // ✅ re-renders when FY changes
+    [sectorType, dateRange], // ✅ re-renders when FY changes
   );
 
   return (
@@ -410,14 +410,14 @@ const TrackForms = () => {
                   color: "#6b7280",
                 }}>
                 Select a form number below to view the corresponding register
-                {selectedFY && (
+                {dateRange?.from && dateRange?.to && (
                   <span
                     style={{
                       marginLeft: "8px",
                       color: "#14532d",
                       fontWeight: "600",
                     }}>
-                    — FY {selectedFY}
+                    — {dateRange.from} to {dateRange.to}
                   </span>
                 )}
               </p>
@@ -468,7 +468,10 @@ const TrackForms = () => {
                   fontSize: "11px",
                   color: "#9ca3af",
                 }}>
-                Currently Viewing{selectedFY ? ` — FY ${selectedFY}` : ""}
+                Currently Viewing
+                {dateRange?.from && dateRange?.to
+                  ? ` — ${dateRange.from} to ${dateRange.to}`
+                  : ""}
               </p>
             </div>
           </div>

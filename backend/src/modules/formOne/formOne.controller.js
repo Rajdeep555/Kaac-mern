@@ -1,18 +1,19 @@
-import { getCashbookRowsByFy, saveCashbookSummary } from "./formOne.service.js";
+import { getCashbookRowsByDateRange, saveCashbookSummary } from "./formOne.service.js";
 
 export const getCashbookByFy = async (req, res) => {
     try {
-        const { year, sector } = req.query;
+        const { from, to, sector } = req.query;
         console.log("👉 req.query:", req.query); // ADD THIS
         console.log("👉 sector:", sector);        // ADD THIS
-        if (!year) {
+
+        if (!from || !to) {
             return res.status(400).json({
                 success: false,
-                message: "Query param 'year' is required",
+                message: "Query params 'from' and 'to' are required",
             });
         }
 
-        const rows = await getCashbookRowsByFy(Number(year), sector);
+        const rows = await getCashbookRowsByDateRange(from, to, sector);
 
         return res.status(200).json({
             success: true,
@@ -20,7 +21,9 @@ export const getCashbookByFy = async (req, res) => {
             data: rows,
         });
     } catch (error) {
-        return res.status(500).json({
+        // Honors the 400 flagged by the service for invalid/reversed dates,
+        // falls back to 500 for anything unexpected
+        return res.status(error.status || 500).json({
             success: false,
             message: error.message || "Something went wrong",
         });

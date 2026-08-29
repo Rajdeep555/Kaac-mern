@@ -28,7 +28,7 @@ const STATEMENT_LABELS = {
 const TrackStatements = () => {
   const { sector } = useParams();
   const [activeStep, setActiveStep] = useState("1");
-  const [selectedFY, setSelectedFY] = useState(null); // ✅ FY filter state
+  const [dateRange, setDateRange] = useState(null); // ✅ { from, to } date filter state
 
   // ✅ Ref for targeted print
   const statementAreaRef = useRef(null);
@@ -39,9 +39,9 @@ const TrackStatements = () => {
 
   const array = ["1", "2", "3", "4", "5", "6", "7"];
 
-  // ✅ Handle FY filter
-  const handleFilter = useCallback((fy) => {
-    setSelectedFY(fy);
+  // ✅ Handle date range filter from SearchFunction
+  const handleFilter = useCallback((range) => {
+    setDateRange(range); // { from, to }
   }, []);
 
   // ✅ Print only the statement content div
@@ -72,40 +72,38 @@ const TrackStatements = () => {
   }, [activeStep, sectorType]);
 
   // ✅ Download statement metadata as CSV
-  const handleDownload = useCallback(
-    (fy) => {
-      const rows = [
-        ["Statement No", "Statement Name", "Sector", "Financial Year"],
-        [
-          activeStep,
-          STATEMENT_LABELS[activeStep] || "",
-          sectorType || "All",
-          fy || "Current",
-        ],
-      ];
-      const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Statement_${activeStep}_${sectorType || "ALL"}_${fy || "current"}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-    [activeStep, sectorType],
-  );
+  const handleDownload = useCallback(() => {
+    const rows = [
+      ["Statement No", "Statement Name", "Sector", "From", "To"],
+      [
+        activeStep,
+        STATEMENT_LABELS[activeStep] || "",
+        sectorType || "All",
+        dateRange?.from || "",
+        dateRange?.to || "",
+      ],
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Statement_${activeStep}_${sectorType || "ALL"}_${dateRange?.from || "all"}_${dateRange?.to || "time"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [activeStep, sectorType, dateRange]);
 
   const stepComponents = useMemo(
     () => ({
-      1: <Statement1 sector={sectorType} financialYear={selectedFY} />,
-      2: <Statement2 sector={sectorType} financialYear={selectedFY} />,
-      3: <Statement3 sector={sectorType} financialYear={selectedFY} />,
-      4: <Statement4 sector={sectorType} financialYear={selectedFY} />,
-      5: <Statement5 sector={sectorType} financialYear={selectedFY} />,
-      6: <Statement6 sector={sectorType} financialYear={selectedFY} />,
-      7: <Statement7 sector={sectorType} financialYear={selectedFY} />,
+      1: <Statement1 sector={sectorType} dateRange={dateRange} />,
+      2: <Statement2 sector={sectorType} dateRange={dateRange} />,
+      3: <Statement3 sector={sectorType} dateRange={dateRange} />,
+      4: <Statement4 sector={sectorType} dateRange={dateRange} />,
+      5: <Statement5 sector={sectorType} dateRange={dateRange} />,
+      6: <Statement6 sector={sectorType} dateRange={dateRange} />,
+      7: <Statement7 sector={sectorType} dateRange={dateRange} />,
     }),
-    [sectorType, selectedFY], // ✅ re-renders when FY changes
+    [sectorType, dateRange],
   );
 
   return (
@@ -359,14 +357,14 @@ const TrackStatements = () => {
                 }}>
                 Select a statement number below to view the corresponding
                 register
-                {selectedFY && (
+                {(dateRange?.from || dateRange?.to) && (
                   <span
                     style={{
                       marginLeft: "8px",
                       color: "#14532d",
                       fontWeight: "600",
                     }}>
-                    — FY {selectedFY}
+                    — {dateRange?.from || "…"} to {dateRange?.to || "…"}
                   </span>
                 )}
               </p>
@@ -418,7 +416,9 @@ const TrackStatements = () => {
                   color: "#9ca3af",
                 }}>
                 Currently Viewing — {sectorType ?? "All Sectors"}
-                {selectedFY ? ` — FY ${selectedFY}` : ""}
+                {dateRange?.from || dateRange?.to
+                  ? ` — ${dateRange?.from || "…"} to ${dateRange?.to || "…"}`
+                  : ""}
               </p>
             </div>
           </div>

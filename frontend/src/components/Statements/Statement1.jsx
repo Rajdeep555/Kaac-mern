@@ -53,14 +53,14 @@ const SectionHeader = ({ label, align = "start" }) => (
   </tr>
 );
 
-const Statement1 = ({ sector, financialYear }) => {
+const Statement1 = ({ sector, dateRange }) => {
   const {
     statement1Data: d,
     loading,
     error,
   } = useStatement1({
     sector,
-    financialYear,
+    dateRange,
   });
 
   if (loading) {
@@ -90,6 +90,11 @@ const Statement1 = ({ sector, financialYear }) => {
         <h1 className="font-bold text-lg">STATEMENT NO. 1</h1>
         {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
+        )}
+        {(dateRange?.from || dateRange?.to) && (
+          <p className="text-xs text-gray-500">
+            {dateRange?.from || "…"} to {dateRange?.to || "…"}
+          </p>
         )}
         <h2 className="py-2 font-semibold">Summary of Transactions</h2>
       </div>

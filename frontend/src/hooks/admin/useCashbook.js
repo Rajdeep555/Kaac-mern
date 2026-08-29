@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { getFormOne } from "../../api/formOne.api.js";
 
 // Move cache inside the hook — no shared module-level state
-export function useCashbook({ year, sector }, options = {}) {
+export function useCashbook({ from, to, sector }, options = {}) {
     const { enabled = true, staleTime = 5 * 60 * 1000 } = options;
 
     const [data, setData] = useState([]);
@@ -14,10 +14,10 @@ export function useCashbook({ year, sector }, options = {}) {
     const cacheRef = useRef(new Map());
     const cacheExpiryRef = useRef(new Map());
 
-    const cacheKey = `${year}-${sector}`;
+    const cacheKey = `${from}-${to}-${sector}`;
 
     useEffect(() => {
-        if (!enabled || !year || !sector) {
+        if (!enabled || !from || !to || !sector) {
             setData([]);
             setLoading(false);
             return;
@@ -32,11 +32,11 @@ export function useCashbook({ year, sector }, options = {}) {
             return;
         }
 
-        let cancelled = false;  // ← prevent stale closure race conditions
+        let cancelled = false; // ← prevent stale closure race conditions
         setLoading(true);
         setError(null);
 
-        getFormOne({ year, sector })
+        getFormOne({ from, to, sector })
             .then((response) => {
                 if (cancelled) return;
                 const newData = response.data?.data ?? [];
@@ -55,9 +55,9 @@ export function useCashbook({ year, sector }, options = {}) {
             });
 
         return () => {
-            cancelled = true;  // ← cleanup on unmount or key change
+            cancelled = true; // ← cleanup on unmount or key change
         };
-    }, [year, sector, enabled, cacheKey, staleTime]);
+    }, [from, to, sector, enabled, cacheKey, staleTime]);
 
     const refetch = useCallback(() => {
         cacheRef.current.delete(cacheKey);

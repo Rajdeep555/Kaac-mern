@@ -13,8 +13,8 @@ const Amt = ({ value }) =>
     "-"
   );
 
-const Form8 = ({ sector }) => {
-  const { form8Data, loading, error } = useForm8({ sector });
+const Form8 = ({ sector, dateRange }) => {
+  const { form8Data, loading, error } = useForm8({ sector, dateRange });
 
   if (loading) {
     return (

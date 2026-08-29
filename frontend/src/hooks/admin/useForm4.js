@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { getForm4 } from "../../api/forms.api.js";
 
-export const useForm4 = ({ sector } = {}, { enabled = true } = {}) => {
+export const useForm4 = ({ sector, dateRange } = {}, { enabled = true } = {}) => {
     const [form4Data, setForm4Data] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const from = dateRange?.from;
+    const to = dateRange?.to;
 
     const fetchData = useCallback(async () => {
         // Don't fetch if disabled
@@ -14,8 +17,11 @@ export const useForm4 = ({ sector } = {}, { enabled = true } = {}) => {
         setError(null);
 
         try {
-            // Pass sector as query param e.g. ?sector=COUNCIL
-            const params = sector ? { sector } : {};
+            // Pass sector + from/to as query params e.g. ?sector=COUNCIL&from=2025-04-01&to=2026-08-28
+            const params = {};
+            if (sector) params.sector = sector;
+            if (from) params.from = from;
+            if (to) params.to = to;
 
             const { data } = await getForm4(params);
 
@@ -25,9 +31,9 @@ export const useForm4 = ({ sector } = {}, { enabled = true } = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [sector, enabled]);
+    }, [sector, from, to, enabled]);
 
-    // Re-fetch whenever sector or enabled changes
+    // Re-fetch whenever sector, from, to, or enabled changes
     useEffect(() => {
         fetchData();
     }, [fetchData]);

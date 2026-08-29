@@ -17,7 +17,6 @@ const MONTHS = [
   "DEC",
 ];
 
-// Helper for amount display
 const AmountCell = ({ value }) =>
   value > 0 ? (
     <span className="flex items-center justify-center gap-1">
@@ -27,6 +26,22 @@ const AmountCell = ({ value }) =>
   ) : (
     "-"
   );
+
+// row.classification is [{ level, code, name }] resolved on the
+// backend. Renders each level on its own line — "code - name" when
+// resolved (including "code - Null" for zero codes), else just the
+// code. Falls back to the old flat headCode string if classification
+// is somehow missing.
+const HeadCodeCell = ({ classification, headCode }) => {
+  if (!classification || classification.length === 0) {
+    return <div className="font-semibold">{headCode}</div>;
+  }
+  return classification.map((line, idx) => (
+    <div key={idx} className="font-semibold">
+      {line.name ? `${line.code} - ${line.name}` : line.code}
+    </div>
+  ));
+};
 
 const Form6 = ({ sector }) => {
   const { form6Data, loading, error } = useForm6({ sector });
@@ -78,7 +93,6 @@ const Form6 = ({ sector }) => {
       <div className="w-full overflow-x-auto">
         <table className="w-full border border-black mx-4 text-[11px] px-2 my-2 text-center">
           <thead>
-            {/* Row 1 — Head label + month names + total */}
             <tr className="border">
               <th className="border py-2 px-4 text-left">FULL HEAD CODE</th>
               {MONTHS.map((month) => (
@@ -89,7 +103,6 @@ const Form6 = ({ sector }) => {
               <th className="border py-2 px-2">TOTAL</th>
             </tr>
 
-            {/* Row 2 — year under each month */}
             <tr>
               <th className="border py-2"></th>
               {MONTHS.map((month) => (
@@ -102,7 +115,6 @@ const Form6 = ({ sector }) => {
           </thead>
 
           <tbody>
-            {/* No data message */}
             {(!rows || rows.length === 0) && (
               <tr>
                 <td colSpan={15} className="border py-4 font-semibold">
@@ -111,47 +123,27 @@ const Form6 = ({ sector }) => {
               </tr>
             )}
 
-            {/* Data rows */}
             {rows.map((row, index) => (
               <tr key={`${index}-${row.headCode}`} className="border">
-                {/* Full head code broken into parts for readability */}
-                <td className="border py-2 px-4 text-left">
-                  <div className="font-semibold">{row.headCode}</div>
-                  {/* Show individual head labels below the full code */}
-                  {/* <div className="text-[9px] text-gray-500 mt-1 space-y-0.5">
-                    {row.majorHead !== "-" && <div>Major: {row.majorHead}</div>}
-                    {row.subMajorHead !== "-" && (
-                      <div>Sub Major: {row.subMajorHead}</div>
-                    )}
-                    {row.minorHead !== "-" && <div>Minor: {row.minorHead}</div>}
-                    {row.subHead !== "-" && <div>Sub Head: {row.subHead}</div>}
-                    {row.subSubHead !== "-" && (
-                      <div>Sub Sub Head: {row.subSubHead}</div>
-                    )}
-                    {row.detailHead !== "-" && (
-                      <div>Detail: {row.detailHead}</div>
-                    )}
-                    {row.subDetailHead !== "-" && (
-                      <div>Sub Detail: {row.subDetailHead}</div>
-                    )}
-                  </div> */}
+                <td className="border py-2 px-4 text-left align-top">
+                  <HeadCodeCell
+                    classification={row.classification}
+                    headCode={row.headCode}
+                  />
                 </td>
 
-                {/* Monthly amounts */}
                 {MONTHS.map((month) => (
-                  <td key={month} className="border py-2">
+                  <td key={month} className="border py-2 align-top">
                     <AmountCell value={row.months[month]} />
                   </td>
                 ))}
 
-                {/* Row total */}
-                <td className="border py-2 font-semibold">
+                <td className="border py-2 font-semibold align-top">
                   <AmountCell value={row.total} />
                 </td>
               </tr>
             ))}
 
-            {/* Grand Total Row — always shown at the bottom */}
             {rows.length > 0 && (
               <tr className="bg-gray-200 font-bold border">
                 <td className="border px-4 py-2 text-left">GRAND TOTAL</td>

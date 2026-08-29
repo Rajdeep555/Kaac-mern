@@ -19,7 +19,14 @@ const csvField = (value) => {
 
 const downloadChallanCsv = (groupedByDate, title) => {
   const lines = [
-    ["#", "Date", "Head Code", "Challan No", "Gross Amount"]
+    [
+      "#",
+      "Date",
+      "Head Code",
+      "Challan No",
+      "Treasury Challan Date",
+      "Gross Amount",
+    ]
       .map(csvField)
       .join(","),
   ];
@@ -31,20 +38,27 @@ const downloadChallanCsv = (groupedByDate, title) => {
     headGroups.forEach(({ head, rows: headRows, headSubtotal }) => {
       headRows.forEach((r) => {
         lines.push(
-          [srNo, date, head, r.challanNo, r.amount.toFixed(2)]
+          [
+            srNo,
+            date,
+            head,
+            r.challanNo,
+            r.treasuryChallanDate,
+            r.amount.toFixed(2),
+          ]
             .map(csvField)
             .join(","),
         );
         srNo++;
       });
       lines.push(
-        ["", "", "", `Total for Head ${head}`, headSubtotal.toFixed(2)]
+        ["", "", "", "", `Total for Head ${head}`, headSubtotal.toFixed(2)]
           .map(csvField)
           .join(","),
       );
     });
     lines.push(
-      ["", "", "", `Total for ${date}`, subtotal.toFixed(2)]
+      ["", "", "", "", `Total for ${date}`, subtotal.toFixed(2)]
         .map(csvField)
         .join(","),
     );
@@ -52,7 +66,9 @@ const downloadChallanCsv = (groupedByDate, title) => {
   });
 
   lines.push(
-    ["", "", "", "GRAND TOTAL", grandTotal.toFixed(2)].map(csvField).join(","),
+    ["", "", "", "", "GRAND TOTAL", grandTotal.toFixed(2)]
+      .map(csvField)
+      .join(","),
   );
 
   const csv = lines.join("\n");
@@ -70,8 +86,9 @@ const downloadChallanCsv = (groupedByDate, title) => {
 };
 
 // ── Modal: rows grouped by date, then by head code within each date — Sr No,
-//    Date, Head Code, Challan No, Gross Amount — with a semibold subtotal
-//    row per head code, a bold total row per date, and a grand total ──
+//    Date, Head Code, Challan No, Treasury Challan Date, Gross Amount — with
+//    a semibold subtotal row per head code, a bold total row per date, and a
+//    grand total ──
 const ChallanListModal = ({ title, rows, onClose }) => {
   const groupedByDate = useMemo(() => {
     const byDate = new Map();
@@ -121,7 +138,7 @@ const ChallanListModal = ({ title, rows, onClose }) => {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}>
       <div
-        className="w-full max-w-2xl bg-white rounded-lg shadow-lg flex flex-col max-h-[80vh]"
+        className="w-full max-w-3xl bg-white rounded-lg shadow-lg flex flex-col max-h-[80vh]"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200">
           <h2 className="font-unbounded text-lg font-normal">{title}</h2>
@@ -156,6 +173,7 @@ const ChallanListModal = ({ title, rows, onClose }) => {
                   <th className="py-2 pr-2">Date</th>
                   <th className="py-2 pr-2">Head Code</th>
                   <th className="py-2 pr-2">Challan No</th>
+                  <th className="py-2 pr-2">Treasury Challan Date</th>
                   <th className="py-2 text-right">Gross Amount</th>
                 </tr>
               </thead>
@@ -176,6 +194,9 @@ const ChallanListModal = ({ title, rows, onClose }) => {
                               <td className="py-2 pr-2 font-medium">
                                 {r.challanNo}
                               </td>
+                              <td className="py-2 pr-2">
+                                {r.treasuryChallanDate || "-"}
+                              </td>
                               <td className="py-2 text-right">
                                 {r.amount.toLocaleString("en-IN")}
                               </td>
@@ -185,7 +206,7 @@ const ChallanListModal = ({ title, rows, onClose }) => {
                         {/* ── Per-head subtotal (semibold) ── */}
                         <tr className="bg-zinc-50/60 border-b border-zinc-100">
                           <td
-                            colSpan={4}
+                            colSpan={5}
                             className="py-1.5 pr-2 text-right font-semibold text-zinc-600">
                             Total for Head {hg.head}
                           </td>
@@ -198,7 +219,7 @@ const ChallanListModal = ({ title, rows, onClose }) => {
                     {/* ── Per-date total (bold) ── */}
                     <tr className="bg-zinc-100 border-b border-zinc-200">
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="py-1.5 pr-2 text-right font-bold text-zinc-700">
                         Total for {group.date}
                       </td>

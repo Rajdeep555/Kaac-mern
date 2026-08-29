@@ -47,11 +47,11 @@ const COUNCIL_STATE_TREASURY_TYPES = [
     "MC Forest Royalty",
 ];
 
-function getFyRange(year) {
-    const from = new Date(Date.UTC(year, 3, 1, 0, 0, 0, 0));
-    const to = new Date(Date.UTC(year + 1, 2, 31, 23, 59, 59, 999));
-    return { from, to };
-}
+// function getFyRange(year) {
+//     const from = new Date(Date.UTC(year, 3, 1, 0, 0, 0, 0));
+//     const to = new Date(Date.UTC(year + 1, 2, 31, 23, 59, 59, 999));
+//     return { from, to };
+// }
 
 function createEmptyRow() {
     return {
@@ -85,16 +85,32 @@ const buildClassification = (...parts) =>
         )
         .join("-") || null;
 
-export const getCashbookRowsByFy = async (year, sector) => {
+export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
     try {
-        const { from, to } = getFyRange(year);
+        // Normalize incoming date strings/values to full-day UTC bounds,
+        // same shape getFyRange used to produce.
+        const from = new Date(fromDate);
+        from.setUTCHours(0, 0, 0, 0);
+
+        const to = new Date(toDate);
+        to.setUTCHours(23, 59, 59, 999);
+
+        if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+            const err = new Error("Invalid from/to date");
+            err.status = 400;
+            throw err;
+        }
+        if (from > to) {
+            const err = new Error("`from` date must be before or equal to `to` date");
+            err.status = 400;
+            throw err;
+        }
 
         const isStateSector = sector === "STATE";
         const isConsolidated = sector === "CONSOLIDATED";
         const isCouncilSector = sector === "COUNCIL";
 
         logger.info(`Cashbook fetch started`, {
-            year,
             sector,
             from: from.toISOString().slice(0, 10),
             to: to.toISOString().slice(0, 10),
@@ -210,7 +226,8 @@ export const getCashbookRowsByFy = async (year, sector) => {
         // ── DEBUG: dump every fetched table ─────────────────────────
         console.log("[CASHBOOK DEBUG] ===== RAW TABLE DUMPS =====");
         console.log("[CASHBOOK DEBUG] sector param:", JSON.stringify(sector));
-        console.log("[CASHBOOK DEBUG] year param:", year);
+        console.log("[CASHBOOK DEBUG] from param:", from.toISOString());
+        console.log("[CASHBOOK DEBUG] to param:", to.toISOString());
 
         console.log(
             `[CASHBOOK DEBUG] cashReceipts (${cashReceipts.length}):`,
@@ -272,38 +289,12 @@ export const getCashbookRowsByFy = async (year, sector) => {
             CASH_AMOUNT_TYPES.includes(cfb.amountType)
         );
 
-        // ── DEBUG: derived challanFromBill buckets ──────────────────
-        // console.log("[CASHBOOK DEBUG] ===== DERIVED CFB BUCKETS =====");
-        // console.log(
-        //     `[CASHBOOK DEBUG] cfbStateRows (${cfbStateRows.length}):`,
-        //     JSON.stringify(cfbStateRows, null, 2)
-        // );
-        // console.log(
-        //     `[CASHBOOK DEBUG] cfbNonStateRows (${cfbNonStateRows.length}):`,
-        //     JSON.stringify(cfbNonStateRows, null, 2)
-        // );
-        // console.log(
-        //     `[CASHBOOK DEBUG] cfbPlaRows (non-state, ${cfbPlaRows.length}):`,
-        //     JSON.stringify(cfbPlaRows, null, 2)
-        // );
-        // console.log(
-        //     `[CASHBOOK DEBUG] cfbCashRows (non-state, ${cfbCashRows.length}):`,
-        //     JSON.stringify(cfbCashRows, null, 2)
-        // );
-        // console.log(
-        //     `[CASHBOOK DEBUG] FY date bounds -> from: ${from.toISOString()} to: ${to.toISOString()}`
-        // );
         if (cfbStateRows.length > 0) {
             const dates = cfbStateRows
                 .map((cfb) => cfb.voucharDate)
                 .filter(Boolean)
                 .sort((a, b) => a - b);
-            // console.log(
-            //     `[CASHBOOK DEBUG] cfbStateRows voucharDate range -> min: ${dates[0]?.toISOString()} max: ${dates[dates.length - 1]?.toISOString()}`
-            // );
         }
-        // console.log("[CASHBOOK DEBUG] ===== END DERIVED CFB BUCKETS =====");
-        // ── END DEBUG ────────────────────────────────────────────
 
         const rows = [];
 
@@ -422,9 +413,7 @@ export const getCashbookRowsByFy = async (year, sector) => {
             rows.push(row);
         });
         if (isCouncilSector) {
-            // console.log(
-            //     `[CASHBOOK] COUNCIL receipt Treasury PLA — cross-sector STATE treasury rows added: ${c3aCrossTotal} (${councilCrossStateTreasuryRows.length} rows)`
-            // );
+            // no-op — placeholder for future logging
         }
 
         // ════════════════════════════════════════════════════════
@@ -507,9 +496,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
                 rows.push(crRow);
             }
         });
-        // console.log(
-        //     `[CASHBOOK] Total amount from Challan From Bill -> Receipt PLA: ${c3cDrTotal}, Disbursement PLA: ${c3cCrTotal}`
-        // );
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 4: Challan WITH counterfoilNo (DR + CR pair)
@@ -621,7 +607,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             c6Total += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
-        // console.log(`[CASHBOOK] Total amount from State Challan -> Receipt PLA: ${c6Total}`);
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 2: Expenditure (has sector field — filtered correctly)
@@ -654,7 +639,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             crETotal += row.plaColumnPayment ?? 0;
             rows.push(row);
         });
-        // console.log(`[CASHBOOK] Total amount from Expenditure (CR side) -> Disbursement PLA: ${crETotal}`);
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 3: ChallanFromBill (Cash types)
@@ -683,11 +667,6 @@ export const getCashbookRowsByFy = async (year, sector) => {
             crCfbTotal += row.disbursementCashAmount ?? 0;
             rows.push(row);
         });
-
-        // console.log(
-        //     `[CASHBOOK] CR side total (Challan From Bill PLA + Expenditure): ${c3cCrTotal + crETotal
-        //     } (Challan From Bill: ${c3cCrTotal}, Expenditure: ${crETotal})`
-        // );
 
         // ════════════════════════════════════════════════════════
         // SORT all rows by date

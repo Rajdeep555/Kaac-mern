@@ -33,8 +33,8 @@ export const getStatement6 = async (req, res) => {
 
 export const getStatement5 = async (req, res) => {
     try {
-        const { sector } = req.query;
-        const data = await getStatement5Data(sector);
+        const { sector, from, to } = req.query;
+        const data = await getStatement5Data(sector, from, to);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement5 Error:", error);
@@ -44,6 +44,7 @@ export const getStatement5 = async (req, res) => {
         });
     }
 };
+
 
 
 export const getStatement4 = async (req, res) => {
@@ -77,14 +78,13 @@ export const getStatement2 = async (req, res) => {
 };
 
 
-
 // Statement 3
 
 // Part 1 — Debt Position
 export const getStatement3Debt = async (req, res) => {
     try {
-        const { sector } = req.query;
-        const data = await getStatement3DebtData(sector);
+        const { sector, from, to } = req.query;
+        const data = await getStatement3DebtData(sector, from, to);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement3 Debt Error:", error);
@@ -98,8 +98,8 @@ export const getStatement3Debt = async (req, res) => {
 // Part 2 — Ways and Means
 export const getStatement3WaysAndMeans = async (req, res) => {
     try {
-        const { sector, financialYear } = req.query;
-        const data = await getStatement3WaysAndMeansData(sector, financialYear);
+        const { sector, from, to } = req.query;
+        const data = await getStatement3WaysAndMeansData(sector, from, to);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement3 Ways & Means Error:", error);
@@ -111,11 +111,10 @@ export const getStatement3WaysAndMeans = async (req, res) => {
 };
 
 
-
 export const getStatement1 = async (req, res) => {
     try {
-        const { sector, financialYear } = req.query;
-        const data = await getStatement1Data(sector, financialYear);
+        const { sector, from, to } = req.query;
+        const data = await getStatement1Data(sector, from, to);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement1 Error:", error);

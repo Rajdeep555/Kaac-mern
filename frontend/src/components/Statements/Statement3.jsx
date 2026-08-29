@@ -14,18 +14,18 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-const Statement3 = ({ sector, financialYear }) => {
+const Statement3 = ({ sector, dateRange }) => {
   const {
     debtData,
     loading: debtLoading,
     error: debtError,
-  } = useStatement3Debt({ sector });
+  } = useStatement3Debt({ sector, dateRange });
 
   const {
     waysAndMeansData,
     loading: wamLoading,
     error: wamError,
-  } = useStatement3WaysAndMeans({ sector, financialYear });
+  } = useStatement3WaysAndMeans({ sector, dateRange });
 
   if (debtLoading || wamLoading) {
     return (
@@ -53,6 +53,11 @@ const Statement3 = ({ sector, financialYear }) => {
         <h1 className="font-bold text-lg">STATEMENT NO. 3</h1>
         {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
+        )}
+        {(dateRange?.from || dateRange?.to) && (
+          <p className="text-xs text-gray-500">
+            {dateRange?.from || "…"} to {dateRange?.to || "…"}
+          </p>
         )}
         <h2 className="py-4 font-semibold">Debt Position</h2>
       </div>

@@ -391,6 +391,8 @@ model cashbookInformations {
   sector                  Sector?
   month                   Int?
   year                    Int?
+  fromDate                DateTime?
+  toDate                  DateTime?
   financialYear           String?
   receiptCashColumn       Decimal? @db.Decimal(14, 2)
   receiptTreasuryPla      Decimal? @db.Decimal(14, 2)

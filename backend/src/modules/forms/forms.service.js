@@ -1,7 +1,244 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
+// Build a { from, to } Date range directly from raw from/to date strings
+// (replaces the old FY-based getFyRange(year) call)
+function getDateRangeFromParams(from, to) {
+    if (!from && !to) return null;
+
+    const range = {};
+    if (from) {
+        range.from = new Date(from);
+        range.from.setUTCHours(0, 0, 0, 0);
+    }
+    if (to) {
+        range.to = new Date(to);
+        range.to.setUTCHours(23, 59, 59, 999);
+    }
+    return range;
+}
+
 // ─────────────────────────────────────────────────────────────
+// SHARED HEAD-CODE NAME-RESOLUTION HELPERS
+// Used by both Form 4 and Form 5A below — declared ONCE here to
+// avoid the duplicate-identifier crash from before.
+// ─────────────────────────────────────────────────────────────
+
+// "004" -> "4", "0000" -> "0", "" / null / undefined -> ""
+const normalizeCodeSegment = (value) => {
+    if (value === null || value === undefined) return "";
+    const str = String(value).trim();
+    if (str === "") return "";
+    return /^\d+$/.test(str) ? String(parseInt(str, 10)) : str;
+};
+
+const STATE_HEAD_CODE_LEVELS = [
+    "majorHeadCode",
+    "subMajorCode",
+    "minorHeadCode",
+    "subHeadCode",
+    "subSubHeadCode",
+    "detailHeadCode",
+    "subDetailHeadCode",
+];
+
+const buildFullChainKey = (codes) =>
+    STATE_HEAD_CODE_LEVELS.map((level) => normalizeCodeSegment(codes[level])).join("|");
+
+// ── ChallanHeads (used ONLY for the plain `challan` table) ─────────────
+// Codes there repeat across branches (e.g. "01" appears under many
+// different majors), so lookups are done PARENT-AWARE via the
+// *ParentCode columns, not a flat/global key.
+const getChallanHeadsNameMap = async () => {
+    const rows = await prisma.challanHeads.findMany({ where: { isActive: true } });
+
+    const majorMap = new Map();    // majorCode -> name
+    const subMajorMap = new Map(); // `${majorCode}|${subMajorCode}` -> name
+    const minorMap = new Map();    // `${subMajorCode}|${minorCode}` -> name
+
+    for (const row of rows) {
+        const majorCode = normalizeCodeSegment(row.majorHeadCode);
+        const subMajorCode = normalizeCodeSegment(row.subMajorCode);
+        const subMajorParent = normalizeCodeSegment(row.subMajorParentCode);
+        const minorCode = normalizeCodeSegment(row.minorHeadCode);
+        const minorParent = normalizeCodeSegment(row.minorHeadParentCode);
+
+        if (majorCode && majorCode !== "0" && !majorMap.has(majorCode)) {
+            majorMap.set(majorCode, row.majorHead ?? null);
+        }
+        if (subMajorCode && subMajorCode !== "0") {
+            const key = `${subMajorParent}|${subMajorCode}`;
+            if (!subMajorMap.has(key)) subMajorMap.set(key, row.subMajor ?? null);
+        }
+        if (minorCode && minorCode !== "0") {
+            const key = `${minorParent}|${minorCode}`;
+            if (!minorMap.has(key)) minorMap.set(key, row.minorHead ?? null);
+        }
+    }
+
+    logger.info(
+        `Loaded ChallanHeads lookup — majors: ${majorMap.size}, subMajors: ${subMajorMap.size}, minors: ${minorMap.size}`
+    );
+
+    return { majorMap, subMajorMap, minorMap };
+};
+
+// ── Heads — full 7-level exact-chain match (used ONLY for stateChallan
+// in Form 4, which needs subHead/subSubHead/detailHead/subDetailHead
+// too) ──────────────────────────────────────────────────────────────
+// A stateChallan row's chain only makes sense matched as one identity
+// against a single Heads row sharing the same value in every column —
+// short codes like "2" or "800" repeat across many different chains,
+// so a flat per-level lookup would produce wrong matches.
+const getHeadsFullChainMap = async (sector) => {
+    const where = { isActive: true };
+    if (sector) where.sector = sector;
+
+    const rows = await prisma.heads.findMany({ where });
+
+    const map = new Map();
+    for (const row of rows) {
+        const key = buildFullChainKey({
+            majorHeadCode: row.majorHeadCode,
+            subMajorCode: row.subMajorCode,
+            minorHeadCode: row.minorHeadCode,
+            subHeadCode: row.subHeadCode,
+            subSubHeadCode: row.subSubHeadCode,
+            detailHeadCode: row.detailHeadCode,
+            subDetailHeadCode: row.subDetailHeadCode,
+        });
+        map.set(key, {
+            majorHeadName: row.majorHead ?? null,
+            subMajorName: row.subMajor ?? null,
+            minorHeadName: row.minorHead ?? null,
+            subHeadName: row.subHead ?? null,
+            subSubHeadName: row.subSubHead ?? null,
+            detailHeadName: row.detailHead ?? null,
+            subDetailHeadName: row.subDetailHead ?? null,
+        });
+    }
+
+    logger.info(
+        `Loaded Heads full-chain lookup — ${map.size} entries for sector: ${sector ?? "ALL"}`
+    );
+
+    return map;
+};
+
+// ── Heads — 3-level match (used for challanTwo / challanFromBill in
+// Form 4, and for stateChallan/challanFromBill in Form 5A — both only
+// ever populate major/subMajor/minor) ───────────────────────────────
+const getHeads3LevelMap = async () => {
+    const rows = await prisma.heads.findMany({ where: { isActive: true } });
+
+    const map = new Map();
+    for (const row of rows) {
+        const key = [
+            normalizeCodeSegment(row.majorHeadCode),
+            normalizeCodeSegment(row.subMajorCode),
+            normalizeCodeSegment(row.minorHeadCode),
+        ].join("|");
+        if (!map.has(key)) {
+            map.set(key, {
+                majorHeadName: row.majorHead ?? null,
+                subMajorName: row.subMajor ?? null,
+                minorHeadName: row.minorHead ?? null,
+            });
+        }
+    }
+
+    logger.info(`Loaded Heads 3-level lookup — ${map.size} entries`);
+
+    return map;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Classification builders — each returns an array of
+// { level, code, name } lines — code alone when unresolved, code +
+// name when a match is found — so the frontend can render one line
+// per head level, vertically.
+// ─────────────────────────────────────────────────────────────
+
+const isZeroCode = (code) => {
+    if (code === null || code === undefined) return false;
+    const trimmed = String(code).trim();
+    return trimmed !== "" && /^0+$/.test(trimmed);
+};
+
+const buildClassificationLines = (parts) =>
+    parts
+        .filter((p) => p.code && p.code !== "-")
+        .map((p) => ({
+            level: p.level,
+            code: p.code,
+            name: isZeroCode(p.code) ? "Null" : (p.name || null),
+        }));
+
+// challan → resolves via ChallanHeads (parent-aware)
+// Takes plain major/subMajor/minor values (works for both Form 4's
+// `row` fields and Form 5A's row fields — call with the 3 raw values).
+const buildChallanClassification = (majorHead, subMajor, minorHead, { majorMap, subMajorMap, minorMap }) => {
+    const majorCode = normalizeCodeSegment(majorHead);
+    const subMajorCode = normalizeCodeSegment(subMajor);
+    const minorCode = normalizeCodeSegment(minorHead);
+
+    return buildClassificationLines([
+        { level: "major", code: majorHead, name: majorCode ? majorMap.get(majorCode) : null },
+        {
+            level: "subMajor",
+            code: subMajor,
+            name: subMajorCode ? subMajorMap.get(`${majorCode}|${subMajorCode}`) : null,
+        },
+        {
+            level: "minor",
+            code: minorHead,
+            name: minorCode ? minorMap.get(`${subMajorCode}|${minorCode}`) : null,
+        },
+    ]);
+};
+
+// challanTwo / challanFromBill / stateChallan(Form5A) → resolves via
+// Heads (3-level match)
+const buildThreeLevelClassification = (major, subMajor, minor, heads3LevelMap) => {
+    const key = [
+        normalizeCodeSegment(major),
+        normalizeCodeSegment(subMajor),
+        normalizeCodeSegment(minor),
+    ].join("|");
+    const names = heads3LevelMap.get(key) ?? {};
+
+    return buildClassificationLines([
+        { level: "major", code: major, name: names.majorHeadName },
+        { level: "subMajor", code: subMajor, name: names.subMajorName },
+        { level: "minor", code: minor, name: names.minorHeadName },
+    ]);
+};
+
+// stateChallan (Form4 only) → resolves via Heads (full 7-level chain match)
+const buildStateChallanClassification = (row, headsFullChainMap) => {
+    const key = buildFullChainKey({
+        majorHeadCode: row.majorHead,
+        subMajorCode: row.subMajorHead,
+        minorHeadCode: row.minorHead,
+        subHeadCode: row.subHead,
+        subSubHeadCode: row.subSubHead,
+        detailHeadCode: row.detailHead,
+        subDetailHeadCode: row.subDetailHead,
+    });
+    const names = headsFullChainMap.get(key) ?? {};
+
+    return buildClassificationLines([
+        { level: "major", code: row.majorHead, name: names.majorHeadName },
+        { level: "subMajor", code: row.subMajorHead, name: names.subMajorName },
+        { level: "minor", code: row.minorHead, name: names.minorHeadName },
+        { level: "subHead", code: row.subHead, name: names.subHeadName },
+        { level: "subSubHead", code: row.subSubHead, name: names.subSubHeadName },
+        { level: "detailHead", code: row.detailHead, name: names.detailHeadName },
+        { level: "subDetailHead", code: row.subDetailHead, name: names.subDetailHeadName },
+    ]);
+};
+
+// ═════════════════════════════════════════════════════════════
 // FORM 4 - Register of Remittances to Treasury (PLA)
 // Data comes from 4 tables: challan, challanTwo, challanFromBill,
 // stateChallan
@@ -21,7 +258,7 @@ import logger from "../../utils/logger.js";
 // total reconciles against Form 1's COUNCIL Receipt Treasury PLA
 // total. If omitted, date filtering is skipped (old all-time
 // behavior) for backward compatibility.
-// ─────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
 
 const ALLOWED_AMOUNT_TYPES = [
     "Earnest Money",
@@ -53,15 +290,6 @@ function getFyRange(year) {
     return { from, to };
 }
 
-// Helper — variadic to support any number of head levels
-const buildClassification = (...parts) => {
-    return (
-        parts.filter((part) => part && part.trim() !== "").join(" / ") || "-"
-    );
-};
-
-// ─────────────────────────────────────────────────────────────
-
 const getForm4ChallanRows = async (sector, dateRange) => {
     const where = { isActive: true };
 
@@ -79,6 +307,8 @@ const getForm4ChallanRows = async (sector, dateRange) => {
         `Fetched ${rows.length} rows from Challan table for sector: ${sector ?? "ALL"}`
     );
 
+    const challanHeadsMap = await getChallanHeadsNameMap();
+
     return rows.map((row) => ({
         id: `challan-${row.id}`,
         clnNo: row.challanNo ?? "-",
@@ -86,10 +316,11 @@ const getForm4ChallanRows = async (sector, dateRange) => {
         treasury: row.treasuryCode ?? "-",
         amount: parseFloat(row.amount ?? "0"),
         refItemNo: row.treasuryChallanNo ?? "-",
-        classification: buildClassification(
+        classification: buildChallanClassification(
             row.majorHead,
             row.subMajorHead,
-            row.minorHead
+            row.minorHead,
+            challanHeadsMap
         ),
         remarks: row.remarks ?? "-",
         sector: row.challanType ?? null,
@@ -97,7 +328,7 @@ const getForm4ChallanRows = async (sector, dateRange) => {
     }));
 };
 
-const getForm4ChallanTwoRows = async (sector, dateRange) => {
+const getForm4ChallanTwoRows = async (sector, dateRange, heads3LevelMap) => {
     const where = { isActive: true };
 
     if (sector && sector !== "CONSOLIDATED") {
@@ -121,10 +352,11 @@ const getForm4ChallanTwoRows = async (sector, dateRange) => {
         treasury: row.treasuryCode ?? "-",
         amount: row.amount ? parseFloat(row.amount.toString()) : 0,
         refItemNo: row.treasuryChallanNo ?? "-",
-        classification: buildClassification(
+        classification: buildThreeLevelClassification(
             row.majorHead,
             row.subMajor,
-            row.minorHead
+            row.minorHead,
+            heads3LevelMap
         ),
         remarks: row.narration ?? "-",
         sector: row.sector ?? null,
@@ -132,7 +364,7 @@ const getForm4ChallanTwoRows = async (sector, dateRange) => {
     }));
 };
 
-const getForm4ChallanFromBillRows = async (sector, dateRange) => {
+const getForm4ChallanFromBillRows = async (sector, dateRange, heads3LevelMap) => {
     const where = {
         isActive: true,
         amountType: { in: ALLOWED_AMOUNT_TYPES },
@@ -159,10 +391,11 @@ const getForm4ChallanFromBillRows = async (sector, dateRange) => {
         treasury: row.treasuryCode ?? "-",
         amount: row.amount ? parseFloat(row.amount.toString()) : 0,
         refItemNo: row.treasuryChallanNo ?? "-",
-        classification: buildClassification(
+        classification: buildThreeLevelClassification(
             row.majorHead,
             row.subMajor,
-            row.minorHead
+            row.minorHead,
+            heads3LevelMap
         ),
         remarks: row.amountType ?? "-",
         sector: row.sector ?? null,
@@ -177,7 +410,7 @@ const getForm4ChallanFromBillRows = async (sector, dateRange) => {
 // distinct id prefix so the source is traceable; `sector` on the row
 // stays "STATE" (the record's real sector) rather than "COUNCIL".
 // ─────────────────────────────────────────────────────────────
-const getForm4CouncilCrossStateTreasuryRows = async (dateRange) => {
+const getForm4CouncilCrossStateTreasuryRows = async (dateRange, heads3LevelMap) => {
     const where = {
         isActive: true,
         sector: "STATE",
@@ -201,10 +434,11 @@ const getForm4CouncilCrossStateTreasuryRows = async (dateRange) => {
         treasury: row.treasuryCode ?? "-",
         amount: row.amount ? parseFloat(row.amount.toString()) : 0,
         refItemNo: row.treasuryChallanNo ?? "-",
-        classification: buildClassification(
+        classification: buildThreeLevelClassification(
             row.majorHead,
             row.subMajor,
-            row.minorHead
+            row.minorHead,
+            heads3LevelMap
         ),
         remarks: row.amountType ?? "-",
         sector: row.sector ?? null, // "STATE" — the record's real sector
@@ -213,23 +447,28 @@ const getForm4CouncilCrossStateTreasuryRows = async (dateRange) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// StateChallan rows (STATE sector) — COMPLETELY UNCHANGED
-// Amount is stored in lakhs → multiply by 100000
-// Classification spans all 7 head levels
-// isActive check: StateChallan has no isActive field in the
-// schema above, so we filter by sector = "STATE" only.
+// StateChallan rows (STATE sector) — Amount is stored in lakhs →
+// multiply by 100000. isActive check: StateChallan has no isActive
+// field in the schema above, so we filter by sector = "STATE" only.
 // If you add isActive to the model later, add it to `where`.
-// No date filter here either — left exactly as it was.
 // ─────────────────────────────────────────────────────────────
-const getForm4StateChallanRows = async () => {
+const getForm4StateChallanRows = async (dateRange) => {
+    const where = {
+        sector: "STATE",
+    };
+
+    if (dateRange) {
+        where.challanDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
     const rows = await prisma.stateChallan.findMany({
-        where: {
-            sector: "STATE",
-        },
+        where,
         orderBy: { challanDate: "asc" },
     });
 
     logger.info(`Fetched ${rows.length} rows from StateChallan table`);
+
+    const headsFullChainMap = await getHeadsFullChainMap("STATE");
 
     return rows.map((row) => ({
         id: `stateChallan-${row.id}`,
@@ -242,15 +481,7 @@ const getForm4StateChallanRows = async () => {
                 : 0,
         // Cash Book Item No. = challanNo per spec
         refItemNo: row.challanNo ?? "-",
-        classification: buildClassification(
-            row.majorHead,
-            row.subMajorHead,
-            row.minorHead,
-            row.subHead,
-            row.subSubHead,
-            row.detailHead,
-            row.subDetailHead
-        ),
+        classification: buildStateChallanClassification(row, headsFullChainMap),
         remarks: row.remarks ?? "-",
         sector: "STATE",
         source: "stateChallan",
@@ -278,10 +509,10 @@ const getForm4StateChallanRows = async () => {
 // - any other sector          → Challan + ChallanTwo + ChallanFromBill
 //                                 (that sector only), no StateChallan
 // ─────────────────────────────────────────────────────────────
-export const getForm4Data = async (sector, year) => {
+export const getForm4Data = async (sector, from, to) => {
     try {
         logger.info(
-            `Fetching Form 4 data for sector: ${sector ?? "ALL"}, year: ${year ?? "ALL-TIME"}`
+            `Fetching Form 4 data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
         );
 
         const isStateSector = sector === "STATE";
@@ -289,7 +520,7 @@ export const getForm4Data = async (sector, year) => {
         const includeStateChallans =
             !sector || sector === "CONSOLIDATED" || sector === "STATE";
 
-        const dateRange = year != null ? getFyRange(year) : null;
+        const dateRange = getDateRangeFromParams(from, to);
 
         let challanRows = [];
         let challanTwoRows = [];
@@ -298,27 +529,30 @@ export const getForm4Data = async (sector, year) => {
         let councilCrossStateTreasuryRows = [];
 
         if (isStateSector) {
-            // ── STATE sector: ONLY StateChallan table, UNCHANGED ──
+            // ── STATE sector: ONLY StateChallan table ──
             logger.info(
                 `Form4: sector=STATE → skipping Challan, ChallanTwo & ChallanFromBill, using StateChallan only`
             );
-            stateChallanRows = await getForm4StateChallanRows();
+            stateChallanRows = await getForm4StateChallanRows(dateRange);
         } else {
-            // ── Non-STATE sectors ─────────────────────────────────
+            // Shared Heads 3-level lookup for challanTwo/challanFromBill
+            // (and the COUNCIL cross-sector rows), loaded once per call.
+            const heads3LevelMap = await getHeads3LevelMap();
+
             [challanRows, challanTwoRows, challanFromBillRows, stateChallanRows, councilCrossStateTreasuryRows] =
                 await Promise.all([
                     getForm4ChallanRows(sector, dateRange),
-                    getForm4ChallanTwoRows(sector, dateRange),
-                    getForm4ChallanFromBillRows(sector, dateRange),
+                    getForm4ChallanTwoRows(sector, dateRange, heads3LevelMap),
+                    getForm4ChallanFromBillRows(sector, dateRange, heads3LevelMap),
                     includeStateChallans
-                        ? getForm4StateChallanRows()
+                        ? getForm4StateChallanRows(dateRange)
                         : Promise.resolve([]),
                     // Only fires for sector = COUNCIL — CONSOLIDATED
                     // already gets these rows via the unfiltered
                     // getForm4ChallanFromBillRows("CONSOLIDATED") call
                     // above, so running this too would double-count.
                     isCouncilSector
-                        ? getForm4CouncilCrossStateTreasuryRows(dateRange)
+                        ? getForm4CouncilCrossStateTreasuryRows(dateRange, heads3LevelMap)
                         : Promise.resolve([]),
                 ]);
         }
@@ -348,41 +582,27 @@ export const getForm4Data = async (sector, year) => {
     }
 };
 
-
-// ─────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
 // FORM 5A - Classified Abstract of Receipts
 //
 // SECTOR RULES:
-// - sector === "STATE"        → UNCHANGED. StateChallan ONLY,
-//                                 restricted to majorHead in
-//                                 [2011, 3999]. Challan and
-//                                 ChallanFromBill are skipped.
-// - sector === "COUNCIL"      → REPLACED.
-//                                 • Challan: rows where challanType =
-//                                   COUNCIL AND majorHead numeric value
-//                                   is in [1, 16] (was: all COUNCIL
-//                                   Challan rows, no majorHead filter).
-//                                 • ChallanFromBill: rows where sector
-//                                   IS EITHER COUNCIL OR STATE, and
-//                                   amountType is one of the 4 treasury
-//                                   types — this deliberately pulls in
-//                                   STATE's treasury-type
-//                                   ChallanFromBill rows and shows them
-//                                   under COUNCIL too (was: COUNCIL's
-//                                   own rows only).
-//                                 • StateChallan: NOT included (same as
-//                                   before).
-// - sector === "CONSOLIDATED" → Combines STATE's rule (StateChallan,
-//                                 majorHead 2011–3999) + COUNCIL's rule
-//                                 above. NOTE: this is a behavior change
-//                                 from before — CONSOLIDATED previously
-//                                 used the FULL, unrestricted
-//                                 StateChallan set; it now uses the same
-//                                 2011–3999-restricted set sector=STATE
-//                                 uses, to stay consistent with "STATE's
-//                                 own rule" everywhere else in this file.
-// - any other sector          → no rule defined, empty result.
-// ─────────────────────────────────────────────────────────────
+// - sector === "STATE"        → StateChallan ONLY, majorHead in [2011, 3999].
+// - sector === "COUNCIL"      → Challan (majorHead 1-16, COUNCIL only) +
+//                                 ChallanFromBill (sector IN COUNCIL, STATE,
+//                                 treasury amountTypes).
+// - sector === "CONSOLIDATED" → STATE's rule + COUNCIL's rule combined.
+// - any other sector          → empty result.
+//
+// Every row carries a `classification` array of { level, code, name }
+// — one entry per head level (major/subMajor/minor), resolved
+// against the correct name table per source:
+//   - source === "challan"          → ChallanHeads (parent-aware)
+//   - source === "stateChallan"     → Heads
+//   - source === "challanFromBill"  → Heads
+// ═════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+// FORM 5A - Classified Abstract of Receipts
+// ═════════════════════════════════════════════════════════════
 
 const FORM5A_ALLOWED_AMOUNT_TYPES = [
     "Professional Tax",
@@ -391,22 +611,17 @@ const FORM5A_ALLOWED_AMOUNT_TYPES = [
     "MC Forest Royalty",
 ];
 
-// ─────────────────────────────────────────────────────────────
-// StateChallan rows (STATE sector) — UNCHANGED
-// Amount stored in lakhs → multiply by 100000
-// No isActive field on StateChallan model — filter by sector only
-//
-// majorHeadRangeOnly: when true, restricts rows to majorHead
-// numeric value in [2011, 3999] inclusive. majorHead is stored as
-// a string, so we parse to int rather than doing a DB-level string
-// range comparison (which would sort lexicographically and give
-// wrong results).
-// ─────────────────────────────────────────────────────────────
-const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}) => {
+const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}, dateRange) => {
+    const where = {
+        sector: "STATE",
+    };
+
+    if (dateRange) {
+        where.challanDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
     const rows = await prisma.stateChallan.findMany({
-        where: {
-            sector: "STATE",
-        },
+        where,
         orderBy: { challanDate: "asc" },
     });
 
@@ -431,6 +646,8 @@ const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}) =>
         );
     }
 
+    const heads3LevelMap = await getHeads3LevelMap();
+
     return filteredRows.map((row) => ({
         majorHead: row.majorHead ?? "Unknown",
         subMajor: row.subMajorHead ?? "-",
@@ -441,28 +658,32 @@ const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}) =>
                 : 0,
         sector: "STATE",
         source: "stateChallan",
+        classification: buildThreeLevelClassification(
+            row.majorHead,
+            row.subMajorHead,
+            row.minorHead,
+            heads3LevelMap
+        ),
     }));
 };
 
-// ─────────────────────────────────────────────────────────────
-// NEW — Challan rows for COUNCIL: challanType = COUNCIL, restricted
-// to majorHead numeric value in [1, 16]. Same string→int parsing
-// approach as the StateChallan range filter above, since majorHead
-// is a string field.
-// ─────────────────────────────────────────────────────────────
 const isMajorHeadInCouncilRangeForm5A = (majorHead) => {
     if (!majorHead) return false;
     const num = parseInt(majorHead, 10);
     return !Number.isNaN(num) && num >= 1 && num <= 16;
 };
 
-const getForm5ACouncilChallanRows = async () => {
-    const rows = await prisma.challan.findMany({
-        where: {
-            isActive: true,
-            challanType: "COUNCIL",
-        },
-    });
+const getForm5ACouncilChallanRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        challanType: "COUNCIL",
+    };
+
+    if (dateRange) {
+        where.challanDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.challan.findMany({ where });
 
     logger.info(
         `Form5A: Fetched ${rows.length} COUNCIL Challan rows (pre majorHead 1-16 filter)`
@@ -474,6 +695,8 @@ const getForm5ACouncilChallanRows = async () => {
         `Form5A: COUNCIL Challan rows after majorHead 1-16 filter: ${filtered.length} (excluded ${rows.length - filtered.length})`
     );
 
+    const challanHeadsMap = await getChallanHeadsNameMap();
+
     return filtered.map((row) => ({
         majorHead: row.majorHead ?? "Unknown",
         subMajor: row.subMajorHead ?? "-",
@@ -481,27 +704,33 @@ const getForm5ACouncilChallanRows = async () => {
         amount: parseFloat(row.amount ?? "0"),
         sector: row.challanType ?? null,
         source: "challan",
+        classification: buildChallanClassification(
+            row.majorHead,
+            row.subMajorHead,
+            row.minorHead,
+            challanHeadsMap
+        ),
     }));
 };
 
-// ─────────────────────────────────────────────────────────────
-// NEW — ChallanFromBill rows for COUNCIL: sector IN [COUNCIL,
-// STATE], amountType in the 4 treasury types. This is what
-// deliberately cross-includes STATE's treasury-type ChallanFromBill
-// rows under COUNCIL's Form 5A.
-// ─────────────────────────────────────────────────────────────
-const getForm5ACouncilChallanFromBillRows = async () => {
-    const rows = await prisma.challanFromBill.findMany({
-        where: {
-            isActive: true,
-            amountType: { in: FORM5A_ALLOWED_AMOUNT_TYPES },
-            sector: { in: ["COUNCIL", "STATE"] },
-        },
-    });
+const getForm5ACouncilChallanFromBillRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        amountType: { in: FORM5A_ALLOWED_AMOUNT_TYPES },
+        sector: { in: ["COUNCIL", "STATE"] },
+    };
+
+    if (dateRange) {
+        where.voucharDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.challanFromBill.findMany({ where });
 
     logger.info(
         `Form5A: Fetched ${rows.length} ChallanFromBill rows for COUNCIL (sector IN COUNCIL, STATE)`
     );
+
+    const heads3LevelMap = await getHeads3LevelMap();
 
     return rows.map((row) => ({
         majorHead: row.majorHead ?? "Unknown",
@@ -510,41 +739,43 @@ const getForm5ACouncilChallanFromBillRows = async () => {
         amount: row.amount ? parseFloat(row.amount.toString()) : 0,
         sector: row.sector ?? null,
         source: "challanFromBill",
+        classification: buildThreeLevelClassification(
+            row.majorHead,
+            row.subMajor,
+            row.minorHead,
+            heads3LevelMap
+        ),
     }));
 };
 
-// ─────────────────────────────────────────────────────────────
-// Main Form 5A function
-// Groups rows by majorHead
-// If multiple rows share the same majorHead → show each as detail + total row
-// If only one row for a majorHead → show just that row
-// ─────────────────────────────────────────────────────────────
-export const getForm5AData = async (sector) => {
+export const getForm5AData = async (sector, from, to) => {
     try {
-        logger.info(`Fetching Form 5A data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 5A data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
+        );
 
         const isStateSector = sector === "STATE";
         const isCouncilSector = sector === "COUNCIL";
         const isConsolidated = sector === "CONSOLIDATED";
 
+        const dateRange = getDateRangeFromParams(from, to);
+
         let allRows = [];
 
         if (isStateSector) {
-            // ── STATE sector: ONLY StateChallan, majorHead 2011-3999 ──
-            const stateChallanRows = await getForm5AStateChallanRows({
-                majorHeadRangeOnly: true,
-            });
+            const stateChallanRows = await getForm5AStateChallanRows(
+                { majorHeadRangeOnly: true },
+                dateRange
+            );
             allRows = [...stateChallanRows];
 
             logger.info(
                 `Form5A: Rows going into grouping — stateChallan: ${stateChallanRows.length}`
             );
         } else if (isCouncilSector) {
-            // ── COUNCIL sector: Challan (majorHead 1-16) + ────────
-            // ChallanFromBill (sector IN COUNCIL, STATE)
             const [councilChallanRows, councilChallanFromBillRows] = await Promise.all([
-                getForm5ACouncilChallanRows(),
-                getForm5ACouncilChallanFromBillRows(),
+                getForm5ACouncilChallanRows(dateRange),
+                getForm5ACouncilChallanFromBillRows(dateRange),
             ]);
             allRows = [...councilChallanRows, ...councilChallanFromBillRows];
 
@@ -552,12 +783,11 @@ export const getForm5AData = async (sector) => {
                 `Form5A: Rows going into grouping — councilChallan: ${councilChallanRows.length}, councilChallanFromBill: ${councilChallanFromBillRows.length}`
             );
         } else if (isConsolidated) {
-            // ── CONSOLIDATED: STATE's rule + COUNCIL's rule ───────
             const [stateChallanRows, councilChallanRows, councilChallanFromBillRows] =
                 await Promise.all([
-                    getForm5AStateChallanRows({ majorHeadRangeOnly: true }),
-                    getForm5ACouncilChallanRows(),
-                    getForm5ACouncilChallanFromBillRows(),
+                    getForm5AStateChallanRows({ majorHeadRangeOnly: true }, dateRange),
+                    getForm5ACouncilChallanRows(dateRange),
+                    getForm5ACouncilChallanFromBillRows(dateRange),
                 ]);
             allRows = [
                 ...stateChallanRows,
@@ -569,14 +799,12 @@ export const getForm5AData = async (sector) => {
                 `Form5A: Rows going into grouping — stateChallan: ${stateChallanRows.length}, councilChallan: ${councilChallanRows.length}, councilChallanFromBill: ${councilChallanFromBillRows.length}`
             );
         } else {
-            // Any other sector value: no rule defined
             logger.info(
                 `Form5A: no rule defined for sector "${sector}" — returning empty result`
             );
             allRows = [];
         }
 
-        // Group rows by majorHead
         const grouped = allRows.reduce((acc, row) => {
             const key = row.majorHead;
             if (!acc[key]) {
@@ -586,7 +814,6 @@ export const getForm5AData = async (sector) => {
             return acc;
         }, {});
 
-        // Build final result
         const result = Object.entries(grouped).map(([majorHead, rows]) => {
             const total = rows.reduce((sum, row) => sum + row.amount, 0);
             return {
@@ -607,56 +834,37 @@ export const getForm5AData = async (sector) => {
 };
 
 
+
+
+
+
 // ─────────────────────────────────────────────────────────────
 // FORM 5B - Classified Abstract of Expenditure
-//
-// SECTOR RULES:
-// - sector === "STATE"        → UNCHANGED. No expenditureType filter.
-//                                 Expenditure rows where sector = STATE,
-//                                 then JS-filtered to majorHead numeric
-//                                 range 2011–3999 (string field, so a
-//                                 DB-level range compare would sort
-//                                 lexicographically and be wrong).
-// - sector === "COUNCIL"      → REPLACED. No longer filters by
-//                                 expenditureType = "REVENUE" and no
-//                                 majorHead restriction. Instead: ALL
-//                                 active Expenditure rows where
-//                                 sector = COUNCIL, column-mapped as-is
-//                                 (payOfficers, payEstablishment, etc.
-//                                 come straight from the row — per row,
-//                                 only one of these is normally
-//                                 populated, matching grossAmount, so
-//                                 no override is needed).
-// - sector === "CONSOLIDATED" → Combines BOTH rule sets above: STATE's
-//                                 majorHead-range rows + COUNCIL's
-//                                 unfiltered (all) rows, merged before
-//                                 grouping. (The old blanket
-//                                 expenditureType = "REVENUE" filter no
-//                                 longer applies to COUNCIL, so
-//                                 CONSOLIDATED can no longer just query
-//                                 "REVENUE across all sectors" — the two
-//                                 sectors now use genuinely different
-//                                 filter rules.)
-// Grouped by majorHead — total row if multiple entries
+// (sector rules unchanged — see comments below on getForm5BData)
+// 🔸 Every row now also carries `classification`: an array of
+// { level, code, name } resolved via the shared Heads 3-level map
+// (expenditure always resolves through Heads, per source table —
+// regardless of sector), same shape/rules as Form 4/5A, including
+// the "0"/"00" → "Null" display rule from buildClassificationLines.
 // ─────────────────────────────────────────────────────────────
 
-// Renamed from isMajorHeadInStateRange → isMajorHeadInStateRangeForm5B
-// to avoid a duplicate-identifier collision with Form 5C's helper of
-// the same original name in this same forms.service.js file.
 const isMajorHeadInStateRangeForm5B = (majorHead) => {
     if (!majorHead) return false;
     const num = parseInt(majorHead, 10);
     return !Number.isNaN(num) && num >= 2011 && num <= 3999;
 };
 
-// ── STATE rows — UNCHANGED logic ────────────────────────────
-const getForm5BStateRows = async () => {
-    const rows = await prisma.expenditure.findMany({
-        where: {
-            isActive: true,
-            sector: "STATE",
-        },
-    });
+const getForm5BStateRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        sector: "STATE",
+    };
+
+    if (dateRange) {
+        where.voucherDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.expenditure.findMany({ where });
 
     logger.info(
         `Form5B: Fetched ${rows.length} STATE rows from Expenditure table (pre majorHead-range filter)`
@@ -671,15 +879,17 @@ const getForm5BStateRows = async () => {
     return filtered;
 };
 
-// ── COUNCIL rows — NEW logic: ALL active COUNCIL rows, no ────
-// expenditureType filter, no majorHead restriction.
-const getForm5BCouncilRows = async () => {
-    const rows = await prisma.expenditure.findMany({
-        where: {
-            isActive: true,
-            sector: "COUNCIL",
-        },
-    });
+const getForm5BCouncilRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        sector: "COUNCIL",
+    };
+
+    if (dateRange) {
+        where.voucherDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.expenditure.findMany({ where });
 
     logger.info(
         `Form5B: Fetched ${rows.length} COUNCIL rows from Expenditure table (all, unfiltered by type)`
@@ -688,38 +898,37 @@ const getForm5BCouncilRows = async () => {
     return rows;
 };
 
-export const getForm5BData = async (sector) => {
+export const getForm5BData = async (sector, from, to) => {
     try {
-        logger.info(`Fetching Form 5B data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 5B data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
+        );
 
         const isStateSector = sector === "STATE";
         const isCouncilSector = sector === "COUNCIL";
         const isConsolidated = sector === "CONSOLIDATED";
 
+        const dateRange = getDateRangeFromParams(from, to);
+
         let rows = [];
 
         if (isStateSector) {
-            rows = await getForm5BStateRows();
+            rows = await getForm5BStateRows(dateRange);
         } else if (isCouncilSector) {
-            rows = await getForm5BCouncilRows();
+            rows = await getForm5BCouncilRows(dateRange);
         } else if (isConsolidated) {
             const [stateRows, councilRows] = await Promise.all([
-                getForm5BStateRows(),
-                getForm5BCouncilRows(),
+                getForm5BStateRows(dateRange),
+                getForm5BCouncilRows(dateRange),
             ]);
             rows = [...stateRows, ...councilRows];
         } else {
-            // Any other sector value: no rule defined — return empty
-            // rather than silently falling back to the old REVENUE-type
-            // filter, since that filter no longer represents COUNCIL and
-            // STATE now has its own dedicated rule.
             logger.info(
                 `Form5B: no rule defined for sector "${sector}" — returning empty result`
             );
             rows = [];
         }
 
-        // Group rows by majorHead
         const grouped = rows.reduce((acc, row) => {
             const key = row.majorHead ?? "Unknown";
             if (!acc[key]) {
@@ -729,9 +938,9 @@ export const getForm5BData = async (sector) => {
             return acc;
         }, {});
 
-        // Build final result per group
+        const heads3LevelMap = await getHeads3LevelMap();
+
         const result = Object.entries(grouped).map(([majorHead, groupRows]) => {
-            // Sum each amount column across all rows in this group
             const totals = groupRows.reduce(
                 (sum, row) => ({
                     payOfficers: sum.payOfficers + parseFloat(row.payOfficers ?? 0),
@@ -753,12 +962,13 @@ export const getForm5BData = async (sector) => {
                 }
             );
 
-            // Map each row with its head code and amounts
             const mappedRows = groupRows.map((row) => ({
-                // Full head code: majorHead-subMajorHead-minorHead
-                headCode: [row.majorHead, row.subMajorHead, row.minorHead]
-                    .filter((p) => p && p.trim() !== "")
-                    .join("-"),
+                classification: buildThreeLevelClassification(
+                    row.majorHead,
+                    row.subMajorHead,
+                    row.minorHead,
+                    heads3LevelMap
+                ),
                 majorHead: row.majorHead ?? "-",
                 subMajorHead: row.subMajorHead ?? "-",
                 minorHead: row.minorHead ?? "-",
@@ -776,7 +986,6 @@ export const getForm5BData = async (sector) => {
                 majorHead,
                 rows: mappedRows,
                 totals,
-                // Show total row only if more than one entry for same majorHead
                 hasMultiple: groupRows.length > 1,
             };
         });
@@ -792,50 +1001,21 @@ export const getForm5BData = async (sector) => {
 
 
 
+
 // ─────────────────────────────────────────────────────────────
 // FORM 5C - Classified Abstract of Capital Expenditure
-//
-// SECTOR RULES:
-// - sector === "STATE"        → UNCHANGED. No expenditureType filter.
-//                                 Expenditure rows where sector = STATE,
-//                                 then JS-filtered to majorHead numeric
-//                                 range 4001–5999 (string field, so a
-//                                 DB-level range compare would sort
-//                                 lexicographically and be wrong).
-// - sector === "COUNCIL"      → REPLACED. No longer filters by
-//                                 expenditureType = "CAPITAL". Instead:
-//                                 Expenditure rows where sector = COUNCIL
-//                                 AND majorHead is EXACTLY one of
-//                                 "40", "41", "42", "43". Each row's
-//                                 existing amount columns (payOfficers,
-//                                 payEstablishment, etc.) are mapped as-is
-//                                 — per row, only one of these is
-//                                 normally populated, matching grossAmount,
-//                                 so no column override is needed.
-// - sector === "CONSOLIDATED" → Combines BOTH rule sets above: STATE's
-//                                 majorHead-range rows + COUNCIL's
-//                                 majorHead-exact rows, merged before
-//                                 grouping. (The old blanket
-//                                 expenditureType = "CAPITAL" filter no
-//                                 longer applies to COUNCIL, so
-//                                 CONSOLIDATED can no longer just query
-//                                 "CAPITAL across all sectors" — the two
-//                                 sectors now use genuinely different
-//                                 filter rules.)
+// (sector rules unchanged — see comments below on getForm5CData)
+// 🔸 Same classification addition as Form 5B above.
 // ─────────────────────────────────────────────────────────────
 
 const COUNCIL_MAJOR_HEADS = ["440", "441", "442", "443"];
 
-// Renamed from isMajorHeadInStateRange → isMajorHeadInStateRangeForm5C
-// to avoid a duplicate-identifier collision with Form 5B's helper of
-// the same original name in this same forms.service.js file.
 const isMajorHeadInStateRangeForm5C = (majorHead) => {
     if (!majorHead) return false;
     const num = parseInt(majorHead, 10);
     return !Number.isNaN(num) && num >= 4001 && num <= 5999;
 };
 
-// ── STATE rows — UNCHANGED logic ────────────────────────────
 const getForm5CStateRows = async () => {
     const rows = await prisma.expenditure.findMany({
         where: {
@@ -857,8 +1037,6 @@ const getForm5CStateRows = async () => {
     return filtered;
 };
 
-// ── COUNCIL rows — NEW logic: exact majorHead match, no ──────
-// expenditureType filter at all.
 const getForm5CCouncilRows = async () => {
     const rows = await prisma.expenditure.findMany({
         where: {
@@ -896,17 +1074,12 @@ export const getForm5CData = async (sector) => {
             ]);
             rows = [...stateRows, ...councilRows];
         } else {
-            // Any other sector value: no rule defined — return empty
-            // rather than silently falling back to the old CAPITAL-type
-            // filter, since that filter no longer represents COUNCIL and
-            // STATE now has its own dedicated rule.
             logger.info(
                 `Form5C: no rule defined for sector "${sector}" — returning empty result`
             );
             rows = [];
         }
 
-        // Group by majorHead
         const grouped = rows.reduce((acc, row) => {
             const key = row.majorHead ?? "Unknown";
             if (!acc[key]) acc[key] = [];
@@ -914,8 +1087,10 @@ export const getForm5CData = async (sector) => {
             return acc;
         }, {});
 
+        // 🔸 One shared Heads lookup for the whole call, reused per row.
+        const heads3LevelMap = await getHeads3LevelMap();
+
         const result = Object.entries(grouped).map(([majorHead, groupRows]) => {
-            // Sum each amount column across all rows in this group
             const totals = groupRows.reduce(
                 (sum, row) => ({
                     payOfficers: sum.payOfficers + parseFloat(row.payOfficers ?? 0),
@@ -938,9 +1113,12 @@ export const getForm5CData = async (sector) => {
             );
 
             const mappedRows = groupRows.map((row) => ({
-                headCode: [row.majorHead, row.subMajorHead, row.minorHead]
-                    .filter((p) => p && p.trim() !== "")
-                    .join("-"),
+                classification: buildThreeLevelClassification(
+                    row.majorHead,
+                    row.subMajorHead,
+                    row.minorHead,
+                    heads3LevelMap
+                ),
                 majorHead: row.majorHead ?? "-",
                 subMajorHead: row.subMajorHead ?? "-",
                 minorHead: row.minorHead ?? "-",
@@ -1910,13 +2088,19 @@ export const getForm5EData = async (sector) => {
 
 
 
-
 // ─────────────────────────────────────────────────────────────
 // FORM 6 - Classified cum Consolidated Abstract
 // Data from: Expenditure table
 // Rows = full head code (all 7 levels), Columns = months (JAN-DEC)
 // Cell = sum of grossAmount for that head combination in that month
 // Bottom = grand total row across all heads and all months
+//
+// 🔸 Every row now also carries `classification`: an array of
+// { level, code, name } resolved via the shared Heads full-chain map
+// (buildStateChallanClassification — Expenditure rows use the exact
+// same field names as StateChallan, so the same builder applies
+// unmodified). Loaded without a sector filter since Form6 can span
+// COUNCIL, STATE, or CONSOLIDATED rows in one call.
 // ─────────────────────────────────────────────────────────────
 
 const MONTHS = [
@@ -1968,6 +2152,11 @@ export const getForm6Data = async (sector) => {
 
         logger.info(`Form6: Fetched ${rows.length} rows from Expenditure table`);
 
+        // 🔸 No sector filter here — Expenditure rows in this call can
+        // belong to COUNCIL or STATE (or both, for CONSOLIDATED), so we
+        // load the full Heads table rather than scoping to one sector.
+        const headsFullChainMap = await getHeadsFullChainMap();
+
         // Build a map keyed by full head code
         // { "0028-01-101-...": { headCode, majorHead, months: {JAN: 0...}, total } }
         const grouped = {};
@@ -1993,6 +2182,8 @@ export const getForm6Data = async (sector) => {
             if (!grouped[fullHeadCode]) {
                 grouped[fullHeadCode] = {
                     headCode: fullHeadCode,
+                    // 🔸 classification: vertical, code-and-name breakdown
+                    classification: buildStateChallanClassification(row, headsFullChainMap),
                     majorHead: row.majorHead ?? "-",
                     subMajorHead: row.subMajorHead ?? "-",
                     minorHead: row.minorHead ?? "-",
@@ -2040,27 +2231,15 @@ export const getForm6Data = async (sector) => {
 
 // ─────────────────────────────────────────────────────────────
 // FORM 7 - Month wise register
-// Data from 4 tables:
-//   challan         → all active rows, use challanDate
-//                     - sector = STATE          → skipped (stateChallan is the only source)
-//                     - sector = COUNCIL/CONSOLIDATED → ALL rows, no challanType filter
-//                     - any other sector        → filtered by challanType
-//   challanTwo      → grantsInAid amount only, use kaacChallanDate
-//                     - sector = STATE / COUNCIL → skipped
-//                     - sector = CONSOLIDATED    → all rows, no filter
-//                     - any other sector         → filtered by sector
-//   challanFromBill → use voucharDate
-//                     - sector = STATE   → skipped
-//                     - sector = COUNCIL → union of:
-//                         (a) sector = STATE   AND amountType IN allowed 4 types
-//                         (b) sector = COUNCIL AND amountType NOT IN CPF-excluded types
-//                     - sector = CONSOLIDATED → union of:
-//                         (a) sector != COUNCIL AND amountType IN allowed 4 types
-//                         (b) sector = COUNCIL AND amountType NOT IN CPF-excluded types
-//                     - any other sector → filtered by sector, amountType IN allowed 4 types (unchanged)
-//   stateChallan    → totalAmount, use challanDate
-//                     (STATE / CONSOLIDATED only; the ONLY source when sector = STATE)
-// Rows = full head code, Columns = months (JAN-DEC)
+// (sector rules for challan/challanTwo/challanFromBill/stateChallan —
+// UNCHANGED, see original comments below)
+//
+// 🔸 Every row now also carries `classification`: an array of
+// { level, code, name } — resolved per source:
+//   - challan          → ChallanHeads (parent-aware, 3-level)
+//   - challanTwo       → Heads (3-level)
+//   - challanFromBill  → Heads (3-level)
+//   - stateChallan     → Heads (full 7-level chain)
 // ─────────────────────────────────────────────────────────────
 
 const FORM7_ALLOWED_AMOUNT_TYPES = [
@@ -2218,6 +2397,16 @@ export const getForm7Data = async (sector) => {
             `challanFromBill=${challanFromBillRows.length}, stateChallan=${stateChallanRows.length}`
         );
 
+        // 🔸 Shared name-lookup maps, loaded once per call and reused
+        // across all 4 sources below.
+        const [challanHeadsMap, heads3LevelMap, headsFullChainMap] = await Promise.all([
+            (isStateOnly || challanRows.length === 0)
+                ? Promise.resolve(null)
+                : getChallanHeadsNameMap(),
+            getHeads3LevelMap(),
+            includeStateChallans ? getHeadsFullChainMap("STATE") : Promise.resolve(null),
+        ]);
+
         // ── Step 1: group by full head code ─────────────────────
         const grouped = {};
         const grandTotalMonths = emptyMonths();
@@ -2241,6 +2430,13 @@ export const getForm7Data = async (sector) => {
             if (!grouped[key]) {
                 grouped[key] = {
                     headCode: key,
+                    // 🔸 challan → ChallanHeads (parent-aware)
+                    classification: buildChallanClassification(
+                        row.majorHead,
+                        row.subMajorHead,
+                        row.minorHead,
+                        challanHeadsMap
+                    ),
                     majorHead: row.majorHead ?? "-",
                     subMajorHead: row.subMajorHead ?? "-",
                     minorHead: row.minorHead ?? "-",
@@ -2279,6 +2475,13 @@ export const getForm7Data = async (sector) => {
             if (!grouped[key]) {
                 grouped[key] = {
                     headCode: key,
+                    // 🔸 challanTwo → Heads (3-level)
+                    classification: buildThreeLevelClassification(
+                        row.majorHead,
+                        row.subMajor,
+                        row.minorHead,
+                        heads3LevelMap
+                    ),
                     majorHead: row.majorHead ?? "-",
                     subMajorHead: row.subMajor ?? "-",
                     minorHead: row.minorHead ?? "-",
@@ -2316,6 +2519,13 @@ export const getForm7Data = async (sector) => {
             if (!grouped[key]) {
                 grouped[key] = {
                     headCode: key,
+                    // 🔸 challanFromBill → Heads (3-level)
+                    classification: buildThreeLevelClassification(
+                        row.majorHead,
+                        row.subMajor,
+                        row.minorHead,
+                        heads3LevelMap
+                    ),
                     majorHead: row.majorHead ?? "-",
                     subMajorHead: row.subMajor ?? "-",
                     minorHead: row.minorHead ?? "-",
@@ -2365,6 +2575,8 @@ export const getForm7Data = async (sector) => {
             if (!grouped[key]) {
                 grouped[key] = {
                     headCode: key,
+                    // 🔸 stateChallan → Heads (full 7-level chain)
+                    classification: buildStateChallanClassification(row, headsFullChainMap),
                     majorHead: row.majorHead ?? "-",
                     subMajorHead: row.subMajorHead ?? "-",
                     minorHead: row.minorHead ?? "-",

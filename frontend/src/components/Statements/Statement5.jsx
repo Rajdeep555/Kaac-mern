@@ -3,7 +3,7 @@ import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useStatement5 } from "../../hooks/admin/useStatement5";
 
 const AmountCell = ({ value, bold = false }) => (
-  <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
+  <td className={`border px-4 py-2 align-top ${bold ? "font-bold" : ""}`}>
     <span className="flex items-center justify-center gap-1">
       <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
@@ -11,20 +11,35 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-// "2210-80-004-0000-000-03-01 (Some Head - Some Sub Head)"
-// Falls back gracefully when the code or the name couldn't be resolved.
-const formatHeadLabel = (group) => {
-  if (group.codeChain && group.nameChain) {
-    return `${group.codeChain} (${group.nameChain})`;
-  }
-  if (group.codeChain) {
-    return group.codeChain;
-  }
-  return group.nameChain || group.heads;
-};
+const HeadsCell = ({ group }) => (
+  <td className="border px-4 py-2 text-left align-top">
+    {group.headsLines.map((line, idx) => (
+      <div
+        key={idx}
+        className={idx < group.headsLines.length - 1 ? "text-gray-500" : ""}>
+        {line}
+      </div>
+    ))}
+    <div className="mt-1 flex gap-1">
+      {!group.matched && (
+        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-700">
+          Unmapped
+        </span>
+      )}
+      {group.hasMultiple && (
+        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">
+          {group.rows.length} combined
+        </span>
+      )}
+    </div>
+  </td>
+);
 
-const Statement5 = ({ sector }) => {
-  const { statement5Data, loading, error } = useStatement5({ sector });
+const Statement5 = ({ sector, dateRange }) => {
+  const { statement5Data, loading, error } = useStatement5({
+    sector,
+    dateRange,
+  });
 
   if (loading) {
     return (
@@ -44,7 +59,6 @@ const Statement5 = ({ sector }) => {
     );
   }
 
-  // Grand total across all groups
   const grandTotal = (statement5Data ?? []).reduce(
     (sum, group) => sum + Number(group.total ?? 0),
     0,
@@ -56,6 +70,11 @@ const Statement5 = ({ sector }) => {
         <h1 className="font-bold text-lg">STATEMENT NO. 5</h1>
         {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
+        )}
+        {(dateRange?.from || dateRange?.to) && (
+          <p className="text-xs text-gray-500">
+            {dateRange?.from || "…"} to {dateRange?.to || "…"}
+          </p>
         )}
         <h2 className="py-4 font-semibold">
           Detailed Account of Revenue Receipt by Minor Heads
@@ -86,29 +105,13 @@ const Statement5 = ({ sector }) => {
               </tr>
             )}
 
-            {/* One row per unique head chain — identical codes are
-               already summed into group.total on the backend, so
-               duplicates never appear as separate lines here. */}
             {statement5Data?.map((group, groupIndex) => (
               <tr key={`group-${groupIndex}-${group.heads}`} className="border">
-                <td className="border px-4 py-2 text-left">
-                  <span>{formatHeadLabel(group)}</span>
-                  {!group.matched && (
-                    <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-700">
-                      Unmapped
-                    </span>
-                  )}
-                  {group.hasMultiple && (
-                    <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">
-                      {group.rows.length} combined
-                    </span>
-                  )}
-                </td>
+                <HeadsCell group={group} />
                 <AmountCell value={group.total} bold={group.hasMultiple} />
               </tr>
             ))}
 
-            {/* Grand Total */}
             {statement5Data && statement5Data.length > 0 && (
               <tr className="bg-gray-300 border">
                 <td className="border px-4 py-3 text-right font-bold tracking-wider text-sm">

@@ -3,11 +3,23 @@ import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm5C } from "../../hooks/admin/useForm5C";
 
 const AmountCell = ({ value, bold = false }) => (
-  <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
+  <td className={`border px-4 py-2 align-top ${bold ? "font-bold" : ""}`}>
     <div className="flex justify-center items-center gap-1">
       <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
     </div>
+  </td>
+);
+
+const HeadCell = ({ classification }) => (
+  <td className="border px-4 py-2 text-left align-top">
+    {!classification || classification.length === 0
+      ? "-"
+      : classification.map((line, idx) => (
+          <div key={idx}>
+            {line.name ? `${line.code} - ${line.name}` : line.code}
+          </div>
+        ))}
   </td>
 );
 
@@ -24,7 +36,6 @@ const AMOUNT_KEYS = [
 const Form5C = ({ sector }) => {
   const { form5CData, loading, error } = useForm5C({ sector });
 
-  // ── Grand total: sum each column across all groups ───────
   const grandTotals = useMemo(() => {
     const totals = Object.fromEntries(AMOUNT_KEYS.map((k) => [k, 0]));
 
@@ -100,14 +111,11 @@ const Form5C = ({ sector }) => {
 
             {form5CData?.map((group, groupIndex) => (
               <React.Fragment key={`group-${groupIndex}-${group.majorHead}`}>
-                {/* Detail rows */}
                 {group.rows.map((row, index) => (
                   <tr
                     key={`${groupIndex}-row-${index}`}
                     className="text-base border">
-                    <td className="border px-4 py-2 text-left">
-                      {row.headCode}
-                    </td>
+                    <HeadCell classification={row.classification} />
                     <AmountCell value={row.payOfficers} />
                     <AmountCell value={row.payEstablishment} />
                     <AmountCell value={row.allowanceHonorary} />
@@ -118,10 +126,9 @@ const Form5C = ({ sector }) => {
                   </tr>
                 ))}
 
-                {/* Group subtotal — only when multiple rows */}
                 {group.hasMultiple && (
                   <tr className="bg-gray-100 font-semibold border">
-                    <td className="border px-4 py-2 text-left">
+                    <td className="border px-4 py-2 text-left align-top">
                       Total — {group.majorHead}
                     </td>
                     <AmountCell value={group.totals.payOfficers} bold />
@@ -136,7 +143,6 @@ const Form5C = ({ sector }) => {
               </React.Fragment>
             ))}
 
-            {/* Grand Total row */}
             {form5CData && form5CData.length > 0 && (
               <tr className="bg-gray-300 border">
                 <td className="border px-4 py-3 text-right font-bold tracking-wider text-sm">

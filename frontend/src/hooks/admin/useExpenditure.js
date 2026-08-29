@@ -12,14 +12,16 @@ export const useExpenditure = (params = {}, options = {}) => {
     const [error, setError] = useState(null);
     const { enabled = true, staleTime = 5 * 60 * 1000 } = options; // 5 min default
 
-    // Cache key from params (sector, month, year)
+    // Cache key from params (sector, month, year, from, to)
     const cacheKey = useMemo(() => {
         const keyParts = [];
         if (params.sector) keyParts.push(`sector-${params.sector}`);
         if (params.month) keyParts.push(`month-${params.month}`);
         if (params.year) keyParts.push(`year-${params.year}`);
+        if (params.from) keyParts.push(`from-${params.from}`);
+        if (params.to) keyParts.push(`to-${params.to}`);
         return keyParts.join('-') || 'default';
-    }, [params.sector, params.month, params.year]);
+    }, [params.sector, params.month, params.year, params.from, params.to]);
 
     // Check cache (pure function)
     const getCachedData = useCallback(() => {
@@ -76,7 +78,7 @@ export const useExpenditure = (params = {}, options = {}) => {
         };
 
         fetchExpenditures();
-    }, [params.sector, params.month, params.year, enabled, getCachedData]);
+    }, [params.sector, params.month, params.year, params.from, params.to, enabled, getCachedData]);
 
     // Manual refresh
     const refetch = useCallback(() => {

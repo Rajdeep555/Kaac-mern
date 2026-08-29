@@ -61,10 +61,12 @@ const calculateTotals = (data) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
+// dateRange: { from: "YYYY-MM-DD", to: "YYYY-MM-DD" }
+const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
   const { save, saving } = useCashbookSummary();
+  const { from, to } = dateRange ?? {};
 
-  // Track if we've already saved for this sector+year session
+  // Track if we've already saved for this sector+range session
   const hasSaved = useRef(false);
 
   // Status label shown to user during save
@@ -76,7 +78,7 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
     loading: councilLoading,
     error: councilError,
   } = useCashbook(
-    { year, sector: "COUNCIL" },
+    { from, to, sector: "COUNCIL" },
     { enabled: sector === "COUNCIL" || sector === "CONSOLIDATED" },
   );
 
@@ -85,7 +87,7 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
     loading: stateLoading,
     error: stateError,
   } = useCashbook(
-    { year, sector: "STATE" },
+    { from, to, sector: "STATE" },
     { enabled: sector === "STATE" || sector === "CONSOLIDATED" },
   );
 
@@ -122,8 +124,16 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
 
   // ── Auto-save after data loads ───────────────────────────
   useEffect(() => {
-    // Only run when data is loaded, not empty, and not already saved
-    if (loading || error || rawData.length === 0 || hasSaved.current) return;
+    // Only run when data is loaded, not empty, range is set, and not already saved
+    if (
+      loading ||
+      error ||
+      !from ||
+      !to ||
+      rawData.length === 0 ||
+      hasSaved.current
+    )
+      return;
 
     const runSave = async () => {
       hasSaved.current = true; // prevent double-save
@@ -136,11 +146,14 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
 
         const totals = calculateTotals(rawData);
 
-        // Current month and year
+        // Current month and year (for the "when saved" bookkeeping fields)
         const now = new Date();
         const currentMonth = now.getMonth() + 1; // 1-12
         const currentYear = now.getFullYear();
-        const financialYear = `${year}-${year + 1}`;
+
+        // Financial year derived from the selected range's start date
+        const rangeStartYear = new Date(from).getFullYear();
+        const financialYear = `${rangeStartYear}-${rangeStartYear + 1}`;
 
         // Step 2 — Inserting
         setSaveStatus("inserting");
@@ -192,12 +205,12 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
     };
 
     runSave();
-  }, [loading, rawData, sector, year]);
+  }, [loading, rawData, sector, from, to]);
 
-  // Reset hasSaved when sector or year changes
+  // Reset hasSaved when sector or date range changes
   useEffect(() => {
     hasSaved.current = false;
-  }, [sector, year]);
+  }, [sector, from, to]);
 
   // ── Split and zip rows ───────────────────────────────────
   const { drRows, crRows } = useMemo(() => splitRows(rawData), [rawData]);
@@ -221,6 +234,16 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
         return "Cash Book for the month";
     }
   };
+
+  if (!from || !to) {
+    return (
+      <div className="w-full border-2 bg-white p-8 text-center">
+        <p className="font-medium text-gray-600">
+          Select a date range to view Form 1 data.
+        </p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -250,6 +273,9 @@ const Form1 = ({ data: dataProp = [], title, sector, year = 2025 }) => {
         <h1 className="text-xl font-bold">Form No. 1</h1>
         {sector && <p className="text-sm text-gray-600">Sector: {sector}</p>}
         <p>{getTitle()}</p>
+        <p className="text-xs text-gray-500 font-normal">
+          {from} to {to}
+        </p>
       </div>
 
       <hr className="w-full mb-4 h-0.5 bg-black" />

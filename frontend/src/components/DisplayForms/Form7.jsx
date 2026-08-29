@@ -27,6 +27,17 @@ const AmountCell = ({ value }) =>
     "-"
   );
 
+const HeadCodeCell = ({ classification, headCode }) => {
+  if (!classification || classification.length === 0) {
+    return <div className="font-semibold">{headCode}</div>;
+  }
+  return classification.map((line, idx) => (
+    <div key={idx} className="font-semibold">
+      {line.name ? `${line.code} - ${line.name}` : line.code}
+    </div>
+  ));
+};
+
 const Form7 = ({ sector }) => {
   const { form7Data, loading, error } = useForm7({ sector });
   const year = new Date().getFullYear();
@@ -103,47 +114,29 @@ const Form7 = ({ sector }) => {
 
             {groups.map((group, groupIndex) => (
               <React.Fragment key={`group-${groupIndex}-${group.majorHead}`}>
-                {/* Detail rows for each head code under this majorHead */}
                 {group.rows.map((row, rowIndex) => (
                   <tr
                     key={`${groupIndex}-${rowIndex}-${row.headCode}`}
                     className="border">
-                    <td className="border py-2 px-4 text-left">
-                      <div className="font-semibold">{row.headCode}</div>
-                      {/* <div className="text-[9px] text-gray-500 mt-1 space-y-0.5">
-                        {row.majorHead !== "-" && (
-                          <div>Major: {row.majorHead}</div>
-                        )}
-                        {row.subMajorHead !== "-" && (
-                          <div>Sub Major: {row.subMajorHead}</div>
-                        )}
-                        {row.minorHead !== "-" && (
-                          <div>Minor: {row.minorHead}</div>
-                        )}
-                        {row.detailHead !== "-" && (
-                          <div>Detail: {row.detailHead}</div>
-                        )}
-                        {row.amountType && (
-                          <div className="text-blue-500">
-                            Type: {row.amountType}
-                          </div>
-                        )}
-                      </div> */}
+                    <td className="border py-2 px-4 text-left align-top">
+                      <HeadCodeCell
+                        classification={row.classification}
+                        headCode={row.headCode}
+                      />
                     </td>
 
                     {MONTHS.map((month) => (
-                      <td key={month} className="border py-2">
+                      <td key={month} className="border py-2 align-top">
                         <AmountCell value={row.months[month]} />
                       </td>
                     ))}
 
-                    <td className="border py-2 font-semibold">
+                    <td className="border py-2 font-semibold align-top">
                       <AmountCell value={row.total} />
                     </td>
                   </tr>
                 ))}
 
-                {/* MajorHead total row — only when more than one head code */}
                 {group.hasMultiple && (
                   <tr className="bg-gray-100 font-bold border">
                     <td className="border px-4 py-2 text-left">
@@ -162,7 +155,6 @@ const Form7 = ({ sector }) => {
               </React.Fragment>
             ))}
 
-            {/* Grand Total Row */}
             {groups.length > 0 && (
               <tr className="bg-gray-200 font-bold border">
                 <td className="border px-4 py-2 text-left">GRAND TOTAL</td>
