@@ -11,10 +11,10 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-const Statement2 = ({ sector, financialYear }) => {
+const Statement2 = ({ sector, dateRange }) => {
   const { statement2Data, loading, error } = useStatement2({
     sector,
-    financialYear,
+    dateRange,
   });
 
   if (loading) {
@@ -37,11 +37,10 @@ const Statement2 = ({ sector, financialYear }) => {
 
   const { rows, total } = statement2Data;
 
-  // Parse FY for dynamic headers e.g. "2025-2026" → previous = "2024", current = "2025-2026"
-  const previousFY = financialYear
-    ? String(Number(financialYear.split("-")[0]) - 1)
-    : "Previous Year";
-  const currentFY = financialYear ?? "Current Year";
+  const rangeLabel =
+    dateRange?.from || dateRange?.to
+      ? `${dateRange?.from || "…"} to ${dateRange?.to || "…"}`
+      : "Current Period";
 
   return (
     <div className="w-full overflow-x-auto border-2 bg-white">
@@ -51,7 +50,7 @@ const Statement2 = ({ sector, financialYear }) => {
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
         )}
         <h2 className="py-4 font-semibold text-center px-4">
-          Capital Outlay - Progressive Capital Outlay to end of {currentFY}
+          Capital Outlay - Progressive Capital Outlay to end of {rangeLabel}
         </h2>
       </div>
 
@@ -65,10 +64,10 @@ const Statement2 = ({ sector, financialYear }) => {
                 Major Head of Account
               </th>
               <th className="border font uppercase tracking-wide py-2">
-                Expenditure to end of {previousFY}
+                Expenditure to end of Previous Period
               </th>
               <th className="border font uppercase tracking-wide py-2">
-                Expenditure during {currentFY}
+                Expenditure during {rangeLabel}
               </th>
               <th className="border font uppercase tracking-wide py-2">
                 Total

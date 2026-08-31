@@ -10,6 +10,7 @@ const splitRows = (data) => ({
 });
 
 const emptyDr = {
+  rowType: "data",
   receiptDate: null,
   receiptItemNo: null,
   receiptCounterfoilNo: null,
@@ -20,6 +21,7 @@ const emptyDr = {
 };
 
 const emptyCr = {
+  rowType: "data",
   disbursementDate: null,
   voucherNo: null,
   disbursementCounterfoilNo: null,
@@ -41,16 +43,21 @@ const calculateTotals = (data) => {
   let disbursementCashColumn = 0;
   let disbursementTreasuryPla = 0;
 
-  data.forEach((row) => {
-    if (row.receiptCashAmount !== null)
-      receiptCashColumn += Number(row.receiptCashAmount);
-    if (row.receiptPlaColumn !== null)
-      receiptTreasuryPla += Number(row.receiptPlaColumn);
-    if (row.disbursementCashAmount !== null)
-      disbursementCashColumn += Number(row.disbursementCashAmount);
-    if (row.plaColumnPayment !== null)
-      disbursementTreasuryPla += Number(row.plaColumnPayment);
-  });
+  // Day-total marker rows are already sums of the day's data rows —
+  // including them here too would double-count, so they're excluded
+  // from the grand total.
+  data
+    .filter((row) => row.rowType !== "dayTotal")
+    .forEach((row) => {
+      if (row.receiptCashAmount !== null)
+        receiptCashColumn += Number(row.receiptCashAmount);
+      if (row.receiptPlaColumn !== null)
+        receiptTreasuryPla += Number(row.receiptPlaColumn);
+      if (row.disbursementCashAmount !== null)
+        disbursementCashColumn += Number(row.disbursementCashAmount);
+      if (row.plaColumnPayment !== null)
+        disbursementTreasuryPla += Number(row.plaColumnPayment);
+    });
 
   return {
     receiptCashColumn,
@@ -411,71 +418,82 @@ const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
               </tr>
             )}
 
-            {zippedRows.map(({ dr, cr, key }) => (
-              <tr key={key} className="border border-black">
-                {/* DR side */}
-                <td className="border border-black py-2 px-1">
-                  {fmt(dr.receiptItemNo)}
-                </td>
-                <td className="border border-black px-1">
-                  {fmt(dr.receiptCounterfoilNo)}
-                </td>
-                <td className="border border-black px-1">
-                  {fmt(dr.receiptDate)}
-                </td>
-                <td className="border border-black px-2 text-left">
-                  {fmt(dr.receiptParticulars)}
-                </td>
-                <td className="border border-black px-1">
-                  {dr.receiptCashAmount !== null
-                    ? fmtAmt(dr.receiptCashAmount)
-                    : "-"}
-                </td>
-                <td className="border border-black px-1">
-                  {dr.receiptPlaColumn !== null
-                    ? fmtAmt(dr.receiptPlaColumn)
-                    : "-"}
-                </td>
-                <td className="border border-black px-1">
-                  {fmt(dr.receiptClassification)}
-                </td>
+            {zippedRows.map(({ dr, cr, key }) => {
+              // Darker background + bold text for day-total marker rows
+              // (either side can independently be a day-total row).
+              const isDrTotal = dr.rowType === "dayTotal";
+              const isCrTotal = cr.rowType === "dayTotal";
+              const drCellClass = isDrTotal
+                ? "border border-black px-1 bg-gray-300 font-bold"
+                : "border border-black px-1";
+              const crCellClass = isCrTotal
+                ? "border border-black px-1 bg-gray-300 font-bold"
+                : "border border-black px-1";
 
-                {/* CR side */}
-                <td className="border border-black py-2 px-1">
-                  {fmt(cr.disbursementDate)}
-                </td>
-                <td className="border border-black px-1">
-                  {fmt(cr.voucherNo)}
-                </td>
-                <td className="border border-black px-1">
-                  {fmt(cr.disbursementCounterfoilNo)}
-                </td>
-                <td className="border border-black px-2 text-left">
-                  {fmt(cr.disbursementDetails)}
-                </td>
-                <td className="border border-black px-1">
-                  {cr.disbursementCashAmount !== null
-                    ? fmtAmt(cr.disbursementCashAmount)
-                    : "-"}
-                </td>
-                <td className="border border-black px-1">{fmt(cr.chequeNo)}</td>
-                <td className="border border-black px-1">
-                  {cr.plaColumnPayment !== null
-                    ? fmtAmt(cr.plaColumnPayment)
-                    : "-"}
-                </td>
-                <td className="border border-black px-1">
-                  {fmt(cr.treasuryClassification)}
-                </td>
-              </tr>
-            ))}
+              return (
+                <tr key={key} className="border border-black">
+                  {/* DR side */}
+                  <td className={`${drCellClass} py-2`}>
+                    {fmt(dr.receiptItemNo)}
+                  </td>
+                  <td className={drCellClass}>
+                    {fmt(dr.receiptCounterfoilNo)}
+                  </td>
+                  <td className={drCellClass}>{fmt(dr.receiptDate)}</td>
+                  <td
+                    className={`${isDrTotal ? "border border-black bg-gray-300 font-bold" : "border border-black"} px-2 text-left`}>
+                    {fmt(dr.receiptParticulars)}
+                  </td>
+                  <td className={drCellClass}>
+                    {dr.receiptCashAmount !== null
+                      ? fmtAmt(dr.receiptCashAmount)
+                      : "-"}
+                  </td>
+                  <td className={drCellClass}>
+                    {dr.receiptPlaColumn !== null
+                      ? fmtAmt(dr.receiptPlaColumn)
+                      : "-"}
+                  </td>
+                  <td className={drCellClass}>
+                    {fmt(dr.receiptClassification)}
+                  </td>
+
+                  {/* CR side */}
+                  <td className={`${crCellClass} py-2`}>
+                    {fmt(cr.disbursementDate)}
+                  </td>
+                  <td className={crCellClass}>{fmt(cr.voucherNo)}</td>
+                  <td className={crCellClass}>
+                    {fmt(cr.disbursementCounterfoilNo)}
+                  </td>
+                  <td
+                    className={`${isCrTotal ? "border border-black bg-gray-300 font-bold" : "border border-black"} px-2 text-left`}>
+                    {fmt(cr.disbursementDetails)}
+                  </td>
+                  <td className={crCellClass}>
+                    {cr.disbursementCashAmount !== null
+                      ? fmtAmt(cr.disbursementCashAmount)
+                      : "-"}
+                  </td>
+                  <td className={crCellClass}>{fmt(cr.chequeNo)}</td>
+                  <td className={crCellClass}>
+                    {cr.plaColumnPayment !== null
+                      ? fmtAmt(cr.plaColumnPayment)
+                      : "-"}
+                  </td>
+                  <td className={crCellClass}>
+                    {fmt(cr.treasuryClassification)}
+                  </td>
+                </tr>
+              );
+            })}
 
             {/* Totals row */}
             {zippedRows.length > 0 &&
               (() => {
                 const t = calculateTotals(rawData);
                 return (
-                  <tr className="font-bold bg-gray-100 border border-black">
+                  <tr className="font-bold bg-gray-400 border border-black">
                     <td
                       colSpan={4}
                       className="border border-black px-2 py-2 text-right">

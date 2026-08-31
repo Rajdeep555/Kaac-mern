@@ -53,10 +53,34 @@ const COUNCIL_STATE_TREASURY_TYPES = [
 //     return { from, to };
 // }
 
+// Format a Date as dd-mm-yyyy for display. A separate sortable
+// yyyy-mm-dd key (sortableDateKey below) is stored alongside every
+// row's display date, since sorting/grouping by "dd-mm-yyyy" strings
+// directly is wrong (e.g. "31-03-2026" would sort before "01-04-2025").
+const formatDisplayDate = (date) => {
+    if (!date) return null;
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return null;
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const year = d.getUTCFullYear();
+    return `${day}-${month}-${year}`;
+};
+
+// Sortable yyyy-mm-dd key, independent of display format
+const sortableDateKey = (date) => {
+    if (!date) return "";
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+};
+
 function createEmptyRow() {
     return {
+        rowType: "data", // "data" | "dayTotal" — see day-total rows below
         id: null,
         receiptDate: null,
+        receiptDateKey: null,
         receiptItemNo: null,
         receiptCounterfoilNo: null,
         receiptParticulars: null,
@@ -64,6 +88,7 @@ function createEmptyRow() {
         receiptPlaColumn: null,
         receiptClassification: null,
         disbursementDate: null,
+        disbursementDateKey: null,
         voucherNo: null,
         disbursementCounterfoilNo: null,
         disbursementDetails: null,
@@ -84,6 +109,90 @@ const buildClassification = (...parts) =>
                 String(p).trim() !== "0"
         )
         .join("-") || null;
+
+
+
+
+// Builds day-total marker row(s) for a given date. Returns an array of
+// 0–2 rows: a DR-side total row if that date has receipt rows, and/or
+// a CR-side total row if that date has disbursement rows — kept
+// single-sided (like every other row here) so each one lands cleanly
+// in only ONE of drRows/crRows when the frontend splits by side,
+// instead of duplicating into both.
+const buildDayTotalRows = (dateKey, displayDate, dayRows) => {
+    const results = [];
+
+    const drRowsForDay = dayRows.filter((r) => r.receiptDateKey === dateKey);
+    const crRowsForDay = dayRows.filter((r) => r.disbursementDateKey === dateKey);
+
+    if (drRowsForDay.length > 0) {
+        const row = createEmptyRow();
+        row.rowType = "dayTotal";
+        row.id = `DAYTOTAL-DR-${dateKey}`;
+        row.receiptDate = displayDate;
+        row.receiptDateKey = dateKey;
+        row.receiptParticulars = "Total for the day";
+        row.receiptCashAmount = drRowsForDay.reduce(
+            (s, r) => s + (r.receiptCashAmount ?? 0),
+            0
+        );
+        row.receiptPlaColumn = drRowsForDay.reduce(
+            (s, r) => s + (r.receiptPlaColumn ?? 0),
+            0
+        );
+        results.push(row);
+    }
+
+    if (crRowsForDay.length > 0) {
+        const row = createEmptyRow();
+        row.rowType = "dayTotal";
+        row.id = `DAYTOTAL-CR-${dateKey}`;
+        row.disbursementDate = displayDate;
+        row.disbursementDateKey = dateKey;
+        row.disbursementDetails = "Total for the day";
+        row.disbursementCashAmount = crRowsForDay.reduce(
+            (s, r) => s + (r.disbursementCashAmount ?? 0),
+            0
+        );
+        row.plaColumnPayment = crRowsForDay.reduce(
+            (s, r) => s + (r.plaColumnPayment ?? 0),
+            0
+        );
+        results.push(row);
+    }
+
+    return results;
+};
+
+// Inserts day-total row(s) immediately after the last data row of each
+// calendar day, for BOTH the DR date sequence and the CR date sequence
+// independently.
+const insertDayTotals = (rows) => {
+    const dataRows = rows.filter((r) => r.rowType === "data");
+
+    const allDateKeys = new Set();
+    dataRows.forEach((r) => {
+        if (r.receiptDateKey) allDateKeys.add(r.receiptDateKey);
+        if (r.disbursementDateKey) allDateKeys.add(r.disbursementDateKey);
+    });
+
+    const sortedDateKeys = [...allDateKeys].sort();
+
+    const result = [];
+    for (const dateKey of sortedDateKeys) {
+        const orderedRowsForThisDate = dataRows.filter(
+            (r) => r.receiptDateKey === dateKey || r.disbursementDateKey === dateKey
+        );
+
+        result.push(...orderedRowsForThisDate);
+
+        const displayDate = formatDisplayDate(new Date(`${dateKey}T00:00:00.000Z`));
+        result.push(...buildDayTotalRows(dateKey, displayDate, orderedRowsForThisDate));
+    }
+
+    return result;
+};
+
 
 export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
     try {
@@ -223,43 +332,6 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             councilCrossStateTreasuryRows: councilCrossStateTreasuryRows.length,
         });
 
-        // ── DEBUG: dump every fetched table ─────────────────────────
-        console.log("[CASHBOOK DEBUG] ===== RAW TABLE DUMPS =====");
-        console.log("[CASHBOOK DEBUG] sector param:", JSON.stringify(sector));
-        console.log("[CASHBOOK DEBUG] from param:", from.toISOString());
-        console.log("[CASHBOOK DEBUG] to param:", to.toISOString());
-
-        console.log(
-            `[CASHBOOK DEBUG] cashReceipts (${cashReceipts.length}):`,
-            JSON.stringify(cashReceipts, null, 2)
-        );
-        console.log(
-            `[CASHBOOK DEBUG] challans (${challans.length}):`,
-            JSON.stringify(challans, null, 2)
-        );
-        console.log(
-            `[CASHBOOK DEBUG] challanFromBills (${challanFromBills.length}):`,
-            JSON.stringify(challanFromBills, null, 2)
-        );
-        console.log(
-            `[CASHBOOK DEBUG] challanTwoRows (${challanTwoRows.length}):`,
-            JSON.stringify(challanTwoRows, null, 2)
-        );
-        console.log(
-            `[CASHBOOK DEBUG] expenditures (${expenditures.length}):`,
-            JSON.stringify(expenditures, null, 2)
-        );
-        console.log(
-            `[CASHBOOK DEBUG] stateChallans (${stateChallans.length}):`,
-            JSON.stringify(stateChallans, null, 2)
-        );
-        console.log(
-            `[CASHBOOK DEBUG] councilCrossStateTreasuryRows (${councilCrossStateTreasuryRows.length}):`,
-            JSON.stringify(councilCrossStateTreasuryRows, null, 2)
-        );
-        console.log("[CASHBOOK DEBUG] ===== END RAW TABLE DUMPS =====");
-        // ── END DEBUG ────────────────────────────────────────────
-
         const challansWithoutCounterfoil = challans.filter(
             (c) => !c.counterfoilNo || c.counterfoilNo.trim() === ""
         );
@@ -289,25 +361,16 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             CASH_AMOUNT_TYPES.includes(cfb.amountType)
         );
 
-        if (cfbStateRows.length > 0) {
-            const dates = cfbStateRows
-                .map((cfb) => cfb.voucharDate)
-                .filter(Boolean)
-                .sort((a, b) => a - b);
-        }
-
         const rows = [];
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 1: CashReceipt
-        // Has sector field (default COUNCIL) — filtered correctly above
-        // Classification: always null (no head fields in schema)
         // ════════════════════════════════════════════════════════
-        let c1Total = 0;
         cashReceipts.forEach((r) => {
             const row = createEmptyRow();
             row.id = `R-${r.id}`;
-            row.receiptDate = r.date ? r.date.toISOString().slice(0, 10) : null;
+            row.receiptDate = formatDisplayDate(r.date);
+            row.receiptDateKey = sortableDateKey(r.date);
             row.receiptCounterfoilNo = r.counterfoilNo ?? null;
             const parts = [
                 r.receivedFrom,
@@ -322,21 +385,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 : null;
             row.receiptPlaColumn = null;
             row.receiptClassification = null;
-            c1Total += row.receiptCashAmount ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 2: Challan WITHOUT counterfoilNo
-        // Classification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead
         // ════════════════════════════════════════════════════════
-        let c2Total = 0;
         challansWithoutCounterfoil.forEach((c) => {
             const row = createEmptyRow();
             row.id = `C-DR-${c.id}`;
-            row.receiptDate = c.challanDate
-                ? c.challanDate.toISOString().slice(0, 10)
-                : null;
+            row.receiptDate = formatDisplayDate(c.challanDate);
+            row.receiptDateKey = sortableDateKey(c.challanDate);
             row.receiptItemNo = c.challanNo ?? null;
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = c.remarks ?? null;
@@ -352,21 +411,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 c.subSubHead,
                 c.detailHead
             );
-            c2Total += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3A: ChallanFromBill (PLA types) — own sector
-        // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        let c3aTotal = 0;
         cfbPlaRows.forEach((cfb) => {
             const row = createEmptyRow();
             row.id = `CFB-DR-PLA-${cfb.id}`;
-            row.receiptDate = cfb.voucharDate
-                ? cfb.voucharDate.toISOString().slice(0, 10)
-                : null;
+            row.receiptDate = formatDisplayDate(cfb.voucharDate);
+            row.receiptDateKey = sortableDateKey(cfb.voucharDate);
             row.receiptItemNo = cfb.challanNo ?? null;
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = cfb.amountType ?? null;
@@ -379,24 +434,19 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 cfb.subMajor,
                 cfb.minorHead
             );
-            c3aTotal += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3A-2 (NEW): ChallanFromBill treasury rows
         // from STATE sector, surfaced under COUNCIL's receipt Treasury
-        // PLA column. Only runs when sector = COUNCIL. Same row shape
-        // and classification logic as 3A above — just a different
-        // source filter (sector = STATE instead of COUNCIL).
+        // PLA column.
         // ════════════════════════════════════════════════════════
-        let c3aCrossTotal = 0;
         councilCrossStateTreasuryRows.forEach((cfb) => {
             const row = createEmptyRow();
             row.id = `CFB-DR-STATE-FOR-COUNCIL-${cfb.id}`;
-            row.receiptDate = cfb.voucharDate
-                ? cfb.voucharDate.toISOString().slice(0, 10)
-                : null;
+            row.receiptDate = formatDisplayDate(cfb.voucharDate);
+            row.receiptDateKey = sortableDateKey(cfb.voucharDate);
             row.receiptItemNo = cfb.challanNo ?? null;
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = cfb.amountType ?? null;
@@ -409,24 +459,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 cfb.subMajor,
                 cfb.minorHead
             );
-            c3aCrossTotal += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
-        if (isCouncilSector) {
-            // no-op — placeholder for future logging
-        }
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 3B: ChallanFromBill (Cash types)
-        // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        let c3bTotal = 0;
         cfbCashRows.forEach((cfb) => {
             const row = createEmptyRow();
             row.id = `CFB-DR-CASH-${cfb.id}`;
-            row.receiptDate = cfb.voucharDate
-                ? cfb.voucharDate.toISOString().slice(0, 10)
-                : null;
+            row.receiptDate = formatDisplayDate(cfb.voucharDate);
+            row.receiptDateKey = sortableDateKey(cfb.voucharDate);
             row.receiptItemNo = cfb.challanNo ?? null;
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = cfb.amountType ?? null;
@@ -439,24 +482,15 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 cfb.subMajor,
                 cfb.minorHead
             );
-            c3bTotal += row.receiptCashAmount ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
         // DR + CR SIDE — CONDITION 3C: ChallanFromBill (STATE-sector rows)
-        // UNCHANGED. STATE has no cash-column activity. Every STATE-sector
-        // amountType posts to the receipt PLA column. All types also
-        // post to the disbursement PLA column EXCEPT "Advance Payment",
-        // which is receipt-side only.
-        // Classification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        let c3cDrTotal = 0;
-        let c3cCrTotal = 0;
         cfbStateRows.forEach((cfb) => {
-            const cfbDate = cfb.voucharDate
-                ? cfb.voucharDate.toISOString().slice(0, 10)
-                : null;
+            const cfbDateKey = sortableDateKey(cfb.voucharDate);
+            const cfbDate = formatDisplayDate(cfb.voucharDate);
             const classification = buildClassification(
                 cfb.majorHead,
                 cfb.subMajor,
@@ -470,13 +504,13 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             const drRow = createEmptyRow();
             drRow.id = `CFB-DR-STATE-${cfb.id}`;
             drRow.receiptDate = cfbDate;
+            drRow.receiptDateKey = cfbDateKey;
             drRow.receiptItemNo = cfb.challanNo ?? null;
             drRow.receiptCounterfoilNo = null;
             drRow.receiptParticulars = cfb.amountType ?? null;
             drRow.receiptCashAmount = null;
             drRow.receiptPlaColumn = amount;
             drRow.receiptClassification = classification;
-            c3cDrTotal += amount ?? 0;
             rows.push(drRow);
 
             // Disbursement side — every STATE amountType EXCEPT
@@ -485,6 +519,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 const crRow = createEmptyRow();
                 crRow.id = `CFB-CR-STATE-${cfb.id}`;
                 crRow.disbursementDate = cfbDate;
+                crRow.disbursementDateKey = cfbDateKey;
                 crRow.voucherNo = cfb.challanNo ?? null;
                 crRow.disbursementCounterfoilNo = null;
                 crRow.disbursementDetails = cfb.amountType ?? null;
@@ -492,22 +527,16 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 crRow.chequeNo = cfb.chequeNo ?? null;
                 crRow.plaColumnPayment = amount;
                 crRow.treasuryClassification = classification;
-                c3cCrTotal += amount ?? 0;
                 rows.push(crRow);
             }
         });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 4: Challan WITH counterfoilNo (DR + CR pair)
-        // DR Classification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead
-        // CR treasuryClassification: same full chain
         // ════════════════════════════════════════════════════════
-        let c4DrTotal = 0;
-        let c4CrTotal = 0;
         challansWithCounterfoil.forEach((c) => {
-            const challanDate = c.challanDate
-                ? c.challanDate.toISOString().slice(0, 10)
-                : null;
+            const challanDateKey = sortableDateKey(c.challanDate);
+            const challanDate = formatDisplayDate(c.challanDate);
 
             const fullClassification = buildClassification(
                 c.majorHead,
@@ -521,6 +550,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             const drRow = createEmptyRow();
             drRow.id = `C-DR-CF-${c.id}`;
             drRow.receiptDate = challanDate;
+            drRow.receiptDateKey = challanDateKey;
             drRow.receiptItemNo = c.challanNo ?? null;
             drRow.receiptCounterfoilNo = c.counterfoilNo ?? null;
             drRow.receiptParticulars = c.remarks ?? null;
@@ -529,12 +559,12 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 ? parseFloat(c.amount.toString())
                 : null;
             drRow.receiptClassification = fullClassification;
-            c4DrTotal += drRow.receiptPlaColumn ?? 0;
             rows.push(drRow);
 
             const crRow = createEmptyRow();
             crRow.id = `C-CR-CF-${c.id}`;
             crRow.disbursementDate = challanDate;
+            crRow.disbursementDateKey = challanDateKey;
             crRow.voucherNo = c.challanNo ?? null;
             crRow.disbursementCounterfoilNo = c.counterfoilNo ?? null;
             crRow.disbursementDetails = c.remarks ?? null;
@@ -544,21 +574,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             crRow.chequeNo = null;
             crRow.plaColumnPayment = null;
             crRow.treasuryClassification = fullClassification;
-            c4CrTotal += crRow.disbursementCashAmount ?? 0;
             rows.push(crRow);
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 5: ChallanTwo (has sector field — filtered correctly)
-        // Classification: majorHead-subMajor-minorHead
+        // DR SIDE — CONDITION 5: ChallanTwo
         // ════════════════════════════════════════════════════════
-        let c5Total = 0;
         challanTwoRows.forEach((ct) => {
             const row = createEmptyRow();
             row.id = `CT-DR-${ct.id}`;
-            row.receiptDate = ct.kaacChallanDate
-                ? ct.kaacChallanDate.toISOString().slice(0, 10)
-                : null;
+            row.receiptDate = formatDisplayDate(ct.kaacChallanDate);
+            row.receiptDateKey = sortableDateKey(ct.kaacChallanDate);
             row.receiptItemNo = ct.kaacChallanNo ?? null;
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = ct.remarks ?? null;
@@ -571,22 +597,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 ct.subMajor,
                 ct.minorHead
             );
-            c5Total += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 6: StateChallan (STATE or CONSOLIDATED only)
-        // UNCHANGED.
-        // Classification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead-subDetailHead
         // ════════════════════════════════════════════════════════
-        let c6Total = 0;
         stateChallans.forEach((sc) => {
             const row = createEmptyRow();
             row.id = `SC-DR-${sc.id}`;
-            row.receiptDate = sc.challanDate
-                ? sc.challanDate.toISOString().slice(0, 10)
-                : null;
+            row.receiptDate = formatDisplayDate(sc.challanDate);
+            row.receiptDateKey = sortableDateKey(sc.challanDate);
             row.receiptItemNo = sc.challanNo ?? null;
             row.receiptCounterfoilNo = null;
             row.receiptParticulars = sc.remarks ?? null;
@@ -604,21 +625,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 sc.detailHead,
                 sc.subDetailHead
             );
-            c6Total += row.receiptPlaColumn ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
-        // CR SIDE — CONDITION 2: Expenditure (has sector field — filtered correctly)
-        // treasuryClassification: majorHead-subMajorHead-minorHead-subHead-subSubHead-detailHead-subDetailHead
+        // CR SIDE — CONDITION 2: Expenditure
         // ════════════════════════════════════════════════════════
-        let crETotal = 0;
         expenditures.forEach((e) => {
             const row = createEmptyRow();
             row.id = `E-CR-${e.id}`;
-            row.disbursementDate = e.voucherDate
-                ? e.voucherDate.toISOString().slice(0, 10)
-                : null;
+            row.disbursementDate = formatDisplayDate(e.voucherDate);
+            row.disbursementDateKey = sortableDateKey(e.voucherDate);
             row.voucherNo = e.voucherNo ?? null;
             row.disbursementCounterfoilNo = null;
             row.disbursementDetails = e.remarks ?? null;
@@ -636,21 +653,17 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 e.detailHead,
                 e.subDetailHead
             );
-            crETotal += row.plaColumnPayment ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 3: ChallanFromBill (Cash types)
-        // treasuryClassification: majorHead-subMajor-minorHead
         // ════════════════════════════════════════════════════════
-        let crCfbTotal = 0;
         cfbCashRows.forEach((cfb) => {
             const row = createEmptyRow();
             row.id = `CFB-CR-${cfb.id}`;
-            row.disbursementDate = cfb.voucharDate
-                ? cfb.voucharDate.toISOString().slice(0, 10)
-                : null;
+            row.disbursementDate = formatDisplayDate(cfb.voucharDate);
+            row.disbursementDateKey = sortableDateKey(cfb.voucharDate);
             row.voucherNo = cfb.challanNo ?? null;
             row.disbursementCounterfoilNo = null;
             row.disbursementDetails = cfb.amountType ?? null;
@@ -664,21 +677,22 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                 cfb.subMajor,
                 cfb.minorHead
             );
-            crCfbTotal += row.disbursementCashAmount ?? 0;
             rows.push(row);
         });
 
         // ════════════════════════════════════════════════════════
-        // SORT all rows by date
+        // SORT all data rows by date (using the sortable key, not the
+        // dd-mm-yyyy display string)
         // ════════════════════════════════════════════════════════
         rows.sort((a, b) => {
-            const dateA = a.receiptDate || a.disbursementDate || "";
-            const dateB = b.receiptDate || b.disbursementDate || "";
+            const dateA = a.receiptDateKey || a.disbursementDateKey || "";
+            const dateB = b.receiptDateKey || b.disbursementDateKey || "";
             return dateA.localeCompare(dateB);
         });
 
         // ════════════════════════════════════════════════════════
-        // ASSIGN running item numbers on DR side
+        // ASSIGN running item numbers on DR side (before day-totals
+        // are inserted, so numbering only covers real data rows)
         // ════════════════════════════════════════════════════════
         let itemCounter = 1;
         rows.forEach((row) => {
@@ -688,12 +702,18 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             }
         });
 
+        // ════════════════════════════════════════════════════════
+        // INSERT day-wise total rows (rowType: "dayTotal") after each
+        // day's data rows, for both DR and CR dates.
+        // ════════════════════════════════════════════════════════
+        const rowsWithDayTotals = insertDayTotals(rows);
+
         // ── Final summary ─────────────────────────────────────────
         const drRows = rows.filter((r) => r.receiptDate);
         const crRows = rows.filter((r) => r.disbursementDate);
 
         logger.info(`[CASHBOOK] Final summary`, {
-            totalRows: rows.length,
+            totalRows: rowsWithDayTotals.length,
             drRows: drRows.length,
             crRows: crRows.length,
             drCashTotal: drRows.reduce(
@@ -714,7 +734,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             ),
         });
 
-        return rows;
+        return rowsWithDayTotals;
     } catch (error) {
         logger.error(`Cashbook service error`, {
             error: error.message,
@@ -791,4 +811,13 @@ export const saveCashbookSummary = async ({
 // whose id starts with "CFB-DR-STATE-FOR-COUNCIL-" from the STATE
 // call's contribution (or vice versa) before combining. Let me
 // know and I'll send that Form1.jsx change too.
+//
+// NOTE ON DAY-TOTAL ROWS: since Form1.jsx merges two separate calls
+// (COUNCIL + STATE) for a CONSOLIDATED view, each call now returns
+// its OWN day-total rows independently — merging them client-side
+// will produce two separate day-total rows per date (one from each
+// sector's fetch) rather than one combined total. If you want a
+// single merged day-total for CONSOLIDATED, that logic needs to move
+// to Form1.jsx after the merge, using the same buildDayTotalRow
+// approach on the combined array. Let me know if you want that.
 // ─────────────────────────────────────────────────────────────

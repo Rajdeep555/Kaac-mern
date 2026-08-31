@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getStatement2 } from "../../api/statements.api.js";
 
 export const useStatement2 = (
-    { sector, financialYear } = {},
+    { sector, dateRange } = {},
     { enabled = true } = {}
 ) => {
     const [statement2Data, setStatement2Data] = useState({
@@ -16,6 +16,9 @@ export const useStatement2 = (
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    const from = dateRange?.from;
+    const to = dateRange?.to;
+
     const fetchData = useCallback(async () => {
         if (!enabled) return;
 
@@ -25,7 +28,8 @@ export const useStatement2 = (
         try {
             const params = {};
             if (sector) params.sector = sector;
-            if (financialYear) params.financialYear = financialYear;
+            if (from) params.from = from;
+            if (to) params.to = to;
 
             const { data } = await getStatement2(params);
             setStatement2Data(
@@ -45,7 +49,7 @@ export const useStatement2 = (
         } finally {
             setLoading(false);
         }
-    }, [sector, financialYear, enabled]);
+    }, [sector, from, to, enabled]);
 
     useEffect(() => {
         fetchData();

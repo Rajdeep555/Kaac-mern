@@ -65,8 +65,8 @@ export const getStatement4 = async (req, res) => {
 
 export const getStatement2 = async (req, res) => {
     try {
-        const { sector, financialYear } = req.query;
-        const data = await getStatement2Data(sector, financialYear);
+        const { sector, from, to } = req.query;
+        const data = await getStatement2Data(sector, from, to);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement2 Error:", error);
