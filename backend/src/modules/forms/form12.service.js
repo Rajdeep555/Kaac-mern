@@ -22,13 +22,50 @@ const ALLOWED_AMOUNT_TYPES = [
     "Other Deductions",
 ];
 
-export const getForm12Data = async (sector) => {
+// ─────────────────────────────
+// DATE RANGE HELPERS
+// ─────────────────────────────
+
+// Standard gte/lte filter for models with a real DateTime column
+const buildDateFilter = (dateField, from, to) => {
+    if (!from || !to) return {};
+    const start = new Date(from);
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999); // include the whole "to" day
+    return { [dateField]: { gte: start, lte: end } };
+};
+
+// OpeningBalance / TreasuryPla only store { month, year } ints, not a date.
+// Convert the from/to range into a list of {month, year} pairs and OR them.
+const buildMonthYearFilter = (from, to) => {
+    if (!from || !to) return {};
+    const start = new Date(from);
+    const end = new Date(to);
+
+    const pairs = [];
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    const endCursor = new Date(end.getFullYear(), end.getMonth(), 1);
+
+    while (cursor <= endCursor) {
+        pairs.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear() });
+        cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    if (pairs.length === 0) return {};
+    return { OR: pairs };
+};
+
+export const getForm12Data = async (sector, dateRange = {}) => {
+    const { from, to } = dateRange;
+
     if (sector === "STATE") {
-        return getForm12DataState();
+        return getForm12DataState(from, to);
     }
 
     try {
-        logger.info(`Fetching Form 12 data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 12 data for sector: ${sector ?? "ALL"}, range: ${from ?? "-"} to ${to ?? "-"}`
+        );
 
         const sectorFilter =
             sector && sector !== "CONSOLIDATED" ? { sector } : {};
@@ -37,6 +74,14 @@ export const getForm12Data = async (sector) => {
 
         const includeStateChallans =
             !sector || sector === "CONSOLIDATED" || sector === "STATE";
+
+        const monthYearFilter = buildMonthYearFilter(from, to);
+        const challanDateFilter = buildDateFilter("challanDate", from, to);
+        const cfbDateFilter = buildDateFilter("voucharDate", from, to);
+        const challanTwoDateFilter = buildDateFilter("kaacChallanDate", from, to);
+        const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
+        const cashReceiptDateFilter = buildDateFilter("date", from, to);
+        const stateChallanDateFilter = buildDateFilter("challanDate", from, to);
 
         const [
             openingRows,
@@ -49,25 +94,30 @@ export const getForm12Data = async (sector) => {
             stateChallanRows,
         ] = await Promise.all([
             prisma.openingBalance.findMany({
-                where: { isActive: true, ...sectorFilter },
+                where: { isActive: true, ...sectorFilter, ...monthYearFilter },
                 select: { amount: true },
             }),
             prisma.treasuryPla.findMany({
-                where: { isActive: true, ...sectorFilter },
+                where: { isActive: true, ...sectorFilter, ...monthYearFilter },
                 select: { amount: true },
             }),
             prisma.challan.findMany({
-                where: { isActive: true, ...challanSectorFilter },
+                where: {
+                    isActive: true,
+                    ...challanSectorFilter,
+                    ...challanDateFilter,
+                },
                 select: {
                     id: true,
                     amount: true,
                     challanType: true,
                     departmentId: true,
                     treasuryChallanNo: true,
+                    counterfoilNo: true,
                 },
             }),
             prisma.challanFromBill.findMany({
-                where: { isActive: true, ...sectorFilter },
+                where: { isActive: true, ...sectorFilter, ...cfbDateFilter },
                 select: {
                     id: true,
                     amount: true,
@@ -77,7 +127,7 @@ export const getForm12Data = async (sector) => {
                 },
             }),
             prisma.challanTwo.findMany({
-                where: { isActive: true, ...sectorFilter },
+                where: { isActive: true, ...sectorFilter, ...challanTwoDateFilter },
                 select: {
                     id: true,
                     grantsInAid: true,
@@ -88,10 +138,10 @@ export const getForm12Data = async (sector) => {
                 },
             }),
             prisma.expenditure.findMany({
-                where: { isActive: true, ...sectorFilter },
+                where: { isActive: true, ...sectorFilter, ...expenditureDateFilter },
                 select: {
                     id: true,
-                    expenditureType: true, // ✅ ADDED for disbPartI filter
+                    expenditureType: true,
                     grossAmount: true,
                     carLoanRecovery: true,
                     houseLoanRecovery: true,
@@ -112,12 +162,12 @@ export const getForm12Data = async (sector) => {
                 },
             }),
             prisma.cashReceipt.findMany({
-                where: { isActive: true },
+                where: { isActive: true, ...cashReceiptDateFilter },
                 select: { rupeesInCash: true },
             }),
             includeStateChallans
                 ? prisma.stateChallan.findMany({
-                    where: { sector: "STATE" },
+                    where: { sector: "STATE", ...stateChallanDateFilter },
                     select: {
                         totalAmount: true,
                         treasuryChallanNo: true,
@@ -406,9 +456,16 @@ export const getForm12Data = async (sector) => {
 // ─────────────────────────────────────────────────────────────────
 // STATE SECTOR — dedicated logic (per new spec)
 // ─────────────────────────────────────────────────────────────────
-const getForm12DataState = async () => {
+const getForm12DataState = async (from, to) => {
     try {
-        logger.info("Fetching Form 12 data for STATE sector (custom logic)");
+        logger.info(
+            `Fetching Form 12 data for STATE sector (custom logic), range: ${from ?? "-"} to ${to ?? "-"}`
+        );
+
+        const monthYearFilter = buildMonthYearFilter(from, to);
+        const stateChallanDateFilter = buildDateFilter("challanDate", from, to);
+        const cfbDateFilter = buildDateFilter("voucharDate", from, to);
+        const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
 
         const [
             openingRows,
@@ -418,23 +475,27 @@ const getForm12DataState = async () => {
             expenditureRows,
         ] = await Promise.all([
             prisma.openingBalance.findMany({
-                where: { isActive: true, sector: "STATE" },
+                where: { isActive: true, sector: "STATE", ...monthYearFilter },
                 select: { amount: true },
             }),
             prisma.treasuryPla.findMany({
-                where: { isActive: true, sector: "STATE" },
+                where: { isActive: true, sector: "STATE", ...monthYearFilter },
                 select: { amount: true },
             }),
             prisma.stateChallan.findMany({
-                where: { isActive: true, sector: "STATE" },
+                where: {
+                    isActive: true,
+                    sector: "STATE",
+                    ...stateChallanDateFilter,
+                },
                 select: { totalAmount: true, detailHead: true },
             }),
             prisma.challanFromBill.findMany({
-                where: { isActive: true, sector: "STATE" },
+                where: { isActive: true, sector: "STATE", ...cfbDateFilter },
                 select: { amount: true, amountType: true },
             }),
             prisma.expenditure.findMany({
-                where: { isActive: true, sector: "STATE" },
+                where: { isActive: true, sector: "STATE", ...expenditureDateFilter },
                 select: { majorHead: true, grossAmount: true },
             }),
         ]);

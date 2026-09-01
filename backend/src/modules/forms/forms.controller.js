@@ -225,8 +225,8 @@ export const getForm11 = async (req, res) => {
 
 export const getForm12 = async (req, res) => {
     try {
-        const { sector } = req.query;
-        const data = await getForm12Data(sector);
+        const { sector, from, to } = req.query;
+        const data = await getForm12Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         return res.status(500).json({

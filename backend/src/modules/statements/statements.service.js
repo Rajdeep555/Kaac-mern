@@ -26,10 +26,24 @@ import logger from "../../utils/logger.js";
 //                                 no Ways & Means logic.
 // ─────────────────────────────────────────────────────────────
 
-// 🔸 ASSUMPTION: cashbookInformations' date column is named `date`.
-// If it's actually named something else (e.g. voucherDate, entryDate),
-// swap the field name below.
-const getStatement7StateRow = async ({ dateRange, openingYear }) => {
+// cashbookInformations doesn't have a single "date" column — it stores a
+// period as { fromDate, toDate } (a snapshot saved once per sector each
+// time Form 1 is saved). "Filter by from/to" means: does that row's
+// period overlap the requested window? i.e.
+//   row.fromDate <= requestedTo  AND  row.toDate >= requestedFrom
+const buildCashbookPeriodFilter = (from, to) => {
+    if (!from || !to) return {};
+    const requestedFrom = new Date(from);
+    const requestedTo = new Date(to);
+    requestedTo.setHours(23, 59, 59, 999);
+
+    return {
+        fromDate: { lte: requestedTo },
+        toDate: { gte: requestedFrom },
+    };
+};
+
+const getStatement7StateRow = async ({ from, to, openingYear }) => {
     const openingBalances = await prisma.openingBalance.findMany({
         where: {
             isActive: true,
@@ -42,7 +56,7 @@ const getStatement7StateRow = async ({ dateRange, openingYear }) => {
         where: {
             isActive: true,
             sector: "STATE",
-            ...(dateRange ? { date: dateRange } : {}),
+            ...buildCashbookPeriodFilter(from, to),
         },
     });
 
@@ -97,7 +111,7 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
     let disbursement = 0;
 
     if (isStateSector) {
-        const row = await getStatement7StateRow({ dateRange, openingYear });
+        const row = await getStatement7StateRow({ from, to, openingYear });
         openingBalance = row.openingBalance;
         receipts = row.receipts;
         disbursement = row.disbursement;
@@ -108,7 +122,7 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
         disbursement = row.disbursement;
     } else if (isConsolidated) {
         const [stateRow, councilRow] = await Promise.all([
-            getStatement7StateRow({ dateRange, openingYear }),
+            getStatement7StateRow({ from, to, openingYear }),
             getStatement7CouncilRow({ dateRange }),
         ]);
         openingBalance = stateRow.openingBalance + councilRow.openingBalance;
@@ -116,7 +130,8 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
         disbursement = stateRow.disbursement + councilRow.disbursement;
     } else {
         // Any other/unknown sector value — fall back to the old
-        // literal-sector-filter behavior, unchanged.
+        // literal-sector-filter behavior, unchanged (aside from the
+        // same fromDate/toDate overlap fix).
         const sectorFilter = sector ? { sector } : {};
 
         const openingBalances = await prisma.openingBalance.findMany({
@@ -126,7 +141,7 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
             where: {
                 isActive: true,
                 ...sectorFilter,
-                ...(dateRange ? { date: dateRange } : {}),
+                ...buildCashbookPeriodFilter(from, to),
             },
         });
 
@@ -163,6 +178,10 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
     ];
 };
 
+
+
+
+//===========================================================
 
 // Capital-expenditure major heads — excluded from COUNCIL's Statement 6
 // (these belong to Form 5C, not Statement 6's revenue account).

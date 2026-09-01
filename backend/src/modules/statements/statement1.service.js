@@ -883,6 +883,41 @@ const getClosingCashBalance = async (sector, dateRange) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// SECTOR BREAKDOWN (CONSOLIDATED only)
+// Computes just the Revenue/Capital receipt+expenditure+deficit+surplus
+// figures for a single sector, so CONSOLIDATED can show COUNCIL and
+// STATE as separate rows alongside the existing combined total rows.
+// ─────────────────────────────────────────────────────────────
+const computeRevenueCapitalForSector = async (sector, dateRange) => {
+    const [revenueReceipts, revenueExpenditure, capitalReceipts, capitalExpenditure] =
+        await Promise.all([
+            getTotalRevenueReceipts(sector, dateRange),
+            getTotalRevenueExpenditure(sector, dateRange),
+            getTotalCapitalReceipts(sector, dateRange),
+            getTotalCapitalExpenditure(sector, dateRange),
+        ]);
+
+    const revenueDiff = revenueReceipts - revenueExpenditure;
+    const revenueDeficit = revenueDiff < 0 ? Math.abs(revenueDiff) : 0;
+    const revenueSurplus = revenueDiff >= 0 ? revenueDiff : 0;
+
+    const capitalDiff = capitalReceipts - capitalExpenditure;
+    const capitalDeficit = capitalDiff < 0 ? Math.abs(capitalDiff) : 0;
+    const capitalSurplus = capitalDiff >= 0 ? capitalDiff : 0;
+
+    return {
+        revenueReceipts,
+        revenueExpenditure,
+        revenueDeficit,
+        revenueSurplus,
+        capitalReceipts,
+        capitalExpenditure,
+        capitalDeficit,
+        capitalSurplus,
+    };
+};
+
+// ─────────────────────────────────────────────────────────────
 // BUILD COLUMN HELPER
 // ─────────────────────────────────────────────────────────────
 
@@ -1165,6 +1200,50 @@ export const getStatement1Data = async (sector, from, to) => {
         const fmt = (n) => Number(n ?? 0).toFixed(2);
         const pair = (key) => [fmt(prevColumn[key]), fmt(currColumn[key])];
 
+        // ── Sector breakdown — CONSOLIDATED only ──────────────────
+        // Computes COUNCIL and STATE separately (current + previous
+        // period) so the frontend can show them as extra rows next to
+        // the combined CONSOLIDATED totals. null for STATE/COUNCIL-only
+        // requests, since there's nothing to break down there.
+        const isConsolidatedForBreakdown = !sector || sector === "CONSOLIDATED";
+
+        let sectorBreakdown = null;
+
+        if (isConsolidatedForBreakdown) {
+            const [currCouncil, currState, prevCouncil, prevState] = await Promise.all([
+                computeRevenueCapitalForSector("COUNCIL", currentDateRange),
+                computeRevenueCapitalForSector("STATE", currentDateRange),
+                computeRevenueCapitalForSector("COUNCIL", previousDateRange),
+                computeRevenueCapitalForSector("STATE", previousDateRange),
+            ]);
+
+            const fmtBd = (n) => Number(n ?? 0).toFixed(2);
+            const pairBd = (prevObj, currObj, key) => [fmtBd(prevObj[key]), fmtBd(currObj[key])];
+
+            sectorBreakdown = {
+                council: {
+                    revenueReceipts: pairBd(prevCouncil, currCouncil, "revenueReceipts"),
+                    revenueExpenditure: pairBd(prevCouncil, currCouncil, "revenueExpenditure"),
+                    revenueDeficit: pairBd(prevCouncil, currCouncil, "revenueDeficit"),
+                    revenueSurplus: pairBd(prevCouncil, currCouncil, "revenueSurplus"),
+                    capitalReceipts: pairBd(prevCouncil, currCouncil, "capitalReceipts"),
+                    capitalExpenditure: pairBd(prevCouncil, currCouncil, "capitalExpenditure"),
+                    capitalDeficit: pairBd(prevCouncil, currCouncil, "capitalDeficit"),
+                    capitalSurplus: pairBd(prevCouncil, currCouncil, "capitalSurplus"),
+                },
+                state: {
+                    revenueReceipts: pairBd(prevState, currState, "revenueReceipts"),
+                    revenueExpenditure: pairBd(prevState, currState, "revenueExpenditure"),
+                    revenueDeficit: pairBd(prevState, currState, "revenueDeficit"),
+                    revenueSurplus: pairBd(prevState, currState, "revenueSurplus"),
+                    capitalReceipts: pairBd(prevState, currState, "capitalReceipts"),
+                    capitalExpenditure: pairBd(prevState, currState, "capitalExpenditure"),
+                    capitalDeficit: pairBd(prevState, currState, "capitalDeficit"),
+                    capitalSurplus: pairBd(prevState, currState, "capitalSurplus"),
+                },
+            };
+        }
+
         logger.info(
             `Statement 1 built successfully for sector: ${sector ?? "ALL"}`
         );
@@ -1212,6 +1291,7 @@ export const getStatement1Data = async (sector, from, to) => {
             treasuryBalanceDisbursementSide: pair("treasuryBalanceDisbursementSide"),
             grandTotalReceipt: pair("grandTotalReceipt"),
             grandTotalDisbursement: pair("grandTotalDisbursement"),
+            sectorBreakdown,
         };
     } catch (error) {
         logger.error(`Error fetching Statement 1 data: ${error.message}`);

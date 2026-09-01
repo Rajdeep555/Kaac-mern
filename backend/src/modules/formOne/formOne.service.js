@@ -744,44 +744,66 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
     }
 };
 
+
 export const saveCashbookSummary = async ({
     sector,
     month,
     year,
     financialYear,
+    fromDate,
+    toDate,
     receiptCashColumn,
     receiptTreasuryPla,
     disbursementCashColumn,
     disbursementTreasuryPla,
 }) => {
     try {
-        logger.info(
-            `Saving cashbook summary for sector: ${sector}, year: ${year}`
-        );
+        // 🔍 STEP 5 — what did the service function itself receive as args?
+        // console.log("🔵 [saveCashbookSummary] received fromDate:", fromDate, typeof fromDate);
+        // console.log("🔵 [saveCashbookSummary] received toDate:", toDate, typeof toDate);
+
+        // logger.info(
+        //     `Saving cashbook summary for sector: ${sector}, year: ${year}, range: ${fromDate ?? "-"} to ${toDate ?? "-"}`
+        // );
 
         await prisma.cashbookInformations.updateMany({
             where: { sector: sector ?? undefined, isActive: true },
             data: { isActive: false },
         });
 
+        // 🔍 STEP 6 — what are we about to write into Prisma's `data` object?
+        const parsedFromDate = fromDate ? new Date(fromDate) : null;
+        const parsedToDate = toDate ? new Date(toDate) : null;
+        // console.log("🔵 [saveCashbookSummary] parsedFromDate:", parsedFromDate, "valid:", parsedFromDate && !isNaN(parsedFromDate));
+        // console.log("🔵 [saveCashbookSummary] parsedToDate:", parsedToDate, "valid:", parsedToDate && !isNaN(parsedToDate));
+
+        const createData = {
+            sector: sector ?? null,
+            month: month ?? null,
+            year: year ?? null,
+            financialYear: financialYear ?? null,
+            fromDate: parsedFromDate,
+            toDate: parsedToDate,
+            receiptCashColumn: receiptCashColumn ?? 0,
+            receiptTreasuryPla: receiptTreasuryPla ?? 0,
+            disbursementCashColumn: disbursementCashColumn ?? 0,
+            disbursementTreasuryPla: disbursementTreasuryPla ?? 0,
+            isActive: true,
+        };
+        // console.log("🔵 [saveCashbookSummary] final prisma.create data:", createData);
+
         const newEntry = await prisma.cashbookInformations.create({
-            data: {
-                sector: sector ?? null,
-                month: month ?? null,
-                year: year ?? null,
-                financialYear: financialYear ?? null,
-                receiptCashColumn: receiptCashColumn ?? 0,
-                receiptTreasuryPla: receiptTreasuryPla ?? 0,
-                disbursementCashColumn: disbursementCashColumn ?? 0,
-                disbursementTreasuryPla: disbursementTreasuryPla ?? 0,
-                isActive: true,
-            },
+            data: createData,
         });
 
-        logger.info(`Cashbook summary saved — id: ${newEntry.id}`);
+        // 🔍 STEP 7 — what did Prisma actually persist and return?
+        // console.log("🟢 [saveCashbookSummary] newEntry from Prisma:", newEntry);
+
+        // logger.info(`Cashbook summary saved — id: ${newEntry.id}`);
         return newEntry;
     } catch (error) {
-        logger.error(`Error saving cashbook summary: ${error.message}`);
+        // console.log("🔴 [saveCashbookSummary] error:", error.message);
+        // logger.error(`Error saving cashbook summary: ${error.message}`);
         throw error;
     }
 };
