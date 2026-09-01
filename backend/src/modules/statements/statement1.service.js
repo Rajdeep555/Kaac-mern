@@ -829,7 +829,11 @@ const getSecurityDepositsRefunded = async (sector, dateRange) => {
     return stateTotal + councilTotal;
 };
 
-// 31. Opening Cash Balance — unchanged, not part of this scope
+// 31. Opening Cash Balance — kept for backward compatibility / other callers.
+// NOTE: getStatement1Data no longer uses this to populate the statement's
+// Opening Balance (Cash) row — see the roll-forward logic added below,
+// which derives Opening Balance from the previous period's Closing Cash
+// Balance instead. This function itself is unchanged.
 const getOpeningCashBalance = async (sector, openingYear) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -1151,6 +1155,19 @@ export const getStatement1Data = async (sector, from, to) => {
             getClosingCashBalance(sector, previousDateRange),
         ]);
 
+        // ── Opening / Closing Cash Balance roll-forward ────────────────
+        // Opening Balance (Cash) row:
+        //   - Previous Year column AND Current Year column both show the
+        //     previous year's closing cash (prevClosingCashBalance).
+        // Closing Balance (Cash) row:
+        //   - Previous Year column shows the previous year's closing cash
+        //     (prevClosingCashBalance) as-is.
+        //   - Current Year column shows a running/cumulative balance:
+        //     previous year's closing cash + current year's closing cash.
+        const rolledOpeningCashBalance = prevClosingCashBalance;
+        const rolledPrevClosingCashBalance = prevClosingCashBalance;
+        const rolledCurrClosingCashBalance = prevClosingCashBalance + currClosingCashBalance;
+
         const prevColumn = buildColumn({
             revenueReceipts: prevRevenueReceipts,
             revenueExpenditure: prevRevenueExpenditure,
@@ -1169,8 +1186,8 @@ export const getStatement1Data = async (sector, from, to) => {
             otherRecoveries: prevOtherRecoveries,
             securityRefunded: prevSecurityRefunded,
             otherDeposits: prevOtherDeposits,
-            openingCashBalance: prevOpeningCashBalance,
-            closingCashBalance: prevClosingCashBalance,
+            openingCashBalance: rolledOpeningCashBalance,
+            closingCashBalance: rolledPrevClosingCashBalance,
             prevTreasuryBalance: 0,
         });
 
@@ -1192,8 +1209,8 @@ export const getStatement1Data = async (sector, from, to) => {
             otherRecoveries: currOtherRecoveries,
             securityRefunded: currSecurityRefunded,
             otherDeposits: currOtherDeposits,
-            openingCashBalance: currOpeningCashBalance,
-            closingCashBalance: currClosingCashBalance,
+            openingCashBalance: rolledOpeningCashBalance,
+            closingCashBalance: rolledCurrClosingCashBalance,
             prevTreasuryBalance: 0,
         });
 

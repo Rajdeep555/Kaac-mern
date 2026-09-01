@@ -1,5 +1,7 @@
 import prisma from "../../config/database.js"
 import logger from "../../utils/logger.js"
+// 🔸 ADJUST THIS PATH if it lives elsewhere relative to this file
+import { isPerpetualCounterfoil } from "../../constrants/perpetualCounterfoils.js";
 
 // A cashier is restricted to their own entries UNLESS the relevant granular
 // permission flag is true. ADMIN (or any non-CASHIER role) is never
@@ -168,25 +170,40 @@ export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role,
         return null;
     }
 
-    // Check whether this counterfoilNo is already linked to a Challan
-    const linkedChallan = await prisma.challan.findFirst({
+    const perpetual = isPerpetualCounterfoil(counterfoilNo);
+
+    // Every Challan ever linked to this counterfoilNo, most recent last.
+    // For non-perpetual counterfoils we only actually need the first one
+    // (to preserve the old "already inserted" behavior), but fetching the
+    // full list costs nothing extra and lets perpetual counterfoils show
+    // their whole history.
+    const linkedChallans = await prisma.challan.findMany({
         where: {
             counterfoilNo,
             ...(excludeChallanId && { id: { not: Number(excludeChallanId) } }),
         },
-        select: { id: true, challanNo: true },
+        select: { id: true, challanNo: true, amount: true, challanDate: true },
+        orderBy: { challanDate: "asc" },
     });
 
     return {
         ...receipt,
-        alreadyInserted: Boolean(linkedChallan),
-        linkedChallanNo: linkedChallan?.challanNo ?? null,
+        // ✅ Perpetual counterfoils (C725) are always re-usable — never
+        // block insertion just because a Challan already exists against it.
+        alreadyInserted: perpetual ? false : linkedChallans.length > 0,
+        linkedChallanNo: !perpetual ? (linkedChallans[0]?.challanNo ?? null) : null,
+        // ✅ Full Challan history — populated only for perpetual
+        // counterfoils, so the frontend can show "details properly"
+        // (which Challans have drawn against this receipt and when).
+        linkedChallans: perpetual ? linkedChallans : [],
     };
 }
 
 
 // ─── Pending Receipts ─────────────────────────────────────────────────────────
 // A "pending" receipt is one whose counterfoilNo has NOT been used in any Challan
+// — EXCEPT for perpetual counterfoils (C725), which always stay pending
+// regardless of how many Challans have been raised against them.
 
 export const getPendingReceipts = async (userId, role, canViewAllEntries) => {
     try {
@@ -196,7 +213,11 @@ export const getPendingReceipts = async (userId, role, canViewAllEntries) => {
             select: { counterfoilNo: true },
         });
 
-        const linkedNos = linked.map((c) => c.counterfoilNo);
+        // ✅ Perpetual counterfoils never count as "linked" for this
+        // purpose — they must never be excluded from the pending list.
+        const linkedNos = linked
+            .map((c) => c.counterfoilNo)
+            .filter((no) => !isPerpetualCounterfoil(no));
 
         // Step 2: return receipts NOT in that list, scoped to cashier if needed
         const receipts = await prisma.cashReceipt.findMany({
@@ -210,7 +231,43 @@ export const getPendingReceipts = async (userId, role, canViewAllEntries) => {
             orderBy: { createdAt: "desc" },
         });
 
-        return receipts;
+        // ✅ For any perpetual-counterfoil receipts in this result, attach
+        // the full history of Challans raised against them (challanNo,
+        // amount, date) so the frontend can display it alongside the
+        // receipt's current (already-decremented) rupeesInCash balance.
+        const perpetualCounterfoilNos = [
+            ...new Set(
+                receipts
+                    .map((r) => r.counterfoilNo)
+                    .filter((no) => isPerpetualCounterfoil(no))
+            ),
+        ];
+
+        let challansByCounterfoil = {};
+        if (perpetualCounterfoilNos.length > 0) {
+            const challans = await prisma.challan.findMany({
+                where: { counterfoilNo: { in: perpetualCounterfoilNos } },
+                select: {
+                    id: true,
+                    challanNo: true,
+                    challanDate: true,
+                    amount: true,
+                    counterfoilNo: true,
+                },
+                orderBy: { challanDate: "asc" },
+            });
+
+            challansByCounterfoil = challans.reduce((acc, c) => {
+                (acc[c.counterfoilNo] ||= []).push(c);
+                return acc;
+            }, {});
+        }
+
+        return receipts.map((r) =>
+            isPerpetualCounterfoil(r.counterfoilNo)
+                ? { ...r, linkedChallans: challansByCounterfoil[r.counterfoilNo] ?? [] }
+                : r
+        );
     } catch (error) {
         logger.error("Get Pending Receipts Error:", error);
         throw error;
@@ -224,7 +281,11 @@ export const getPendingReceiptsCount = async (userId, role, canViewAllEntries) =
             select: { counterfoilNo: true },
         });
 
-        const linkedNos = linked.map((c) => c.counterfoilNo);
+        // ✅ Same perpetual-counterfoil exclusion as getPendingReceipts, so
+        // the count always matches what the list endpoint returns.
+        const linkedNos = linked
+            .map((c) => c.counterfoilNo)
+            .filter((no) => !isPerpetualCounterfoil(no));
 
         const count = await prisma.cashReceipt.count({
             where: {
