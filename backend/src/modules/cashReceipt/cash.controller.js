@@ -101,12 +101,21 @@ export const getByCounterfoilNo = async (req, res) => {
             req.user.id,
             req.user.role,
             req.user.permissions.canViewAllEntries,
+            req.query.excludeChallanId,
         )
 
         if (!receipt) {
             return res.status(404).json({
                 success: false,
                 message: "Counterfoil no not found"
+            })
+        }
+
+        if (receipt.alreadyInserted) {
+            return res.status(409).json({
+                success: false,
+                alreadyInserted: true,
+                message: `This counterfoil no. is already inserted in Challan No. ${receipt.linkedChallanNo}`,
             })
         }
 

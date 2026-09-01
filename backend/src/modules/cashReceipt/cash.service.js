@@ -155,7 +155,7 @@ export const getAllCashReceipts = async ({
     }
 }
 
-export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role, canViewAllEntries) => {
+export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role, canViewAllEntries, excludeChallanId) => {
     const receipt = await prisma.cashReceipt.findFirst({
         where: {
             counterfoilNo,
@@ -163,7 +163,25 @@ export const getCashReceiptByCounterfoilNo = async (counterfoilNo, userId, role,
             ...(isRestricted(role, canViewAllEntries) && { cashierId: userId }),
         }
     })
-    return receipt;
+
+    if (!receipt) {
+        return null;
+    }
+
+    // Check whether this counterfoilNo is already linked to a Challan
+    const linkedChallan = await prisma.challan.findFirst({
+        where: {
+            counterfoilNo,
+            ...(excludeChallanId && { id: { not: Number(excludeChallanId) } }),
+        },
+        select: { id: true, challanNo: true },
+    });
+
+    return {
+        ...receipt,
+        alreadyInserted: Boolean(linkedChallan),
+        linkedChallanNo: linkedChallan?.challanNo ?? null,
+    };
 }
 
 

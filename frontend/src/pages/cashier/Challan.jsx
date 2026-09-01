@@ -396,7 +396,10 @@ const Challan = () => {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await getCashReceiptByCounterfoil(counterfoilNo);
+        const res = await getCashReceiptByCounterfoil(
+          counterfoilNo,
+          isEditMode ? id : undefined,
+        );
         if (res.data.success) {
           showToast("Counterfoil no found", "success");
           setCounterfoilError("");
@@ -409,14 +412,24 @@ const Challan = () => {
           );
         }
       } catch (error) {
-        setCounterfoilError("Counterfoil no not found");
+        if (
+          error.response?.status === 409 &&
+          error.response?.data?.alreadyInserted
+        ) {
+          setCounterfoilError(
+            error.response.data.message ||
+              "This counterfoil no. is already inserted.",
+          );
+        } else {
+          setCounterfoilError("Counterfoil no not found");
+        }
         setValue("totalAmount", "");
         setValue("amountInWords", "");
         setValue("counterfoilDate", "");
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [counterfoilNo, setValue]);
+  }, [counterfoilNo, setValue, isEditMode, id]);
 
   // ─── Amount → Words ────────────────────────────────────────────────────────
   useEffect(() => {
