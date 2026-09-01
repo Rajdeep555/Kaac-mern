@@ -12,7 +12,6 @@ const AmountCell = ({ value, isTotal = false }) => (
   </td>
 );
 
-// major → bold, subMajor → semi-bold, minor → normal, total → bold + darker
 const LEVEL_CLASS = {
   major: "font-bold",
   subMajor: "font-semibold",
@@ -30,8 +29,11 @@ const HeadsCell = ({ lines }) => (
   </td>
 );
 
-const Statement6 = ({ sector }) => {
-  const { statement6Data, loading, error } = useStatement6({ sector });
+const Statement6 = ({ sector, dateRange }) => {
+  const { statement6Data, loading, error } = useStatement6({
+    sector,
+    dateRange,
+  });
 
   if (loading) {
     return (

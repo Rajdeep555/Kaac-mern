@@ -11,8 +11,11 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-const Statement4 = ({ sector }) => {
-  const { statement4Data, loading, error } = useStatement4({ sector });
+const Statement4 = ({ sector, dateRange }) => {
+  const { statement4Data, loading, error } = useStatement4({
+    sector,
+    dateRange,
+  });
 
   if (loading) {
     return (
@@ -40,6 +43,11 @@ const Statement4 = ({ sector }) => {
         <h1 className="font-bold text-lg">STATEMENT NO. 4</h1>
         {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
+        )}
+        {(dateRange?.from || dateRange?.to) && (
+          <p className="text-xs text-gray-500">
+            {dateRange?.from || "…"} to {dateRange?.to || "…"}
+          </p>
         )}
         <h2 className="py-4 font-semibold">
           Loans and Advances by the Council

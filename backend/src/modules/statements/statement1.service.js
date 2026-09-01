@@ -681,38 +681,24 @@ const getSecurityDepositsDeducted = async (sector, dateRange) => {
 };
 
 // 21. Other Recoveries
-// STATE:   Expenditure (mdrrf, labourCess, dmft) + challanFromBill (amountType in
-//          [Labour Cess, MDRRF, DMFT], no sector filter) — unchanged
+// STATE:   challanFromBill, amountType in [Labour Cess, MDRRF, DMFT], sector STATE
 // COUNCIL: challanFromBill, amountType in [CPF Council Share, CPF Contribution,
 //          CPF Advance, Other Deductions], sector COUNCIL
+const OTHER_RECOVERIES_STATE_TYPES = ["Labour Cess", "MDRRF", "DMFT"];
+
 const getOtherRecoveries = async (sector, dateRange) => {
     if (sector === "STATE") {
-        const [rows, cfbRows] = await Promise.all([
-            prisma.expenditure.findMany({
-                where: {
-                    isActive: true,
-                    sector: "STATE",
-                    ...(dateRange ? { voucherDate: dateRange } : {}),
-                },
-                select: { labourCess: true, mdrrf: true, dmft: true },
-            }),
-            prisma.challanFromBill.findMany({
-                where: {
-                    isActive: true,
-                    amountType: { in: ["Labour Cess", "MDRRF", "DMFT"] },
-                    ...(dateRange ? { voucharDate: dateRange } : {}),
-                },
-                select: { amount: true },
-            }),
-        ]);
+        const rows = await prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: "STATE",
+                amountType: { in: OTHER_RECOVERIES_STATE_TYPES },
+                ...(dateRange ? { voucharDate: dateRange } : {}),
+            },
+            select: { amount: true },
+        });
 
-        const expenditureTotal = rows.reduce(
-            (s, r) => s + safeNum(r.mdrrf) + safeNum(r.labourCess) + safeNum(r.dmft),
-            0
-        );
-        const cfbTotal = cfbRows.reduce((s, r) => s + safeNum(r.amount), 0);
-
-        return expenditureTotal + cfbTotal;
+        return rows.reduce((s, r) => s + safeNum(r.amount), 0);
     }
 
     if (sector === "COUNCIL") {
@@ -737,55 +723,53 @@ const getOtherRecoveries = async (sector, dateRange) => {
 };
 
 // 25. Other Deposits
-// STATE:   Expenditure (houseRent, otherDeductions) + challanFromBill (amountType
-//          in [Professional Tax, MC Forest Royalty, Monopoly, Forest Royalty],
-//          no sector filter) — unchanged
-// COUNCIL: challanFromBill, amountType in [CPF Council Share, CPF Contribution,
-//          CPF Advance], sector COUNCIL
+// STATE:   same rule as Other Recoveries (STATE) — challanFromBill,
+//          amountType in [Labour Cess, MDRRF, DMFT], sector STATE
+// COUNCIL: challanFromBill (amountType in [CPF Council Share, CPF Contribution,
+//          CPF Advance], sector COUNCIL) + Expenditure (majorHead 662, sector COUNCIL)
 const getOtherDeposits = async (sector, dateRange) => {
     if (sector === "STATE") {
-        const [rows, cfbRows] = await Promise.all([
-            prisma.expenditure.findMany({
-                where: {
-                    isActive: true,
-                    sector: "STATE",
-                    ...(dateRange ? { voucherDate: dateRange } : {}),
-                },
-                select: { houseRent: true, otherDeductions: true },
-            }),
-            prisma.challanFromBill.findMany({
-                where: {
-                    isActive: true,
-                    amountType: {
-                        in: ["Professional Tax", "MC Forest Royalty", "Monopoly", "Forest Royalty"],
-                    },
-                    ...(dateRange ? { voucharDate: dateRange } : {}),
-                },
-                select: { amount: true },
-            }),
-        ]);
-
-        const expenditureTotal = rows.reduce(
-            (s, r) => s + safeNum(r.houseRent) + safeNum(r.otherDeductions),
-            0
-        );
-        const cfbTotal = cfbRows.reduce((s, r) => s + safeNum(r.amount), 0);
-
-        return expenditureTotal + cfbTotal;
-    }
-
-    if (sector === "COUNCIL") {
         const rows = await prisma.challanFromBill.findMany({
             where: {
                 isActive: true,
-                sector: "COUNCIL",
-                amountType: { in: COUNCIL_OTHER_DEPOSITS_TYPES },
+                sector: "STATE",
+                amountType: { in: OTHER_RECOVERIES_STATE_TYPES },
                 ...(dateRange ? { voucharDate: dateRange } : {}),
             },
             select: { amount: true },
         });
 
         return rows.reduce((s, r) => s + safeNum(r.amount), 0);
+    }
+
+    if (sector === "COUNCIL") {
+        const [cfbRows, expenditureRows] = await Promise.all([
+            prisma.challanFromBill.findMany({
+                where: {
+                    isActive: true,
+                    sector: "COUNCIL",
+                    amountType: { in: COUNCIL_OTHER_DEPOSITS_TYPES },
+                    ...(dateRange ? { voucharDate: dateRange } : {}),
+                },
+                select: { amount: true },
+            }),
+            prisma.expenditure.findMany({
+                where: {
+                    isActive: true,
+                    sector: "COUNCIL",
+                    ...(dateRange ? { voucherDate: dateRange } : {}),
+                },
+                select: { grossAmount: true, majorHead: true },
+            }),
+        ]);
+
+        const cfbTotal = cfbRows.reduce((s, r) => s + safeNum(r.amount), 0);
+
+        const expenditureTotal = expenditureRows
+            .filter((r) => headEquals(r.majorHead, 662))
+            .reduce((s, r) => s + safeNum(r.grossAmount), 0);
+
+        return cfbTotal + expenditureTotal;
     }
 
     const [stateTotal, councilTotal] = await Promise.all([

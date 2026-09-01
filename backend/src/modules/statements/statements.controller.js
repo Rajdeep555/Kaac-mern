@@ -3,8 +3,8 @@ import { getStatement2Data, getStatement3DebtData, getStatement3WaysAndMeansData
 
 export const getStatement7 = async (req, res) => {
     try {
-        const { sector } = req.query;
-        const data = await getStatement7Data({ sector });
+        const { sector, from, to } = req.query;
+        const data = await getStatement7Data({ sector, from, to });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement7 Error:", error);
@@ -18,8 +18,8 @@ export const getStatement7 = async (req, res) => {
 
 export const getStatement6 = async (req, res) => {
     try {
-        const { sector } = req.query;
-        const data = await getStatement6Data({ sector });
+        const { sector, from, to } = req.query;
+        const data = await getStatement6Data({ sector, from, to });
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement6 Error:", error);
@@ -47,10 +47,11 @@ export const getStatement5 = async (req, res) => {
 
 
 
+
 export const getStatement4 = async (req, res) => {
     try {
-        const { sector } = req.query;
-        const data = await getStatement4Data(sector);
+        const { sector, from, to } = req.query;
+        const data = await getStatement4Data(sector, from, to);
         return res.status(200).json({ success: true, data });
     } catch (error) {
         console.error("Statement4 Error:", error);
@@ -60,6 +61,7 @@ export const getStatement4 = async (req, res) => {
         });
     }
 };
+
 
 
 

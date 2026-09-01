@@ -1,18 +1,49 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
 
-export const getStatement7Data = async ({ sector } = {}) => {
-    const sectorFilter =
-        sector && sector !== "CONSOLIDATED" ? { sector } : {};
+// ─────────────────────────────────────────────────────────────
+// STATEMENT 7 - Receipts, Disbursements and Balance
+//
+// SECTOR RULES:
+// - sector === "STATE"        → UNCHANGED math: openingBalance +
+//                                 cashbookInformations (receiptCashColumn +
+//                                 receiptTreasuryPla, disbursementCashColumn +
+//                                 disbursementTreasuryPla). Now also
+//                                 respects from/to date filtering.
+// - sector === "COUNCIL"      → REPLACED. Reuses Statement 3's COUNCIL
+//                                 Ways & Means logic
+//                                 (buildCouncilWaysAndMeansMonthlyMaps):
+//                                 openingBalance forced to 0 (no
+//                                 opening-balance data for COUNCIL, same
+//                                 as Statement 3), receipts/disbursement
+//                                 summed from that builder's monthly maps
+//                                 (already date-range filtered internally).
+// - sector === "CONSOLIDATED" → STATE's row + COUNCIL's row, summed
+//                                 field-by-field (openingBalance = STATE's
+//                                 only, since COUNCIL contributes 0).
+// - any other sector          → old behavior: sector filter applied
+//                                 as-is to openingBalance/cashbookInformations,
+//                                 no Ways & Means logic.
+// ─────────────────────────────────────────────────────────────
 
-    // 1. Opening Balance
+// 🔸 ASSUMPTION: cashbookInformations' date column is named `date`.
+// If it's actually named something else (e.g. voucherDate, entryDate),
+// swap the field name below.
+const getStatement7StateRow = async ({ dateRange, openingYear }) => {
     const openingBalances = await prisma.openingBalance.findMany({
-        where: { isActive: true, ...sectorFilter },
+        where: {
+            isActive: true,
+            sector: "STATE",
+            ...(openingYear ? { year: openingYear } : {}),
+        },
     });
 
-    // 2. Cashbook entries for receipts & disbursements
     const cashbookEntries = await prisma.cashbookInformations.findMany({
-        where: { isActive: true, ...sectorFilter },
+        where: {
+            isActive: true,
+            sector: "STATE",
+            ...(dateRange ? { date: dateRange } : {}),
+        },
     });
 
     const openingBalance = openingBalances.reduce(
@@ -35,6 +66,89 @@ export const getStatement7Data = async ({ sector } = {}) => {
         0
     );
 
+    return { openingBalance, receipts, disbursement };
+};
+
+// COUNCIL — reuses buildCouncilWaysAndMeansMonthlyMaps from Statement 3
+// (same file). That builder already applies dateRange internally to
+// challanFromBill/challan/expenditure, so summing its returned maps
+// gives totals for exactly the requested from/to window.
+const getStatement7CouncilRow = async ({ dateRange }) => {
+    const { receiptByMonth, disbursementByMonth } =
+        await buildCouncilWaysAndMeansMonthlyMaps(dateRange);
+
+    const receipts = [...receiptByMonth.values()].reduce((s, v) => s + v, 0);
+    const disbursement = [...disbursementByMonth.values()].reduce((s, v) => s + v, 0);
+
+    // No opening-balance data for COUNCIL, same as Statement 3's rule.
+    return { openingBalance: 0, receipts, disbursement };
+};
+
+export const getStatement7Data = async ({ sector, from, to } = {}) => {
+    const isStateSector = sector === "STATE";
+    const isCouncilSector = sector === "COUNCIL";
+    const isConsolidated = !sector || sector === "CONSOLIDATED";
+
+    const dateRange = getDateRangeFromParams(from, to);
+    const openingYear = from ? new Date(from).getFullYear() : null;
+
+    let openingBalance = 0;
+    let receipts = 0;
+    let disbursement = 0;
+
+    if (isStateSector) {
+        const row = await getStatement7StateRow({ dateRange, openingYear });
+        openingBalance = row.openingBalance;
+        receipts = row.receipts;
+        disbursement = row.disbursement;
+    } else if (isCouncilSector) {
+        const row = await getStatement7CouncilRow({ dateRange });
+        openingBalance = row.openingBalance; // 0
+        receipts = row.receipts;
+        disbursement = row.disbursement;
+    } else if (isConsolidated) {
+        const [stateRow, councilRow] = await Promise.all([
+            getStatement7StateRow({ dateRange, openingYear }),
+            getStatement7CouncilRow({ dateRange }),
+        ]);
+        openingBalance = stateRow.openingBalance + councilRow.openingBalance;
+        receipts = stateRow.receipts + councilRow.receipts;
+        disbursement = stateRow.disbursement + councilRow.disbursement;
+    } else {
+        // Any other/unknown sector value — fall back to the old
+        // literal-sector-filter behavior, unchanged.
+        const sectorFilter = sector ? { sector } : {};
+
+        const openingBalances = await prisma.openingBalance.findMany({
+            where: { isActive: true, ...sectorFilter },
+        });
+        const cashbookEntries = await prisma.cashbookInformations.findMany({
+            where: {
+                isActive: true,
+                ...sectorFilter,
+                ...(dateRange ? { date: dateRange } : {}),
+            },
+        });
+
+        openingBalance = openingBalances.reduce(
+            (sum, item) => sum + Number(item.amount ?? 0), 0
+        );
+        receipts = cashbookEntries.reduce(
+            (sum, item) =>
+                sum +
+                Number(item.receiptCashColumn ?? 0) +
+                Number(item.receiptTreasuryPla ?? 0),
+            0
+        );
+        disbursement = cashbookEntries.reduce(
+            (sum, item) =>
+                sum +
+                Number(item.disbursementCashColumn ?? 0) +
+                Number(item.disbursementTreasuryPla ?? 0),
+            0
+        );
+    }
+
     const closingBalance = openingBalance + receipts - disbursement;
 
     return [
@@ -50,11 +164,51 @@ export const getStatement7Data = async ({ sector } = {}) => {
 };
 
 
-export const getStatement6Data = async ({ sector } = {}) => {
-    const sectorFilter = sector && sector !== "CONSOLIDATED" ? { sector } : {};
+// Capital-expenditure major heads — excluded from COUNCIL's Statement 6
+// (these belong to Form 5C, not Statement 6's revenue account).
+const STATEMENT6_COUNCIL_EXCLUDED_MAJOR_HEADS = ["440", "441", "442", "443"];
 
-    const expenditures = await prisma.expenditure.findMany({
-        where: { isActive: true, ...sectorFilter },
+// "Total Revenue Expenditure" subtotal range — majorHead 201 through 224.
+const REVENUE_EXPENDITURE_RANGE = { from: 201, to: 224 };
+
+// Same { from, to } Date-range builder pattern used elsewhere (Form 4).
+// 🔸 ASSUMPTION: filtering on `voucherDate`, matching the field name
+// Form 6 / Form 7 use on this same Expenditure model. If Statement 6's
+// date column is actually named something else, let me know and I'll
+// swap it.
+function getStatement6DateRange(from, to) {
+    if (!from && !to) return null;
+
+    const range = {};
+    if (from) {
+        range.from = new Date(from);
+        range.from.setUTCHours(0, 0, 0, 0);
+    }
+    if (to) {
+        range.to = new Date(to);
+        range.to.setUTCHours(23, 59, 59, 999);
+    }
+    return range;
+}
+
+// Fetches Expenditure rows for ONE sector at a time, so COUNCIL and
+// STATE can each apply their own filter rule before being merged
+// (needed for CONSOLIDATED, where the two rules now differ).
+const getStatement6ExpenditureRows = async ({ sector, dateRange, excludeCapitalHeads }) => {
+    const where = { isActive: true };
+
+    if (sector) where.sector = sector;
+
+    if (dateRange) {
+        where.voucherDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    if (excludeCapitalHeads) {
+        where.majorHead = { notIn: STATEMENT6_COUNCIL_EXCLUDED_MAJOR_HEADS };
+    }
+
+    return prisma.expenditure.findMany({
+        where,
         select: {
             majorHead: true,
             subMajorHead: true,
@@ -63,6 +217,63 @@ export const getStatement6Data = async ({ sector } = {}) => {
             planType: true,
         },
     });
+};
+
+export const getStatement6Data = async ({ sector, from, to } = {}) => {
+    const isStateSector = sector === "STATE";
+    const isCouncilSector = sector === "COUNCIL";
+    const isConsolidated = !sector || sector === "CONSOLIDATED";
+
+    const dateRange = getStatement6DateRange(from, to);
+
+    let expenditures = [];
+
+    if (isStateSector) {
+        // ── STATE: UNCHANGED rule — no majorHead exclusion ──────────
+        expenditures = await getStatement6ExpenditureRows({
+            sector: "STATE",
+            dateRange,
+            excludeCapitalHeads: false,
+        });
+    } else if (isCouncilSector) {
+        // ── COUNCIL: exclude capital-expenditure major heads ────────
+        expenditures = await getStatement6ExpenditureRows({
+            sector: "COUNCIL",
+            dateRange,
+            excludeCapitalHeads: true,
+        });
+    } else if (isConsolidated) {
+        // ── CONSOLIDATED: COUNCIL's rule + STATE's rule, merged ─────
+        // (previously a single unfiltered-by-sector query worked here
+        // because both sectors shared the same rule; now they don't,
+        // so each is fetched separately with its own filter.)
+        const [councilRows, stateRows] = await Promise.all([
+            getStatement6ExpenditureRows({
+                sector: "COUNCIL",
+                dateRange,
+                excludeCapitalHeads: true,
+            }),
+            getStatement6ExpenditureRows({
+                sector: "STATE",
+                dateRange,
+                excludeCapitalHeads: false,
+            }),
+        ]);
+        expenditures = [...councilRows, ...stateRows];
+    } else {
+        // Any other/unknown sector value — fall back to a literal
+        // sector filter with no exclusion, same as the old behavior.
+        expenditures = await getStatement6ExpenditureRows({
+            sector,
+            dateRange,
+            excludeCapitalHeads: false,
+        });
+    }
+
+    // "Total Revenue Expenditure" subtotal only applies to COUNCIL's
+    // majorHead range — shown for COUNCIL and CONSOLIDATED (which
+    // includes COUNCIL rows), never for STATE-only.
+    const includeRevenueSubtotal = isCouncilSector || isConsolidated;
 
     // ── Step 1: aggregate by (majorHead, subMajorHead, minorHead) ──────────
     const groupMap = new Map();
@@ -191,11 +402,6 @@ export const getStatement6Data = async ({ sector } = {}) => {
     }
 
     // ── Step 4: flatten, cascading the heads text as in the mock-up ────────
-    // 🔸 Only change from before: each line now carries a `level` tag
-    // ("major" | "subMajor" | "minor" | "total") alongside its text,
-    // instead of being a plain string. This lets the frontend style
-    // each line correctly (bold/semi-bold/normal) without guessing
-    // from array position, since the number of lines per row varies.
     const rows = [];
     let idCounter = 1;
 
@@ -214,7 +420,43 @@ export const getStatement6Data = async ({ sector } = {}) => {
         a.code.localeCompare(b.code),
     );
 
+    // 🔸 Tracks the running total across contiguous majorHeads in the
+    // 201–224 range, so "Total Revenue Expenditure" is inserted right
+    // after the last major in that range (before whatever major comes
+    // next), regardless of gaps in the actual data.
+    let revenueAccum = { nonPlan: 0, plan: 0 };
+    let inRevenueBlock = false;
+
+    const flushRevenueSubtotal = () => {
+        if (!inRevenueBlock) return;
+        pushRow(
+            [{ level: "total", text: "Total Revenue Expenditure" }],
+            revenueAccum.nonPlan,
+            revenueAccum.plan,
+            { isTotal: true },
+        );
+        inRevenueBlock = false;
+        revenueAccum = { nonPlan: 0, plan: 0 };
+    };
+
     for (const major of sortedMajors) {
+        const majorNum = parseInt(major.code, 10);
+        const isInRevenueRange =
+            includeRevenueSubtotal &&
+            !Number.isNaN(majorNum) &&
+            majorNum >= REVENUE_EXPENDITURE_RANGE.from &&
+            majorNum <= REVENUE_EXPENDITURE_RANGE.to;
+
+        if (isInRevenueRange) {
+            revenueAccum.nonPlan += major.nonPlan;
+            revenueAccum.plan += major.plan;
+            inRevenueBlock = true;
+        } else {
+            // Left the 201-224 block (or never entered it) — flush
+            // any accumulated subtotal before processing this major.
+            flushRevenueSubtotal();
+        }
+
         const sortedSubMajors = [...major.subMajors.values()].sort((a, b) =>
             (a.code || "").localeCompare(b.code || ""),
         );
@@ -241,7 +483,6 @@ export const getStatement6Data = async ({ sector } = {}) => {
                     lines.push({ level: "minor", text: `${minor.code} - ${minor.name}` });
                     pushRow(lines, minor.nonPlan, minor.plan);
                 } else if (!subMajor.code) {
-                    // No sub-major and no minor at all — show directly under major
                     pushRow(
                         [{ level: "major", text: `${major.code} - ${major.name}` }],
                         minor.nonPlan,
@@ -268,17 +509,39 @@ export const getStatement6Data = async ({ sector } = {}) => {
         );
     }
 
+    // If the last major processed was still inside the revenue range,
+    // the subtotal never got flushed inside the loop — flush it now.
+    flushRevenueSubtotal();
+
     const grandTotal = groups.reduce((sum, g) => sum + g.nonPlan + g.plan, 0);
 
     return { rows, grandTotal: grandTotal.toFixed(2) };
 };
 
 
-
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 5 - Detailed Account of Revenue Receipt by Minor Heads
 // Data comes from 3 tables: challan, challanFromBill, stateChallan
-// (STATE sector: only from StateChallan table — see getStatement5Data)
+//
+// STATE: UNCHANGED — only from StateChallan table.
+//
+// COUNCIL: NEW structured layout (heads display/grouping logic is
+// untouched — same ChallanHeads/CHALLAN_FROM_BILL_HEAD_CODES lookups,
+// same "group by full head chain" behaviour — only WHICH rows go in
+// and their ORDER changed):
+//   1. Challan rows, majorHead 001–016 (challanType COUNCIL)
+//   2. A synthetic "Total Revenue Receipt" row = sum of bucket 1 ONLY
+//   3. Challan rows, majorHead 017 (challanType COUNCIL)
+//   4. ChallanFromBill rows, sector IN [COUNCIL, STATE], majorHead
+//      001–016 (derived from amountType via CHALLAN_FROM_BILL_HEAD_CODES,
+//      same as how these rows were already being resolved — the raw
+//      majorHead/subMajor/minorHead columns on this table aren't
+//      reliably populated, that's why that lookup table exists)
+//
+// CONSOLIDATED: Council's structured result (all 4 buckets above) +
+// State's existing StateChallan-only grouped rows, concatenated —
+// same "council array + state array" pattern used across the other
+// statements in this file.
 //
 // Date field per table: challan → challanDate, challanFromBill →
 // voucharDate, stateChallan → challanDate
@@ -381,6 +644,13 @@ const normalizeCodeSegment = (value) => {
 const buildNormalizedCodeKey = (codes) =>
     HEAD_CODE_LEVELS.map((level) => normalizeCodeSegment(codes[level])).join("|");
 
+// "001" -> true (in [1,16]), null/undefined/non-numeric -> false
+const isHeadCodeInRange = (code, min, max) => {
+    if (!code) return false;
+    const n = parseInt(code, 10);
+    return !Number.isNaN(n) && n >= min && n <= max;
+};
+
 // ─────────────────────────────────────────────────────────────
 // Heads table (used ONLY for StateChallan) — unchanged from before.
 // sector param is optional — pass a specific sector to scope the lookup,
@@ -465,6 +735,8 @@ const getChallanHeadsNameMap = async () => {
 };
 
 // Amount types allowed from challanFromBill for Statement 5
+// (still used by the old getStatement5ChallanFromBillRows below,
+// which is no longer called by getStatement5Data — see note there)
 const STATEMENT5_ALLOWED_AMOUNT_TYPES = [
     "Professional Tax",
     "Monopoly",
@@ -472,7 +744,67 @@ const STATEMENT5_ALLOWED_AMOUNT_TYPES = [
     "MC Forest Royalty",
 ];
 
+// ─────────────────────────────────────────────────────────────
+// Per-row mapping helpers — extracted so both the old (now-unused
+// by getStatement5Data, kept for compatibility) per-sector fetchers
+// AND the new Council bucketed fetcher share identical row shapes.
+// ─────────────────────────────────────────────────────────────
+const mapStatement5ChallanRow = (row, { majorMap, subMajorMap, minorMap }) => {
+    const majorCode = normalizeCodeSegment(row.majorHead);
+    const subMajorCode = normalizeCodeSegment(row.subMajorHead);
+    const minorCode = normalizeCodeSegment(row.minorHead);
+
+    const majorHeadName = majorCode ? majorMap.get(majorCode) ?? null : null;
+    const subMajorName = subMajorCode
+        ? subMajorMap.get(`${majorCode}|${subMajorCode}`) ?? null
+        : null;
+    const minorHeadName = minorCode
+        ? minorMap.get(`${subMajorCode}|${minorCode}`) ?? null
+        : null;
+
+    return {
+        majorHead: row.majorHead ?? "Unknown",
+        subMajor: row.subMajorHead ?? "-",
+        minorHead: row.minorHead ?? "-",
+        amount: parseFloat(row.amount ?? "0"),
+        sector: row.challanType ?? null,
+        source: "challan",
+        majorHeadCode: row.majorHead ?? null,
+        subMajorCode: row.subMajorHead ?? null,
+        minorHeadCode: row.minorHead ?? null,
+        majorHeadName,
+        subMajorName,
+        minorHeadName,
+    };
+};
+
+const mapStatement5ChallanFromBillRow = (row) => {
+    const rowSector = row.sector ?? null;
+    const codes = getChallanFromBillHeadCode(row.amountType, rowSector);
+
+    return {
+        majorHead: row.majorHead ?? "Unknown",
+        subMajor: row.subMajor ?? "-",
+        minorHead: row.minorHead ?? "-",
+        amount: row.amount ? parseFloat(row.amount.toString()) : 0,
+        sector: rowSector,
+        source: "challanFromBill",
+        amountType: row.amountType ?? null,
+        // 🔸 Names intentionally left null for now — only codes are
+        // shown for ChallanFromBill rows, per current requirement.
+        majorHeadName: null,
+        subMajorName: null,
+        minorHeadName: null,
+        // resolved codes = looked up from amountType above (may be empty)
+        ...codes,
+    };
+};
+
 // Get rows from Challan table
+// (kept for compatibility — no longer called by getStatement5Data,
+// since Council now fetches its own way to control bucket ordering.
+// STATE never used this; CONSOLIDATED used to but now uses the
+// Council bucketed fetch + State's StateChallan rows instead.)
 const getStatement5ChallanRows = async (sector, dateRange) => {
     const where = { isActive: true };
 
@@ -490,41 +822,14 @@ const getStatement5ChallanRows = async (sector, dateRange) => {
         `Statement5: Fetched ${rows.length} rows from Challan for sector: ${sector ?? "ALL"}`
     );
 
-    const { majorMap, subMajorMap, minorMap } = await getChallanHeadsNameMap();
+    const headsNameLookup = await getChallanHeadsNameMap();
 
-    return rows.map((row) => {
-        const majorCode = normalizeCodeSegment(row.majorHead);
-        const subMajorCode = normalizeCodeSegment(row.subMajorHead);
-        const minorCode = normalizeCodeSegment(row.minorHead);
-
-        const majorHeadName = majorCode ? majorMap.get(majorCode) ?? null : null;
-        const subMajorName = subMajorCode
-            ? subMajorMap.get(`${majorCode}|${subMajorCode}`) ?? null
-            : null;
-        const minorHeadName = minorCode
-            ? minorMap.get(`${subMajorCode}|${minorCode}`) ?? null
-            : null;
-
-        return {
-            majorHead: row.majorHead ?? "Unknown",
-            subMajor: row.subMajorHead ?? "-",
-            minorHead: row.minorHead ?? "-",
-            amount: parseFloat(row.amount ?? "0"),
-            sector: row.challanType ?? null,
-            source: "challan",
-            // explicit code fields, same shape as challanFromBill/stateChallan
-            majorHeadCode: row.majorHead ?? null,
-            subMajorCode: row.subMajorHead ?? null,
-            minorHeadCode: row.minorHead ?? null,
-            // resolved names via ChallanHeads (null when no match)
-            majorHeadName,
-            subMajorName,
-            minorHeadName,
-        };
-    });
+    return rows.map((row) => mapStatement5ChallanRow(row, headsNameLookup));
 };
 
 // Get rows from ChallanFromBill table
+// (kept for compatibility — no longer called by getStatement5Data,
+// see note above getStatement5ChallanRows.)
 const getStatement5ChallanFromBillRows = async (sector, dateRange) => {
     const where = {
         isActive: true,
@@ -545,27 +850,7 @@ const getStatement5ChallanFromBillRows = async (sector, dateRange) => {
         `Statement5: Fetched ${rows.length} rows from ChallanFromBill for sector: ${sector ?? "ALL"}`
     );
 
-    return rows.map((row) => {
-        const rowSector = row.sector ?? null;
-        const codes = getChallanFromBillHeadCode(row.amountType, rowSector);
-
-        return {
-            majorHead: row.majorHead ?? "Unknown",
-            subMajor: row.subMajor ?? "-",
-            minorHead: row.minorHead ?? "-",
-            amount: row.amount ? parseFloat(row.amount.toString()) : 0,
-            sector: rowSector,
-            source: "challanFromBill",
-            amountType: row.amountType ?? null,
-            // 🔸 Names intentionally left null for now — only codes are
-            // shown for ChallanFromBill rows, per current requirement.
-            majorHeadName: null,
-            subMajorName: null,
-            minorHeadName: null,
-            // resolved codes = looked up from amountType above (may be empty)
-            ...codes,
-        };
-    });
+    return rows.map(mapStatement5ChallanFromBillRow);
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -644,9 +929,151 @@ const getStatement5StateChallanRows = async (dateRange) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Main Statement 5 function — grouping/sector-routing logic UNCHANGED.
-// Only the shape of the returned display data changed (headsLines
-// replaces codeChain/nameChain, see explanation below).
+// Group identical head chains together into display rows.
+// Extracted unchanged from the old inline block in getStatement5Data
+// so it can run per-bucket for Council as well as for State.
+// ─────────────────────────────────────────────────────────────
+const groupStatement5Rows = (rows) => {
+    const grouped = rows.reduce((acc, row) => {
+        const key = [
+            row.majorHead,
+            row.subMajor,
+            row.minorHead,
+            row.subHead,
+            row.subSubHead,
+            row.detailHead,
+            row.subDetailHead,
+        ]
+            .filter((p) => p && p !== "-")
+            .join("-");
+
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(row);
+        return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([heads, groupedRows]) => {
+        const total = groupedRows.reduce((sum, row) => sum + row.amount, 0);
+        const [sample] = groupedRows;
+
+        const levels = HEAD_CODE_LEVELS.reduce((acc, codeField, idx) => {
+            const nameField = HEAD_NAME_LEVELS[idx];
+            const raw = sample[codeField];
+            const code = raw !== null && raw !== undefined ? String(raw).trim() : "";
+            if (!code || code === "-" || code === "0") return acc;
+            acc.push({ code, name: sample[nameField] || null });
+            return acc;
+        }, []);
+
+        const headsLines = levels.length
+            ? levels.map((l) => (l.name ? `${l.code} - ${l.name}` : l.code))
+            : [heads]; // fallback: raw grouping key if no code fields exist
+
+        const matched = levels.length > 0 && levels.every((l) => l.name);
+
+        return {
+            heads,
+            headsLines,
+            matched,
+            rows: groupedRows,
+            total: parseFloat(total.toFixed(2)),
+            hasMultiple: groupedRows.length > 1,
+        };
+    });
+};
+
+// ─────────────────────────────────────────────────────────────
+// COUNCIL — new structured layout. See the header comment at the
+// top of this section for the 4-bucket order.
+// ─────────────────────────────────────────────────────────────
+const STATEMENT5_COUNCIL_REVENUE_HEAD_MIN = 1;
+const STATEMENT5_COUNCIL_REVENUE_HEAD_MAX = 16;
+const STATEMENT5_COUNCIL_HEAD_017 = 17;
+
+const getStatement5CouncilRows = async (dateRange) => {
+    const [challanRows, cfbRows] = await Promise.all([
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanType: "COUNCIL",
+                ...(dateRange ? { challanDate: dateRange } : {}),
+            },
+        }),
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: { in: ["COUNCIL", "STATE"] },
+                ...(dateRange ? { voucharDate: dateRange } : {}),
+            },
+        }),
+    ]);
+
+    logger.info(
+        `Statement5 [COUNCIL]: Fetched ${challanRows.length} Challan rows (challanType COUNCIL), ${cfbRows.length} ChallanFromBill rows (sector IN [COUNCIL, STATE])`
+    );
+
+    const headsNameLookup = await getChallanHeadsNameMap();
+
+    const mappedChallanRows = challanRows.map((row) =>
+        mapStatement5ChallanRow(row, headsNameLookup)
+    );
+    const mappedCfbRows = cfbRows.map(mapStatement5ChallanFromBillRow);
+
+    // ── Bucket 1: Challan majorHead 001–016 ──
+    const revenueRangeRows = mappedChallanRows.filter((r) =>
+        isHeadCodeInRange(r.majorHeadCode, STATEMENT5_COUNCIL_REVENUE_HEAD_MIN, STATEMENT5_COUNCIL_REVENUE_HEAD_MAX)
+    );
+
+    // ── Bucket 3 (shown after the total): Challan majorHead 017 ──
+    const head017Rows = mappedChallanRows.filter((r) =>
+        isHeadCodeInRange(r.majorHeadCode, STATEMENT5_COUNCIL_HEAD_017, STATEMENT5_COUNCIL_HEAD_017)
+    );
+
+    // ── Bucket 4: ChallanFromBill, sector IN [COUNCIL, STATE], derived
+    // majorHead 001–016 (derived from amountType — see header note) ──
+    const cfbRangeRows = mappedCfbRows.filter((r) =>
+        isHeadCodeInRange(r.majorHeadCode, STATEMENT5_COUNCIL_REVENUE_HEAD_MIN, STATEMENT5_COUNCIL_REVENUE_HEAD_MAX)
+    );
+
+    logger.info(
+        `Statement5 [COUNCIL]: bucket sizes — 001-016: ${revenueRangeRows.length}, 017: ${head017Rows.length}, ChallanFromBill 001-016: ${cfbRangeRows.length}`
+    );
+
+    const revenueRangeGroups = groupStatement5Rows(revenueRangeRows);
+    const head017Groups = groupStatement5Rows(head017Rows);
+    const cfbRangeGroups = groupStatement5Rows(cfbRangeRows);
+
+    // ── Bucket 2: synthetic "Total Revenue Receipt" row — sum of
+    // bucket 1 (majorHead 001–016 Challan rows) ONLY. Not 017, not
+    // the ChallanFromBill bucket. ──
+    const totalRevenueReceiptAmount = revenueRangeRows.reduce(
+        (s, r) => s + r.amount,
+        0
+    );
+    const totalRevenueReceiptRow = {
+        heads: "Total Revenue Receipt",
+        headsLines: ["Total Revenue Receipt"],
+        matched: true,
+        rows: [],
+        total: parseFloat(totalRevenueReceiptAmount.toFixed(2)),
+        hasMultiple: false,
+        isTotal: true,
+    };
+
+    return [
+        ...revenueRangeGroups,
+        totalRevenueReceiptRow,
+        ...head017Groups,
+        ...cfbRangeGroups,
+    ];
+};
+
+// ─────────────────────────────────────────────────────────────
+// Main Statement 5 function.
+// STATE: unchanged (StateChallan only, generic grouping).
+// COUNCIL: new 4-bucket structured layout (see getStatement5CouncilRows).
+// CONSOLIDATED: Council's structured result + State's grouped result,
+// concatenated.
 // ─────────────────────────────────────────────────────────────
 export const getStatement5Data = async (sector, from, to) => {
     try {
@@ -654,98 +1081,43 @@ export const getStatement5Data = async (sector, from, to) => {
             `Fetching Statement 5 data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL"}, to: ${to ?? "ALL"}`
         );
 
-        const isStateSector = sector === "STATE";
-        const includeStateChallans =
-            !sector || sector === "CONSOLIDATED" || sector === "STATE";
-
         const dateRange = getDateRangeFromParams(from, to);
 
-        let challanRows = [];
-        let challanFromBillRows = [];
-        let stateChallanRows = [];
+        const isStateSector = sector === "STATE";
+        const isCouncilSector = sector === "COUNCIL";
+        const isConsolidated = !sector || sector === "CONSOLIDATED";
 
         if (isStateSector) {
             logger.info(
-                `Statement5: sector=STATE → skipping Challan & ChallanFromBill, using StateChallan only`
+                `Statement5: sector=STATE → using StateChallan only (unchanged)`
             );
-            stateChallanRows = await getStatement5StateChallanRows(dateRange);
-        } else {
-            [challanRows, challanFromBillRows, stateChallanRows] =
-                await Promise.all([
-                    getStatement5ChallanRows(sector, dateRange),
-                    getStatement5ChallanFromBillRows(sector, dateRange),
-                    includeStateChallans
-                        ? getStatement5StateChallanRows(dateRange)
-                        : Promise.resolve([]),
-                ]);
+            const stateChallanRows = await getStatement5StateChallanRows(dateRange);
+            const result = groupStatement5Rows(stateChallanRows);
+            logger.info(`Statement 5 total groups returned: ${result.length}`);
+            return result;
         }
 
-        const allRows = [
-            ...challanRows,
-            ...challanFromBillRows,
-            ...stateChallanRows,
-        ];
+        if (isCouncilSector) {
+            const result = await getStatement5CouncilRows(dateRange);
+            logger.info(`Statement 5 total groups returned: ${result.length}`);
+            return result;
+        }
+
+        if (isConsolidated) {
+            const [councilResult, stateChallanRows] = await Promise.all([
+                getStatement5CouncilRows(dateRange),
+                getStatement5StateChallanRows(dateRange),
+            ]);
+            const stateResult = groupStatement5Rows(stateChallanRows);
+            const combined = [...councilResult, ...stateResult];
+            logger.info(`Statement 5 total groups returned: ${combined.length}`);
+            return combined;
+        }
 
         logger.info(
-            `Statement5: Total rows going into grouping — challan: ${challanRows.length}, challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
+            `Statement5: no rule defined for sector "${sector}" — returning empty result`
         );
-
-        // ── Group identical head chains together (unchanged logic) ──
-        const grouped = allRows.reduce((acc, row) => {
-            const key = [
-                row.majorHead,
-                row.subMajor,
-                row.minorHead,
-                row.subHead,
-                row.subSubHead,
-                row.detailHead,
-                row.subDetailHead,
-            ]
-                .filter((p) => p && p !== "-")
-                .join("-");
-
-            if (!acc[key]) acc[key] = [];
-            acc[key].push(row);
-            return acc;
-        }, {});
-
-        const result = Object.entries(grouped).map(([heads, rows]) => {
-            const total = rows.reduce((sum, row) => sum + row.amount, 0);
-            const [sample] = rows;
-
-            // Build a clean per-level breakdown (code, and name when resolved).
-            // This replaces the old codeChain/nameChain STRING approach —
-            // that required splitting on "-" on the frontend, which broke
-            // (duplicated "code - code" lines) whenever a name failed to
-            // resolve. Building the array directly here avoids that entirely.
-            const levels = HEAD_CODE_LEVELS.reduce((acc, codeField, idx) => {
-                const nameField = HEAD_NAME_LEVELS[idx];
-                const raw = sample[codeField];
-                const code = raw !== null && raw !== undefined ? String(raw).trim() : "";
-                if (!code || code === "-" || code === "0") return acc;
-                acc.push({ code, name: sample[nameField] || null });
-                return acc;
-            }, []);
-
-            const headsLines = levels.length
-                ? levels.map((l) => (l.name ? `${l.code} - ${l.name}` : l.code))
-                : [heads]; // fallback: raw grouping key if no code fields exist
-
-            const matched = levels.length > 0 && levels.every((l) => l.name);
-
-            return {
-                heads,
-                headsLines,
-                matched,
-                rows,
-                total: parseFloat(total.toFixed(2)),
-                hasMultiple: rows.length > 1,
-            };
-        });
-
-        logger.info(`Statement 5 total groups returned: ${result.length}`);
-
-        return result;
+        return [];
     } catch (error) {
         logger.error(`Error fetching Statement 5 data: ${error.message}`);
         throw error;
@@ -757,93 +1129,242 @@ export const getStatement5Data = async (sector, from, to) => {
 
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 4 - Loans and Advances by the Council
-// Only 2 fixed rows: Car Loan & House/Building Loan
-// Data source: Expenditure table
+//
+// STATE: UNCHANGED — 2 fixed rows (Car Loan, House/Building Loan),
+// loanType-based, NO date filtering, opening balance forced to 0.
+//
+// COUNCIL: NEW rule, date-filtered by financial year:
+//   - Balance outstanding on 1st April = Expenditure.grossAmount,
+//     sector=COUNCIL, minorHead 6610101 (House/Building Loan) or
+//     6610201 (Car Loan), using the PREVIOUS financial year window
+//     (selected from/to shifted back one year — same convention as
+//     Statement 1 / Statement 2).
+//   - Amount Paid during the year = same query, but the SELECTED
+//     (current) financial year window.
+//   - Amount Repaid during the year = Challan.amount (majorHead
+//     6610101/6610201, challanType COUNCIL, current FY) +
+//     challanFromBill.amount (amountType "Building Loan" for the
+//     house row / "Car Loan" for the car row, sector COUNCIL,
+//     current FY).
+//   - Balance outstanding on 31 March = opening + paid - repaid
+//   - Net Increase(+)/Decrease(-) = closing - opening, i.e. paid - repaid
+//     (see chat note on this formula).
+//
+// CONSOLIDATED: STATE's 2 rows + COUNCIL's 2 rows shown together
+// (4 rows total), totals summed across all of them — same pattern
+// already used for Statement 3 Part 1 (Debt Position).
+//
+// Reuses getDateRangeFromParams and shiftYear, already defined
+// once elsewhere in this file (Statement 5 / Statement 2 sections).
 // ─────────────────────────────────────────────────────────────
 
-export const getStatement4Data = async (sector) => {
-    try {
-        logger.info(`Fetching Statement 4 data for sector: ${sector ?? "ALL"}`);
+// Small numeric-coercion helper — was missing from this file (only
+// existed in Statement 1's separate service). Scoped here for Statement 4.
+const safeNum = (val) => Number(val ?? 0);
 
-        const sectorFilter =
-            sector && sector !== "CONSOLIDATED" ? { sector } : {};
+const STATEMENT4_MINOR_HEAD_HOUSE = 6610101; // House / Building Loan
+const STATEMENT4_MINOR_HEAD_CAR = 6610201;   // Car Loan
 
-        const where = { isActive: true, ...sectorFilter };
+const isStatement4HeadCode = (value, target) => {
+    if (!value) return false;
+    const n = parseInt(value, 10);
+    return !Number.isNaN(n) && n === target;
+};
 
-        const expenditures = await prisma.expenditure.findMany({
-            where,
-            select: {
-                loanType: true,
-                loansAdvances: true,
-                carLoanRecovery: true,
-                houseLoanRecovery: true,
+// ── STATE — unchanged math, just pulled into its own function ──
+const buildStatement4StateRows = async () => {
+    const expenditures = await prisma.expenditure.findMany({
+        where: { isActive: true, sector: "STATE" },
+        select: {
+            loanType: true,
+            loansAdvances: true,
+            carLoanRecovery: true,
+            houseLoanRecovery: true,
+        },
+    });
+
+    const carAmountPaid = expenditures
+        .filter((e) => e.loanType === "CAR_LOAN")
+        .reduce((sum, e) => sum + Number(e.loansAdvances ?? 0), 0);
+    const carAmountRecovered = expenditures.reduce(
+        (sum, e) => sum + Number(e.carLoanRecovery ?? 0),
+        0
+    );
+    const carOpeningBalance = 0;
+    const carClosingBalance = carOpeningBalance + carAmountPaid - carAmountRecovered;
+    const carNetChange = carClosingBalance;
+
+    const houseAmountPaid = expenditures
+        .filter((e) => e.loanType === "BUILDING_LOAN")
+        .reduce((sum, e) => sum + Number(e.loansAdvances ?? 0), 0);
+    const houseAmountRecovered = expenditures.reduce(
+        (sum, e) => sum + Number(e.houseLoanRecovery ?? 0),
+        0
+    );
+    const houseOpeningBalance = 0;
+    const houseClosingBalance = houseOpeningBalance + houseAmountPaid - houseAmountRecovered;
+    const houseNetChange = houseClosingBalance;
+
+    return [
+        {
+            loans: "Car Loan",
+            april: carOpeningBalance,
+            amountPaid: carAmountPaid,
+            amountRecover: carAmountRecovered,
+            march: carClosingBalance,
+            increaseDecrease: carNetChange,
+        },
+        {
+            loans: "House / Building Loan",
+            april: houseOpeningBalance,
+            amountPaid: houseAmountPaid,
+            amountRecover: houseAmountRecovered,
+            march: houseClosingBalance,
+            increaseDecrease: houseNetChange,
+        },
+    ];
+};
+
+// ── COUNCIL — new financial-year-based rule ──────────────────
+const buildStatement4CouncilRows = async (currentDateRange, previousDateRange) => {
+    const [
+        openingExpenditureRows,
+        currentExpenditureRows,
+        currentChallanRows,
+        currentCfbRows,
+    ] = await Promise.all([
+        prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                ...(previousDateRange ? { voucherDate: previousDateRange } : {}),
             },
-        });
+            select: { grossAmount: true, minorHead: true },
+        }),
+        prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                ...(currentDateRange ? { voucherDate: currentDateRange } : {}),
+            },
+            select: { grossAmount: true, minorHead: true },
+        }),
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanType: "COUNCIL",
+                ...(currentDateRange ? { challanDate: currentDateRange } : {}),
+            },
+            select: { amount: true, majorHead: true },
+        }),
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                amountType: { in: ["Building Loan", "Car Loan"] },
+                ...(currentDateRange ? { voucharDate: currentDateRange } : {}),
+            },
+            select: { amount: true, amountType: true },
+        }),
+    ]);
 
-        // ── Row 1: CAR LOAN ──────────────────────────────────
-        // loansAdvances where loanType === "CAR_LOAN"
-        const carAmountPaid = expenditures
-            .filter((e) => e.loanType === "CAR_LOAN")
-            .reduce((sum, e) => sum + Number(e.loansAdvances ?? 0), 0);
+    const buildRow = (label, headCode, cfbAmountType) => {
+        const openingBalance = openingExpenditureRows
+            .filter((r) => isStatement4HeadCode(r.minorHead, headCode))
+            .reduce((s, r) => s + safeNum(r.grossAmount), 0);
 
-        // carLoanRecovery — independent field, just sum all isActive rows
-        const carAmountRecovered = expenditures.reduce(
-            (sum, e) => sum + Number(e.carLoanRecovery ?? 0),
-            0
-        );
+        const amountPaid = currentExpenditureRows
+            .filter((r) => isStatement4HeadCode(r.minorHead, headCode))
+            .reduce((s, r) => s + safeNum(r.grossAmount), 0);
 
-        const carOpeningBalance = 0;
-        const carClosingBalance = carOpeningBalance + carAmountPaid - carAmountRecovered;
-        const carNetChange = carClosingBalance;
+        const challanTotal = currentChallanRows
+            .filter((r) => isStatement4HeadCode(r.majorHead, headCode))
+            .reduce((s, r) => s + safeNum(r.amount), 0);
 
-        // ── Row 2: HOUSE / BUILDING LOAN ─────────────────────
-        // loansAdvances where loanType === "BUILDIN_LOAN"
-        const houseAmountPaid = expenditures
-            .filter((e) => e.loanType === "BUILDING_LOAN")
-            .reduce((sum, e) => sum + Number(e.loansAdvances ?? 0), 0);
+        const cfbTotal = currentCfbRows
+            .filter((r) => r.amountType === cfbAmountType)
+            .reduce((s, r) => s + safeNum(r.amount), 0);
 
-        // houseLoanRecovery — independent field, just sum all isActive rows
-        const houseAmountRecovered = expenditures.reduce(
-            (sum, e) => sum + Number(e.houseLoanRecovery ?? 0),
-            0
-        );
-
-        const houseOpeningBalance = 0;
-        const houseClosingBalance = houseOpeningBalance + houseAmountPaid - houseAmountRecovered;
-        const houseNetChange = houseClosingBalance;
-
-        // ── Totals ───────────────────────────────────────────
-        const totalAmountPaid = carAmountPaid + houseAmountPaid;
-        const totalAmountRecovered = carAmountRecovered + houseAmountRecovered;
-        const totalClosingBalance = carClosingBalance + houseClosingBalance;
-        const totalNetChange = carNetChange + houseNetChange;
+        const amountRecover = challanTotal + cfbTotal;
+        const closingBalance = openingBalance + amountPaid - amountRecover;
+        const netChange = closingBalance - openingBalance; // == amountPaid - amountRecover
 
         return {
-            rows: [
-                {
-                    id: 1,
-                    loans: "Car Loan",
-                    april: carOpeningBalance.toFixed(2),
-                    amountPaid: carAmountPaid.toFixed(2),
-                    amountRecover: carAmountRecovered.toFixed(2),
-                    march: carClosingBalance.toFixed(2),
-                    increaseDecrease: carNetChange.toFixed(2),
-                },
-                {
-                    id: 2,
-                    loans: "House / Building Loan",
-                    april: houseOpeningBalance.toFixed(2),
-                    amountPaid: houseAmountPaid.toFixed(2),
-                    amountRecover: houseAmountRecovered.toFixed(2),
-                    march: houseClosingBalance.toFixed(2),
-                    increaseDecrease: houseNetChange.toFixed(2),
-                },
-            ],
+            loans: label,
+            april: openingBalance,
+            amountPaid,
+            amountRecover,
+            march: closingBalance,
+            increaseDecrease: netChange,
+        };
+    };
+
+    return [
+        buildRow("House / Building Loan", STATEMENT4_MINOR_HEAD_HOUSE, "Building Loan"),
+        buildRow("Car Loan", STATEMENT4_MINOR_HEAD_CAR, "Car Loan"),
+    ];
+};
+
+export const getStatement4Data = async (sector, from, to) => {
+    try {
+        logger.info(
+            `Fetching Statement 4 data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL"}, to: ${to ?? "ALL"}`
+        );
+
+        const currentDateRange = getDateRangeFromParams(from, to);
+        const previousFrom = shiftYear(from, -1);
+        const previousTo = shiftYear(to, -1);
+        const previousDateRange = getDateRangeFromParams(previousFrom, previousTo);
+
+        const isStateSector = sector === "STATE";
+        const isCouncilSector = sector === "COUNCIL";
+        const isConsolidated = !sector || sector === "CONSOLIDATED";
+
+        let rawRows = [];
+
+        if (isStateSector) {
+            rawRows = await buildStatement4StateRows();
+        } else if (isCouncilSector) {
+            rawRows = await buildStatement4CouncilRows(currentDateRange, previousDateRange);
+        } else if (isConsolidated) {
+            const [stateRows, councilRows] = await Promise.all([
+                buildStatement4StateRows(),
+                buildStatement4CouncilRows(currentDateRange, previousDateRange),
+            ]);
+            rawRows = [...stateRows, ...councilRows];
+        } else {
+            logger.info(
+                `Statement4: no rule defined for sector "${sector}" — returning empty result`
+            );
+        }
+
+        const rows = rawRows.map((r, idx) => ({
+            id: idx + 1,
+            loans: r.loans,
+            april: r.april.toFixed(2),
+            amountPaid: r.amountPaid.toFixed(2),
+            amountRecover: r.amountRecover.toFixed(2),
+            march: r.march.toFixed(2),
+            increaseDecrease: r.increaseDecrease.toFixed(2),
+        }));
+
+        const total = rawRows.reduce(
+            (acc, r) => ({
+                amountPaid: acc.amountPaid + r.amountPaid,
+                amountRecover: acc.amountRecover + r.amountRecover,
+                march: acc.march + r.march,
+                increaseDecrease: acc.increaseDecrease + r.increaseDecrease,
+            }),
+            { amountPaid: 0, amountRecover: 0, march: 0, increaseDecrease: 0 }
+        );
+
+        return {
+            rows,
             total: {
-                amountPaid: totalAmountPaid.toFixed(2),
-                amountRecover: totalAmountRecovered.toFixed(2),
-                march: totalClosingBalance.toFixed(2),
-                increaseDecrease: totalNetChange.toFixed(2),
+                amountPaid: total.amountPaid.toFixed(2),
+                amountRecover: total.amountRecover.toFixed(2),
+                march: total.march.toFixed(2),
+                increaseDecrease: total.increaseDecrease.toFixed(2),
             },
         };
     } catch (error) {
@@ -851,7 +1372,6 @@ export const getStatement4Data = async (sector) => {
         throw error;
     }
 };
-
 
 
 
@@ -1378,17 +1898,30 @@ export const getStatement3DebtData = async (sector, from, to) => {
     }
 };
 
+
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 3 - PART 2: Ways and Means (Month-wise)
 //
 // STATE: UNCHANGED math, moved into buildStateWaysAndMeansMonthlyMaps.
 // COUNCIL: NEW rule, in buildCouncilWaysAndMeansMonthlyMaps:
-//   - Receipt = ChallanFromBill (sector=COUNCIL, majorHead IN
-//     001/007/013/661/664) + Challan (challanType=COUNCIL, all rows)
+//   - Receipt = ChallanFromBill (sector IN [COUNCIL, STATE], majorHead
+//     IN 001/007/013/661/664) + Challan (challanType=COUNCIL, all rows)
 //   - Disbursement = Expenditure (sector=COUNCIL, all rows)
 //   - Month 1 opening balance forced to 0 (no opening-balance data)
 // CONSOLIDATED: STATE's monthly maps + COUNCIL's monthly maps,
 //   merged additively per month, carried forward together.
+//
+//   ⚠️ Note: State's own receipt calc already pulls challanFromBill
+//   rows tagged sector=STATE (its full 23-type list). Council's
+//   receipt calc now ALSO pulls sector=STATE rows (restricted to
+//   majorHead 001/007/013/661/664). Any STATE-tagged row that both
+//   matches one of State's 23 amountTypes AND carries one of these
+//   5 majorHeads (e.g. Professional Tax/001, House Rent/007, Forest
+//   Royalty-MC Forest Royalty-Monopoly/013, Car Loan-Building Loan/
+//   661, Earnest Money-Security Deposits/664) gets counted once on
+//   each side, so CONSOLIDATED = State + Council double-counts those
+//   rows. Flagging this — let us know if Consolidated should instead
+//   exclude those specific STATE-tagged rows from one side.
 // ─────────────────────────────────────────────────────────────
 
 // Financial year months: April(4) to March(3)
@@ -1523,6 +2056,11 @@ const buildStateWaysAndMeansMonthlyMaps = async (dateRange) => {
 };
 
 // ── COUNCIL monthly receipt/disbursement maps — NEW rule ─────────
+// Receipt-side challanFromBill pulls BOTH sector=COUNCIL and
+// sector=STATE rows (restricted to majorHead 001/007/013/661/664) —
+// per spec, Council's Ways & Means view shows both sectors' data
+// for these specific heads. See the double-counting note above
+// getStatement3WaysAndMeansData for what this means for CONSOLIDATED.
 const COUNCIL_CHALLAN_FROM_BILL_MAJOR_HEADS = ["001", "007", "013", "661", "664"];
 
 const isCouncilCfbMajorHead = (majorHead) => {
@@ -1539,7 +2077,7 @@ const buildCouncilWaysAndMeansMonthlyMaps = async (dateRange) => {
         prisma.challanFromBill.findMany({
             where: {
                 isActive: true,
-                sector: "COUNCIL",
+                sector: { in: ["COUNCIL", "STATE"] },
                 ...(dateRange ? { voucharDate: dateRange } : {}),
             },
             select: { voucharDate: true, amount: true, majorHead: true },
@@ -1566,19 +2104,19 @@ const buildCouncilWaysAndMeansMonthlyMaps = async (dateRange) => {
     const rawTotal = (records, field) =>
         records.reduce((s, r) => s + Number(r[field] ?? 0), 0);
 
-    console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== RAW FETCH =====");
-    console.log(
-        `[STATEMENT3 COUNCIL WAM DEBUG] challanFromBill rows: ${challanFromBills.length}, total amount (ALL majorHeads, before 001/007/013/661/664 filter): ${rawTotal(challanFromBills, "amount")}`
-    );
-    console.log(
-        `[STATEMENT3 COUNCIL WAM DEBUG] challan rows: ${challans.length}, total amount: ${rawTotal(challans, "amount")}`
-    );
-    console.log(
-        `[STATEMENT3 COUNCIL WAM DEBUG] expenditure rows: ${expenditures.length}, total grossAmount: ${rawTotal(expenditures, "grossAmount")}`
-    );
-    console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== END RAW FETCH =====");
+    // console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== RAW FETCH =====");
+    // console.log(
+    //     `[STATEMENT3 COUNCIL WAM DEBUG] challanFromBill rows (sector IN [COUNCIL, STATE]): ${challanFromBills.length}, total amount (ALL majorHeads, before 001/007/013/661/664 filter): ${rawTotal(challanFromBills, "amount")}`
+    // );
+    // console.log(
+    //     `[STATEMENT3 COUNCIL WAM DEBUG] challan rows: ${challans.length}, total amount: ${rawTotal(challans, "amount")}`
+    // );
+    // console.log(
+    //     `[STATEMENT3 COUNCIL WAM DEBUG] expenditure rows: ${expenditures.length}, total grossAmount: ${rawTotal(expenditures, "grossAmount")}`
+    // );
+    // console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== END RAW FETCH =====");
 
-    // Receipt = ChallanFromBill (majorHead IN 001/007/013/661/664) + Challan (all)
+    // Receipt = ChallanFromBill (sector IN [COUNCIL, STATE], majorHead IN 001/007/013/661/664) + Challan (all)
     const cfbFiltered = challanFromBills.filter((c) => isCouncilCfbMajorHead(c.majorHead));
     const cfbReceiptByMonth = sumByMonth(cfbFiltered, "voucharDate", "amount");
     const challanReceiptByMonth = sumByMonth(challans, "challanDate", "amount");
@@ -1591,26 +2129,26 @@ const buildCouncilWaysAndMeansMonthlyMaps = async (dateRange) => {
     const mapToObj = (map) => Object.fromEntries([...map.entries()].sort((a, b) => a[0] - b[0]));
     const sumMap = (map) => [...map.values()].reduce((s, v) => s + v, 0);
 
-    console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== FILTERED / MONTHLY AGGREGATES =====");
-    console.log(
-        `[STATEMENT3 COUNCIL WAM DEBUG] challanFromBill rows AFTER majorHead 001/007/013/661/664 filter: ${cfbFiltered.length}, total amount: ${rawTotal(cfbFiltered, "amount")}`
-    );
-    console.log(
-        "[STATEMENT3 COUNCIL WAM DEBUG] cfbReceiptByMonth:", JSON.stringify(mapToObj(cfbReceiptByMonth), null, 2)
-    );
-    console.log(
-        "[STATEMENT3 COUNCIL WAM DEBUG] challanReceiptByMonth:", JSON.stringify(mapToObj(challanReceiptByMonth), null, 2)
-    );
-    console.log(
-        `[STATEMENT3 COUNCIL WAM DEBUG] combined receiptByMonth total: ${sumMap(receiptByMonth)}`
-    );
-    console.log(
-        "[STATEMENT3 COUNCIL WAM DEBUG] disbursementByMonth:", JSON.stringify(mapToObj(disbursementByMonth), null, 2)
-    );
-    console.log(
-        `[STATEMENT3 COUNCIL WAM DEBUG] disbursementByMonth total: ${sumMap(disbursementByMonth)}`
-    );
-    console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== END FILTERED / MONTHLY AGGREGATES =====");
+    // console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== FILTERED / MONTHLY AGGREGATES =====");
+    // console.log(
+    //     `[STATEMENT3 COUNCIL WAM DEBUG] challanFromBill rows AFTER majorHead 001/007/013/661/664 filter: ${cfbFiltered.length}, total amount: ${rawTotal(cfbFiltered, "amount")}`
+    // );
+    // console.log(
+    //     "[STATEMENT3 COUNCIL WAM DEBUG] cfbReceiptByMonth:", JSON.stringify(mapToObj(cfbReceiptByMonth), null, 2)
+    // );
+    // console.log(
+    //     "[STATEMENT3 COUNCIL WAM DEBUG] challanReceiptByMonth:", JSON.stringify(mapToObj(challanReceiptByMonth), null, 2)
+    // );
+    // console.log(
+    //     `[STATEMENT3 COUNCIL WAM DEBUG] combined receiptByMonth total: ${sumMap(receiptByMonth)}`
+    // );
+    // console.log(
+    //     "[STATEMENT3 COUNCIL WAM DEBUG] disbursementByMonth:", JSON.stringify(mapToObj(disbursementByMonth), null, 2)
+    // );
+    // console.log(
+    //     `[STATEMENT3 COUNCIL WAM DEBUG] disbursementByMonth total: ${sumMap(disbursementByMonth)}`
+    // );
+    // console.log("[STATEMENT3 COUNCIL WAM DEBUG] ===== END FILTERED / MONTHLY AGGREGATES =====");
 
     return { receiptByMonth, disbursementByMonth };
 };
@@ -1674,6 +2212,8 @@ export const getStatement3WaysAndMeansData = async (sector, from, to) => {
         // ── Build rows with carry-forward logic (closing balance
         // becomes next month's opening balance) ──────────────────
         let carryForward = 0;
+        let totalReceipt = 0;
+        let totalDisbursement = 0;
 
         const rows = FY_MONTHS.map(({ month, num }, index) => {
             const openingBalance =
@@ -1684,6 +2224,8 @@ export const getStatement3WaysAndMeansData = async (sector, from, to) => {
             const closingBalance = openingBalance + receipt - disbursement;
 
             carryForward = closingBalance;
+            totalReceipt += receipt;
+            totalDisbursement += disbursement;
 
             return {
                 monthNum: num,
@@ -1693,6 +2235,19 @@ export const getStatement3WaysAndMeansData = async (sector, from, to) => {
                 disbursement: disbursement.toFixed(2),
                 closingBalance: closingBalance.toFixed(2),
             };
+        });
+
+        // ── Bottom total row — sums receipt/disbursement across all
+        // 12 months; closingBalance is the final month's running
+        // balance (already the cumulative total); openingBalance is
+        // left blank since summing 12 opening balances isn't meaningful. ──
+        rows.push({
+            monthNum: null,
+            month: "Total",
+            openingBalance: "",
+            receipt: totalReceipt.toFixed(2),
+            disbursement: totalDisbursement.toFixed(2),
+            closingBalance: carryForward.toFixed(2),
         });
 
         logger.info(`Statement 3 Ways & Means rows built: ${rows.length}`);

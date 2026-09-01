@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { getStatement7 } from "../../api/statements.api.js";
 
-export const useStatement7 = ({ sector } = {}, { enabled = true } = {}) => {
+export const useStatement7 = ({ sector, dateRange } = {}, { enabled = true } = {}) => {
     const [statement7Data, setStatement7Data] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const from = dateRange?.from;
+    const to = dateRange?.to;
 
     const fetchData = useCallback(async () => {
         if (!enabled) return;
@@ -13,7 +16,11 @@ export const useStatement7 = ({ sector } = {}, { enabled = true } = {}) => {
         setError(null);
 
         try {
-            const params = sector ? { sector } : {};
+            const params = {};
+            if (sector) params.sector = sector;
+            if (from) params.from = from;
+            if (to) params.to = to;
+
             const { data } = await getStatement7(params);
             setStatement7Data(data?.data ?? []);
         } catch (err) {
@@ -23,7 +30,7 @@ export const useStatement7 = ({ sector } = {}, { enabled = true } = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [sector, enabled]);
+    }, [sector, from, to, enabled]);
 
     useEffect(() => {
         fetchData();

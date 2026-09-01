@@ -11,8 +11,11 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-const Statement7 = ({ sector }) => {
-  const { statement7Data, loading, error } = useStatement7({ sector });
+const Statement7 = ({ sector, dateRange }) => {
+  const { statement7Data, loading, error } = useStatement7({
+    sector,
+    dateRange,
+  });
 
   if (loading) {
     return (
