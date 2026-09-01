@@ -78,9 +78,9 @@ export const getForm5D = async (req, res) => {
 
 export const getForm5E = async (req, res) => {
     try {
-        const { sector } = req.query;
-        logger.info(`Form5E controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm5EData(sector);
+        const { sector, from, to } = req.query;
+        // logger.info(`Form5E controller hit — sector: ${sector ?? "ALL"}, range: ${from ?? "-"} to ${to ?? "-"}`);
+        const data = await getForm5EData(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form5E controller error: ${error.message}`);
@@ -90,7 +90,6 @@ export const getForm5E = async (req, res) => {
         });
     }
 };
-
 
 
 // GET /forms/form6?sector=COUNCIL

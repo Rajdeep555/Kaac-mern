@@ -156,6 +156,38 @@ const Statement1 = ({ sector, dateRange }) => {
               disbursementPair={d.revenueSurplus}
             />
 
+            {/* CONSOLIDATED only: COUNCIL / STATE breakdown */}
+            {d.sectorBreakdown && (
+              <>
+                <DataRow
+                  receiptLabel="Total Revenue Receipts (COUNCIL)"
+                  receiptPair={d.sectorBreakdown.council.revenueReceipts}
+                  disbursementLabel="Total Expenditure on Revenue Account (COUNCIL)"
+                  disbursementPair={
+                    d.sectorBreakdown.council.revenueExpenditure
+                  }
+                />
+                <DataRow
+                  receiptLabel="Revenue Deficit (COUNCIL)"
+                  receiptPair={d.sectorBreakdown.council.revenueDeficit}
+                  disbursementLabel="Revenue Surplus (COUNCIL)"
+                  disbursementPair={d.sectorBreakdown.council.revenueSurplus}
+                />
+                <DataRow
+                  receiptLabel="Total Revenue Receipts (STATE)"
+                  receiptPair={d.sectorBreakdown.state.revenueReceipts}
+                  disbursementLabel="Total Expenditure on Revenue Account (STATE)"
+                  disbursementPair={d.sectorBreakdown.state.revenueExpenditure}
+                />
+                <DataRow
+                  receiptLabel="Revenue Deficit (STATE)"
+                  receiptPair={d.sectorBreakdown.state.revenueDeficit}
+                  disbursementLabel="Revenue Surplus (STATE)"
+                  disbursementPair={d.sectorBreakdown.state.revenueSurplus}
+                />
+              </>
+            )}
+
             {/* ── Part I: Capital ── */}
             <SectionHeader label="2. Capital" />
             <DataRow
@@ -170,6 +202,38 @@ const Statement1 = ({ sector, dateRange }) => {
               disbursementLabel="Capital Surplus"
               disbursementPair={d.capitalSurplus}
             />
+
+            {/* CONSOLIDATED only: COUNCIL / STATE breakdown */}
+            {d.sectorBreakdown && (
+              <>
+                <DataRow
+                  receiptLabel="Total Capital Receipts (COUNCIL)"
+                  receiptPair={d.sectorBreakdown.council.capitalReceipts}
+                  disbursementLabel="Total Expenditure on Capital Account (COUNCIL)"
+                  disbursementPair={
+                    d.sectorBreakdown.council.capitalExpenditure
+                  }
+                />
+                <DataRow
+                  receiptLabel="Capital Deficit (COUNCIL)"
+                  receiptPair={d.sectorBreakdown.council.capitalDeficit}
+                  disbursementLabel="Capital Surplus (COUNCIL)"
+                  disbursementPair={d.sectorBreakdown.council.capitalSurplus}
+                />
+                <DataRow
+                  receiptLabel="Total Capital Receipts (STATE)"
+                  receiptPair={d.sectorBreakdown.state.capitalReceipts}
+                  disbursementLabel="Total Expenditure on Capital Account (STATE)"
+                  disbursementPair={d.sectorBreakdown.state.capitalExpenditure}
+                />
+                <DataRow
+                  receiptLabel="Capital Deficit (STATE)"
+                  receiptPair={d.sectorBreakdown.state.capitalDeficit}
+                  disbursementLabel="Capital Surplus (STATE)"
+                  disbursementPair={d.sectorBreakdown.state.capitalSurplus}
+                />
+              </>
+            )}
 
             {/* ── Part I: Debt ── */}
             <SectionHeader label="3. Debt" />

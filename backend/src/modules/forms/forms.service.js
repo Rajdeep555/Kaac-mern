@@ -1419,16 +1419,21 @@ export const getForm5DData = async (sector) => {
 };
 
 
+
+
+
 // ─────────────────────────────────────────────────────────────
 // FORM 5E - Classified cum Consolidated Abstract
 //           Part II Deposit Fund (Debt-Deposit-Remittances)
 //
 // SECTOR RULES:
 // - sector === "STATE"        → UNCHANGED. Extracted verbatim into
-//                                 getForm5EStateRows() below.
+//                                 getForm5EStateRows() below. Now also
+//                                 respects from/to date filtering.
 // - sector === "COUNCIL"      → REBUILT. See getForm5ECouncilRows()
 //                                 for the full column-by-column source
-//                                 mapping (comments inline there).
+//                                 mapping (comments inline there). Now
+//                                 also respects from/to date filtering.
 // - sector === "CONSOLIDATED" → STATE's rows + COUNCIL's rows, merged
 //                                 before computing totals.
 // - any other sector          → no rule defined, empty result.
@@ -1472,14 +1477,30 @@ const safeForm5E = (v) => {
     return isNaN(n) ? 0 : n;
 };
 
+// ─────────────────────────────
+// DATE RANGE HELPER
+// ─────────────────────────────
+// Standard gte/lte filter for models with a real DateTime column
+const buildDateFilter = (dateField, from, to) => {
+    if (!from || !to) return {};
+    const start = new Date(from);
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999); // include the whole "to" day
+    return { [dateField]: { gte: start, lte: end } };
+};
+
 // ════════════════════════════════════════════════════════════
 // STATE — UNCHANGED logic, extracted verbatim into its own
 // function so CONSOLIDATED can call it alongside COUNCIL.
 // ════════════════════════════════════════════════════════════
-const getForm5EStateRows = async () => {
+const getForm5EStateRows = async (from, to) => {
+    const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
+    const stateChallanDateFilter = buildDateFilter("challanDate", from, to);
+    const cfbDateFilter = buildDateFilter("voucharDate", from, to);
+
     const [expenditureRows, stateChallanRows, stateDeductionRows] = await Promise.all([
         prisma.expenditure.findMany({
-            where: { isActive: true, sector: "STATE" },
+            where: { isActive: true, sector: "STATE", ...expenditureDateFilter },
             select: {
                 id: true,
                 voucherNo: true,
@@ -1499,7 +1520,7 @@ const getForm5EStateRows = async () => {
             orderBy: { voucherDate: "asc" },
         }),
         prisma.stateChallan.findMany({
-            where: { sector: "STATE" },
+            where: { sector: "STATE", ...stateChallanDateFilter },
             select: {
                 id: true,
                 challanNo: true,
@@ -1512,6 +1533,7 @@ const getForm5EStateRows = async () => {
                 isActive: true,
                 sector: "STATE",
                 amountType: { in: FORM5E_STATE_DEDUCTION_TYPES },
+                ...cfbDateFilter,
             },
             select: {
                 id: true,
@@ -1697,8 +1719,16 @@ const getForm5EStateRows = async () => {
 //           records as the receipt-side columns above, dual-posted)
 //       (c) ChallanFromBill, sector=STATE, amountType in
 //           FORM5E_COUNCIL_STATE_TREASURY_TYPES (cross-sector pull)
+//
+// All four queries below are date-filtered on the same from/to
+// window (Expenditure→voucherDate, Challan→challanDate,
+// ChallanFromBill→voucharDate).
 // ════════════════════════════════════════════════════════════
-const getForm5ECouncilRows = async () => {
+const getForm5ECouncilRows = async (from, to) => {
+    const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
+    const challanDateFilter = buildDateFilter("challanDate", from, to);
+    const cfbDateFilter = buildDateFilter("voucharDate", from, to);
+
     const [
         expenditureRows,
         challanFromBillCouncilRows,
@@ -1706,7 +1736,7 @@ const getForm5ECouncilRows = async () => {
         challanRows,
     ] = await Promise.all([
         prisma.expenditure.findMany({
-            where: { isActive: true, sector: "COUNCIL" },
+            where: { isActive: true, sector: "COUNCIL", ...expenditureDateFilter },
             select: {
                 id: true,
                 voucherNo: true,
@@ -1722,7 +1752,7 @@ const getForm5ECouncilRows = async () => {
         // by amountType — split into CPF / SecDep / EarnestMoney /
         // non-CPF buckets in JS below.
         prisma.challanFromBill.findMany({
-            where: { isActive: true, sector: "COUNCIL" },
+            where: { isActive: true, sector: "COUNCIL", ...cfbDateFilter },
             select: {
                 id: true,
                 challanNo: true,
@@ -1738,6 +1768,7 @@ const getForm5ECouncilRows = async () => {
                 isActive: true,
                 sector: "STATE",
                 amountType: { in: FORM5E_COUNCIL_STATE_TREASURY_TYPES },
+                ...cfbDateFilter,
             },
             select: {
                 id: true,
@@ -1749,7 +1780,7 @@ const getForm5ECouncilRows = async () => {
         }),
         // ALL Challan rows, no sector/challanType filter at all.
         prisma.challan.findMany({
-            where: { isActive: true },
+            where: { isActive: true, ...challanDateFilter },
             select: {
                 id: true,
                 challanNo: true,
@@ -2016,9 +2047,13 @@ const getForm5ECouncilRows = async () => {
     return { receiptRows, paymentRows };
 };
 
-export const getForm5EData = async (sector) => {
+export const getForm5EData = async (sector, dateRange = {}) => {
+    const { from, to } = dateRange;
+
     try {
-        logger.info(`Fetching Form 5E data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 5E data for sector: ${sector ?? "ALL"}, range: ${from ?? "-"} to ${to ?? "-"}`
+        );
 
         const isStateSector = sector === "STATE";
         const isCouncilSector = sector === "COUNCIL";
@@ -2028,17 +2063,17 @@ export const getForm5EData = async (sector) => {
         let paymentRows = [];
 
         if (isStateSector) {
-            const stateData = await getForm5EStateRows();
+            const stateData = await getForm5EStateRows(from, to);
             receiptRows = stateData.receiptRows;
             paymentRows = stateData.paymentRows;
         } else if (isCouncilSector) {
-            const councilData = await getForm5ECouncilRows();
+            const councilData = await getForm5ECouncilRows(from, to);
             receiptRows = councilData.receiptRows;
             paymentRows = councilData.paymentRows;
         } else if (isConsolidated) {
             const [stateData, councilData] = await Promise.all([
-                getForm5EStateRows(),
-                getForm5ECouncilRows(),
+                getForm5EStateRows(from, to),
+                getForm5ECouncilRows(from, to),
             ]);
             receiptRows = [...stateData.receiptRows, ...councilData.receiptRows];
             paymentRows = [...stateData.paymentRows, ...councilData.paymentRows];
@@ -2085,7 +2120,6 @@ export const getForm5EData = async (sector) => {
         throw error;
     }
 };
-
 
 
 // ─────────────────────────────────────────────────────────────

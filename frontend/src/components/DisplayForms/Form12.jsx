@@ -30,7 +30,7 @@ const structure = [
     re_particulars: "Part I (To be posted from Part-I Div I of Form No 5A)",
     di_sl: "",
     di_particulars:
-      "Part I (By expenditure under all Major Heads of A/cs – Gross Expenditure)",
+      "Part II (By expenditure under all Major Heads of A/cs – Gross Expenditure)",
   },
   {
     id: "r5",
@@ -164,8 +164,8 @@ const structure = [
 const formatAmt = (v) =>
   v !== undefined && v !== null && v !== "-" ? Number(v).toFixed(2) : "-";
 
-const Form12 = ({ sector }) => {
-  const { form12Data, loading, error } = useForm12({ sector });
+const Form12 = ({ sector, dateRange }) => {
+  const { form12Data, loading, error } = useForm12({ sector, dateRange });
 
   const moneyMap = useMemo(() => form12Data?.money ?? {}, [form12Data]);
 
@@ -219,6 +219,11 @@ const Form12 = ({ sector }) => {
           {sector && (
             <p className="text-sm font-medium text-gray-600">
               Sector: {sector}
+            </p>
+          )}
+          {dateRange?.from && dateRange?.to && (
+            <p className="text-sm font-medium text-gray-600">
+              Period: {dateRange.from} to {dateRange.to}
             </p>
           )}
         </div>

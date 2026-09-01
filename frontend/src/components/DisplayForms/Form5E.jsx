@@ -24,8 +24,8 @@ const AmtBold = ({ value }) => (
   </td>
 );
 
-const Form5E = ({ sector }) => {
-  const { form5EData, loading, error } = useForm5E({ sector });
+const Form5E = ({ sector, dateRange }) => {
+  const { form5EData, loading, error } = useForm5E({ sector, dateRange });
 
   // Zip receipt and payment rows side by side
   const zippedRows = useMemo(() => {
@@ -67,7 +67,12 @@ const Form5E = ({ sector }) => {
       <div className="flex flex-col items-center gap-1 mb-10">
         <p className="font-semibold text-sm">
           Classified cum consolidated abstract for receipts and payments for the
-          month of <span className="text-blue-500">All Period</span>
+          month of{" "}
+          <span className="text-blue-500">
+            {dateRange?.from && dateRange?.to
+              ? `${dateRange.from} to ${dateRange.to}`
+              : "All Period"}
+          </span>
         </p>
         <p className="text-sm font-semibold">
           Part II Deposit Fund (Transactions relating to

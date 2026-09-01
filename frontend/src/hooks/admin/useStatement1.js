@@ -43,6 +43,7 @@ const DEFAULT_DATA = {
     treasuryBalanceDisbursementSide: DEFAULT_PAIR,
     grandTotalReceipt: DEFAULT_PAIR,
     grandTotalDisbursement: DEFAULT_PAIR,
+    sectorBreakdown: null,
 };
 
 export const useStatement1 = (

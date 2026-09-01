@@ -19,7 +19,6 @@ import Form10 from "../../components/DisplayForms/Form10";
 import Form11 from "../../components/DisplayForms/Form11";
 import Form12 from "../../components/DisplayForms/Form12";
 import SearchFunction from "../SearchFunction";
-import Button from "../../components/ui/Button";
 
 const SECTOR_LABELS = {
   council: "COUNCIL",

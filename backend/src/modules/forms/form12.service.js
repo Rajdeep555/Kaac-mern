@@ -1,5 +1,7 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
+// 🔸 ADJUST THIS PATH if form5E.service.js lives elsewhere relative to this file
+import { getForm5EData } from "./forms.service.js";
 
 const RECEIPT_CFB_TYPES = [
     "Professional Tax",
@@ -92,6 +94,7 @@ export const getForm12Data = async (sector, dateRange = {}) => {
             expenditureRows,
             cashReceiptRows,
             stateChallanRows,
+            form5EStateData, // ✅ NEW — Form 5E, sector hard-locked to STATE
         ] = await Promise.all([
             prisma.openingBalance.findMany({
                 where: { isActive: true, ...sectorFilter, ...monthYearFilter },
@@ -174,6 +177,8 @@ export const getForm12Data = async (sector, dateRange = {}) => {
                     },
                 })
                 : Promise.resolve([]),
+            // ✅ NEW — always sector="STATE" here, independent of Form12's own sector
+            getForm5EData("STATE", { from, to }),
         ]);
 
         const safe = (v) => {
@@ -277,9 +282,13 @@ export const getForm12Data = async (sector, dateRange = {}) => {
             (sum, r) => sum + safe(r.earnestMoneyDeduction), 0
         );
 
-        const transferDeposits = challanRows
-            .filter((c) => c.challanType === "Transfer" || c.challanType === "STATE")
-            .reduce((sum, c) => sum + safe(c.amount), 0);
+        // ✅ CHANGED — r18 re_amount ("To Deposits received from Govt for
+        // transferred functions") now sourced from Form 5E, sector locked
+        // to STATE, payment-side grand total — NOT the previous
+        // challanRows-based calculation.
+        const form5ETransferTotal =
+            form5EStateData?.paymentTotals?.totalPayment ?? 0;
+        const transferDeposits = form5ETransferTotal;
 
         // ✅ dcCheques — unchanged, all expenditures (receipt side r20)
         const dcCheques = expenditureRows.reduce(
@@ -364,9 +373,11 @@ export const getForm12Data = async (sector, dateRange = {}) => {
             (sum, r) => sum + safe(r.earnestMoney), 0
         );
 
-        const disbTransferExp = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.transferPayment), 0
-        );
+        // ✅ CHANGED — r15_di di_amount ("By expenditure in respect of
+        // transferred functions") now sourced from the SAME Form 5E STATE
+        // payment total as r18 above, per spec — NOT the previous
+        // expenditureRows.transferPayment sum.
+        const disbTransferExp = form5ETransferTotal;
 
         const disbRemitPla = receiptRemitPla;
         const disbDcCheques = dcCheques;
@@ -419,7 +430,7 @@ export const getForm12Data = async (sector, dateRange = {}) => {
             r15: { re_amount: receiptCpf },
             r16: { re_amount: receiptSecDep },
             r17: { re_amount: receiptEarnestDep },
-            r18: { re_amount: transferDeposits },
+            r18: { re_amount: transferDeposits }, // ✅ Form 5E (STATE) payment total
             r20: { re_amount: dcCheques },
             r21: { re_amount: receiptRemitPla },
             r22: { re_amount: receiptGrandTotal },
@@ -434,7 +445,7 @@ export const getForm12Data = async (sector, dateRange = {}) => {
             r11_di: { di_amount: disbRemitCpf },
             r12_di: { di_amount: disbSecDep },
             r13_di: { di_amount: disbEarnest },
-            r15_di: { di_amount: disbTransferExp },
+            r15_di: { di_amount: disbTransferExp }, // ✅ same Form 5E (STATE) payment total as r18
             r19_di: { di_amount: disbRemitPla },
             r20_di: { di_amount: disbDcCheques },
             r21_di: { di_amount: totalDisbursement },
@@ -473,6 +484,7 @@ const getForm12DataState = async (from, to) => {
             stateChallanRows,
             challanFromBillRows,
             expenditureRows,
+            form5EStateData, // ✅ NEW — Form 5E, sector hard-locked to STATE
         ] = await Promise.all([
             prisma.openingBalance.findMany({
                 where: { isActive: true, sector: "STATE", ...monthYearFilter },
@@ -498,6 +510,8 @@ const getForm12DataState = async (from, to) => {
                 where: { isActive: true, sector: "STATE", ...expenditureDateFilter },
                 select: { majorHead: true, grossAmount: true },
             }),
+            // ✅ NEW — always sector="STATE" here (matches this branch anyway)
+            getForm5EData("STATE", { from, to }),
         ]);
 
         const safe = (v) => {
@@ -617,11 +631,18 @@ const getForm12DataState = async (from, to) => {
             (sum, r) => sum + safe(r.grossAmount), 0
         );
 
-        // RECEIPT — PART IV (r18): all stateChallan sum
-        const transferDeposits = allStateChallanSum;
+        // ✅ CHANGED — r18 re_amount ("To Deposits received from Govt for
+        // transferred functions") now sourced from Form 5E (STATE) payment
+        // total, replacing the previous allStateChallanSum-based value.
+        const form5ETransferTotal =
+            form5EStateData?.paymentTotals?.totalPayment ?? 0;
+        const transferDeposits = form5ETransferTotal;
 
-        // DISBURSEMENT — PART IV (r15_di): all expenditure grossAmount sum
-        const disbTransferExp = allExpenditureSum;
+        // ✅ CHANGED — r15_di di_amount ("By expenditure in respect of
+        // transferred functions") now sourced from the SAME Form 5E (STATE)
+        // payment total as r18 above, replacing the previous
+        // allExpenditureSum-based value.
+        const disbTransferExp = form5ETransferTotal;
 
         // RECEIPT — PART V (r20 a = DC Cheques, r21 b = Remit PLA)
         const dcCheques = allExpenditureSum; // (a) all expenditure sum
@@ -692,7 +713,7 @@ const getForm12DataState = async (from, to) => {
             r15: { re_amount: receiptCpf },
             r16: { re_amount: receiptSecDep },
             r17: { re_amount: receiptEarnestDep },
-            r18: { re_amount: transferDeposits },
+            r18: { re_amount: transferDeposits }, // ✅ Form 5E (STATE) payment total
             r20: { re_amount: dcCheques },
             r21: { re_amount: receiptRemitPla },
             r22: { re_amount: receiptGrandTotal },
@@ -707,7 +728,7 @@ const getForm12DataState = async (from, to) => {
             r11_di: { di_amount: disbRemitCpf },
             r12_di: { di_amount: disbSecDep },
             r13_di: { di_amount: disbEarnest },
-            r15_di: { di_amount: disbTransferExp },
+            r15_di: { di_amount: disbTransferExp }, // ✅ same Form 5E (STATE) payment total as r18
             r19_di: { di_amount: disbRemitPla },
             r20_di: { di_amount: disbDcCheques },
             r21_di: { di_amount: totalDisbursement },
