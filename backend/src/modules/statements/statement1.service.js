@@ -35,6 +35,16 @@ const getDateRangeFromParams = (from, to) => {
     return range;
 };
 
+// Builds a Prisma-style { lte } range only — no lower bound — so it
+// captures every record on file up to and including the given date.
+// Used to compute TRUE (cumulative) cash balances as of a date, as
+// opposed to getDateRangeFromParams' windowed from/to range which only
+// captures movement inside a single financial year.
+const getUptoDateRange = (dateStr) => {
+    if (!dateStr) return null;
+    return { lte: new Date(`${dateStr}T23:59:59.999Z`) };
+};
+
 const safeNum = (val) => Number(val ?? 0);
 
 // Shifts a "YYYY-MM-DD" string by `delta` whole years (e.g. -1 for the
@@ -138,7 +148,22 @@ const COUNCIL_REVENUE_RECEIPT_EXCLUDED_HEADS = [661, 662, 663, 664];
 // STATE:   challan (challanType STATE) + stateChallan (majorHead 2011–3999)
 // COUNCIL: challan (challanType COUNCIL), EXCLUDING majorHead 661/662/663/664
 //          + challanFromBill (amountType in council revenue list, sector in [COUNCIL, STATE])
+// 1. Total Revenue Receipts
+//
+// STATE:
+//   challan (challanType STATE)
+//   +
+//   stateChallan (majorHead 2011–3999 + 8550)
+//
+// COUNCIL:
+//   challan (challanType COUNCIL), EXCLUDING majorHead 661/662/663/664
+//   +
+//   challanFromBill (amountType in council revenue list, sector in [COUNCIL, STATE])
+
 const getTotalRevenueReceipts = async (sector, dateRange) => {
+    // =========================
+    // STATE
+    // =========================
     if (sector === "STATE") {
         const [challans, stateChallanRows] = await Promise.all([
             prisma.challan.findMany({
@@ -147,26 +172,50 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
                     challanType: "STATE",
                     ...(dateRange ? { challanDate: dateRange } : {}),
                 },
-                select: { amount: true },
+                select: {
+                    amount: true,
+                },
             }),
+
             prisma.stateChallan.findMany({
                 where: {
                     sector: "STATE",
                     ...(dateRange ? { challanDate: dateRange } : {}),
                 },
-                select: { totalAmount: true, majorHead: true },
+                select: {
+                    totalAmount: true,
+                    majorHead: true,
+                },
             }),
         ]);
 
-        const challanTotal = challans.reduce((s, r) => s + safeNum(r.amount), 0);
+        const challanTotal = challans.reduce(
+            (s, r) => s + safeNum(r.amount),
+            0
+        );
+
         const stateChallanTotal = stateChallanRows.reduce((s, r) => {
-            if (!headInRange(r.majorHead, 2011, 3999)) return s;
+            // Include:
+            // 2011–3999
+            // OR
+            // 8550
+            const isIncluded =
+                headInRange(r.majorHead, 2011, 3999) ||
+                String(r.majorHead) === "8550";
+
+            if (!isIncluded) {
+                return s;
+            }
+
             return s + safeNum(r.totalAmount);
         }, 0);
 
         return challanTotal + stateChallanTotal;
     }
 
+    // =========================
+    // COUNCIL
+    // =========================
     if (sector === "COUNCIL") {
         const [challans, cfbRows] = await Promise.all([
             prisma.challan.findMany({
@@ -175,40 +224,71 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
                     challanType: "COUNCIL",
                     ...(dateRange ? { challanDate: dateRange } : {}),
                 },
-                select: { amount: true, majorHead: true },
+                select: {
+                    amount: true,
+                    majorHead: true,
+                },
             }),
+
             prisma.challanFromBill.findMany({
                 where: {
                     isActive: true,
-                    amountType: { in: COUNCIL_REVENUE_RECEIPT_TYPES },
-                    sector: { in: ["COUNCIL", "STATE"] },
+                    amountType: {
+                        in: COUNCIL_REVENUE_RECEIPT_TYPES,
+                    },
+                    sector: {
+                        in: ["COUNCIL", "STATE"],
+                    },
                     ...(dateRange ? { voucharDate: dateRange } : {}),
                 },
-                select: { amount: true },
+                select: {
+                    amount: true,
+                },
             }),
         ]);
 
         const challanTotal = challans
-            .filter((r) => !headExcluded(r.majorHead, COUNCIL_REVENUE_RECEIPT_EXCLUDED_HEADS))
+            .filter(
+                (r) =>
+                    !headExcluded(
+                        r.majorHead,
+                        COUNCIL_REVENUE_RECEIPT_EXCLUDED_HEADS
+                    )
+            )
             .reduce((s, r) => s + safeNum(r.amount), 0);
 
-        const cfbTotal = cfbRows.reduce((s, r) => s + safeNum(r.amount), 0);
+        const cfbTotal = cfbRows.reduce(
+            (s, r) => s + safeNum(r.amount),
+            0
+        );
 
         return challanTotal + cfbTotal;
     }
 
+    // =========================
     // CONSOLIDATED
+    // =========================
     const [stateTotal, councilTotal] = await Promise.all([
         getTotalRevenueReceipts("STATE", dateRange),
         getTotalRevenueReceipts("COUNCIL", dateRange),
     ]);
+
     return stateTotal + councilTotal;
 };
 
+
 // 2. Total Expenditure on Revenue Account
-// STATE:   Expenditure, majorHead 2011–3999, sector STATE
-// COUNCIL: Expenditure, majorHead 201–224, sector COUNCIL
+//
+// STATE:
+//   Expenditure, majorHead 2011–3999 + 8550, sector STATE
+//
+// COUNCIL:
+//   Expenditure, majorHead 201–224, sector COUNCIL
+
 const getTotalRevenueExpenditure = async (sector, dateRange) => {
+    // =========================
+    // STATE
+    // =========================
     if (sector === "STATE") {
         let rows = await prisma.expenditure.findMany({
             where: {
@@ -216,14 +296,27 @@ const getTotalRevenueExpenditure = async (sector, dateRange) => {
                 sector: "STATE",
                 ...(dateRange ? { voucherDate: dateRange } : {}),
             },
-            select: { grossAmount: true, majorHead: true },
+            select: {
+                grossAmount: true,
+                majorHead: true,
+            },
         });
 
-        rows = rows.filter((r) => headInRange(r.majorHead, 2011, 3999));
+        rows = rows.filter(
+            (r) =>
+                headInRange(r.majorHead, 2011, 3999) ||
+                String(r.majorHead) === "8550"
+        );
 
-        return rows.reduce((s, r) => s + safeNum(r.grossAmount), 0);
+        return rows.reduce(
+            (s, r) => s + safeNum(r.grossAmount),
+            0
+        );
     }
 
+    // =========================
+    // COUNCIL
+    // =========================
     if (sector === "COUNCIL") {
         let rows = await prisma.expenditure.findMany({
             where: {
@@ -231,18 +324,30 @@ const getTotalRevenueExpenditure = async (sector, dateRange) => {
                 sector: "COUNCIL",
                 ...(dateRange ? { voucherDate: dateRange } : {}),
             },
-            select: { grossAmount: true, majorHead: true },
+            select: {
+                grossAmount: true,
+                majorHead: true,
+            },
         });
 
-        rows = rows.filter((r) => headInRange(r.majorHead, 201, 224));
+        rows = rows.filter(
+            (r) => headInRange(r.majorHead, 201, 224)
+        );
 
-        return rows.reduce((s, r) => s + safeNum(r.grossAmount), 0);
+        return rows.reduce(
+            (s, r) => s + safeNum(r.grossAmount),
+            0
+        );
     }
 
+    // =========================
+    // CONSOLIDATED
+    // =========================
     const [stateTotal, councilTotal] = await Promise.all([
         getTotalRevenueExpenditure("STATE", dateRange),
         getTotalRevenueExpenditure("COUNCIL", dateRange),
     ]);
+
     return stateTotal + councilTotal;
 };
 
@@ -629,11 +734,22 @@ const getTaxesDeducted = async (sector, dateRange) => {
         return rows.reduce((s, r) => s + safeNum(r.amount), 0);
     }
 
-    const [stateTotal, councilTotal] = await Promise.all([
-        getTaxesDeducted("STATE", dateRange),
-        getTaxesDeducted("COUNCIL", dateRange),
-    ]);
-    return stateTotal + councilTotal;
+    // =========================
+    // CONSOLIDATED
+    // =========================
+    // NOT a STATE+COUNCIL sum here. CONSOLIDATED shows only
+    // challanFromBill rows matching COUNCIL_TAXES_DEDUCTED_TYPES, with
+    // no sector filter at all (so it isn't limited to sector "COUNCIL").
+    const consolidatedRows = await prisma.challanFromBill.findMany({
+        where: {
+            isActive: true,
+            amountType: { in: COUNCIL_TAXES_DEDUCTED_TYPES },
+            ...(dateRange ? { voucharDate: dateRange } : {}),
+        },
+        select: { amount: true },
+    });
+
+    return consolidatedRows.reduce((s, r) => s + safeNum(r.amount), 0);
 };
 
 // 20. Security Deposits Deducted
@@ -715,11 +831,14 @@ const getOtherRecoveries = async (sector, dateRange) => {
         return rows.reduce((s, r) => s + safeNum(r.amount), 0);
     }
 
-    const [stateTotal, councilTotal] = await Promise.all([
-        getOtherRecoveries("STATE", dateRange),
-        getOtherRecoveries("COUNCIL", dateRange),
-    ]);
-    return stateTotal + councilTotal;
+    // =========================
+    // CONSOLIDATED
+    // =========================
+    // NOT a STATE+COUNCIL sum here. The STATE branch above is defined
+    // entirely by OTHER_RECOVERIES_STATE_TYPES (Labour Cess, MDRRF, DMFT),
+    // which is used elsewhere too — so CONSOLIDATED excludes it and shows
+    // only the COUNCIL total.
+    return getOtherRecoveries("COUNCIL", dateRange);
 };
 
 // 25. Other Deposits
@@ -772,11 +891,14 @@ const getOtherDeposits = async (sector, dateRange) => {
         return cfbTotal + expenditureTotal;
     }
 
-    const [stateTotal, councilTotal] = await Promise.all([
-        getOtherDeposits("STATE", dateRange),
-        getOtherDeposits("COUNCIL", dateRange),
-    ]);
-    return stateTotal + councilTotal;
+    // =========================
+    // CONSOLIDATED
+    // =========================
+    // NOT a STATE+COUNCIL sum here. The STATE branch above is defined
+    // entirely by OTHER_RECOVERIES_STATE_TYPES (Labour Cess, MDRRF, DMFT),
+    // which is used elsewhere too — so CONSOLIDATED excludes it and shows
+    // only the COUNCIL total.
+    return getOtherDeposits("COUNCIL", dateRange);
 };
 
 // 26. Security Deposits Refunded
@@ -850,7 +972,12 @@ const getOpeningCashBalance = async (sector, openingYear) => {
     return rows.reduce((sum, r) => sum + safeNum(r.amount), 0);
 };
 
-// 34. Closing Cash Balance — unchanged, not part of this scope
+// 34. Closing Cash Balance — unchanged, not part of this scope.
+// NOTE: this is a pure sum-over-range helper (net movement inside
+// `dateRange`), not a true running balance. getStatement1Data's
+// roll-forward logic passes it a cumulative "upto" range (lte only, no
+// gte) when it needs the true balance as of a given date — see
+// getUptoDateRange above and its usage below.
 const getClosingCashBalance = async (sector, dateRange) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -883,7 +1010,20 @@ const getClosingCashBalance = async (sector, dateRange) => {
     const cashTotal = cashReceipts.reduce((sum, r) => sum + safeNum(r.rupeesInCash), 0);
     const challanTotal = challans.reduce((sum, r) => sum + safeNum(r.amount), 0);
 
-    return cashTotal - challanTotal;
+    const closingBalance = cashTotal - challanTotal;
+
+    console.log(
+        `[getClosingCashBalance] sector=${sector ?? "CONSOLIDATED"} range=${JSON.stringify(dateRange)}`
+    );
+    console.table([
+        { table: "cashReceipt", rows: cashReceipts.length, sum: cashTotal },
+        { table: "challan", rows: challans.length, sum: challanTotal },
+    ]);
+    console.log(
+        `[getClosingCashBalance] cashTotal=${cashTotal} - challanTotal=${challanTotal} = closingBalance=${closingBalance}`
+    );
+
+    return closingBalance;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -946,6 +1086,11 @@ const buildColumn = ({
     openingCashBalance,
     closingCashBalance,
     prevTreasuryBalance = 0,
+    // Only feeds treasuryBalanceDisbursementSide (never the receipt side,
+    // which stays anchored to prevTreasuryBalance / 0 as before). Used to
+    // roll the previous column's own Treasury Balance (disbursement side)
+    // into the current column's Treasury Balance.
+    carryForwardTreasuryBalance = 0,
 }) => {
     // ── Part I: Revenue ──────────────────────────────────────
     const revenueDiff = revenueReceipts - revenueExpenditure;
@@ -998,7 +1143,7 @@ const buildColumn = ({
     // ── Balances ─────────────────────────────────────────────
     const treasuryBalanceReceiptSide = prevTreasuryBalance;
     const treasuryBalanceDisbursementSide =
-        (totalReceipts - totalDisbursements) + prevTreasuryBalance;
+        (totalReceipts - totalDisbursements) + prevTreasuryBalance + carryForwardTreasuryBalance;
 
     const grandTotalReceipt =
         totalReceipts + openingCashBalance + treasuryBalanceReceiptSide;
@@ -1110,7 +1255,16 @@ export const getStatement1Data = async (sector, from, to) => {
             getSecurityDepositsRefunded(sector, currentDateRange),
             getOtherDeposits(sector, currentDateRange),
             getOpeningCashBalance(sector, openingYear),
-            getClosingCashBalance(sector, currentDateRange),
+            // Cumulative balance as of the END of the current period (lte
+            // only, no gte) — see getUptoDateRange. This is what makes the
+            // roll-forward below carry the TRUE running balance instead of
+            // just this single year's net movement.
+            (async () => {
+                console.log(`[getStatement1Data] fetching CURRENT closing cash — cumulative upto to=${to}`);
+                const val = await getClosingCashBalance(sector, getUptoDateRange(to));
+                console.log(`[getStatement1Data] CURRENT closing cash (cumulative upto ${to}) = ${val}`);
+                return val;
+            })(),
         ]);
 
         const [
@@ -1152,21 +1306,45 @@ export const getStatement1Data = async (sector, from, to) => {
             getSecurityDepositsRefunded(sector, previousDateRange),
             getOtherDeposits(sector, previousDateRange),
             getOpeningCashBalance(sector, previousOpeningYear),
-            getClosingCashBalance(sector, previousDateRange),
+            // Cumulative balance as of the END of the previous period (lte
+            // only, no gte) — the TRUE running closing balance for that FY,
+            // not just that FY's own net movement.
+            (async () => {
+                console.log(`[getStatement1Data] fetching PREVIOUS closing cash — cumulative upto previousTo=${previousTo}`);
+                const val = await getClosingCashBalance(sector, getUptoDateRange(previousTo));
+                console.log(`[getStatement1Data] PREVIOUS closing cash (cumulative upto ${previousTo}) = ${val}`);
+                return val;
+            })(),
         ]);
 
         // ── Opening / Closing Cash Balance roll-forward ────────────────
+        // prevClosingCashBalance and currClosingCashBalance are now both
+        // CUMULATIVE (computed with an "upto" lte-only range — see
+        // getUptoDateRange), so they already represent the true running
+        // balance as of previousTo/`to` — no further chaining/addition
+        // needed.
+        //
         // Opening Balance (Cash) row:
         //   - Previous Year column AND Current Year column both show the
-        //     previous year's closing cash (prevClosingCashBalance).
+        //     cumulative balance as of the end of the previous period
+        //     (prevClosingCashBalance).
         // Closing Balance (Cash) row:
-        //   - Previous Year column shows the previous year's closing cash
-        //     (prevClosingCashBalance) as-is.
-        //   - Current Year column shows a running/cumulative balance:
-        //     previous year's closing cash + current year's closing cash.
+        //   - Previous Year column shows that same cumulative balance
+        //     (prevClosingCashBalance) — previous column's opening equals
+        //     its own closing by this statement's convention.
+        //   - Current Year column shows the cumulative balance as of the
+        //     end of the CURRENT period (currClosingCashBalance), which
+        //     already includes everything up to and including this year.
         const rolledOpeningCashBalance = prevClosingCashBalance;
         const rolledPrevClosingCashBalance = prevClosingCashBalance;
-        const rolledCurrClosingCashBalance = prevClosingCashBalance + currClosingCashBalance;
+        const rolledCurrClosingCashBalance = currClosingCashBalance;
+
+        console.log(`[getStatement1Data] ROLL-FORWARD sector=${sector ?? "CONSOLIDATED"}`);
+        console.table([
+            { row: "Opening Balance (both columns)", value: rolledOpeningCashBalance },
+            { row: "Closing Balance (previous column)", value: rolledPrevClosingCashBalance },
+            { row: "Closing Balance (current column)", value: rolledCurrClosingCashBalance },
+        ]);
 
         const prevColumn = buildColumn({
             revenueReceipts: prevRevenueReceipts,
@@ -1212,6 +1390,11 @@ export const getStatement1Data = async (sector, from, to) => {
             openingCashBalance: rolledOpeningCashBalance,
             closingCashBalance: rolledCurrClosingCashBalance,
             prevTreasuryBalance: 0,
+            // Rolls the previous column's own Treasury Balance (disbursement
+            // side) into the current column's — e.g. 3066841548.00 (previous)
+            // + -30360825.00 (current's own) = 3036480723.00 shown as the
+            // current column's Treasury Balance as Cash Book.
+            carryForwardTreasuryBalance: prevColumn.treasuryBalanceDisbursementSide,
         });
 
         const fmt = (n) => Number(n ?? 0).toFixed(2);
