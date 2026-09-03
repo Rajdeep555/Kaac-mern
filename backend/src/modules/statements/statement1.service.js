@@ -67,6 +67,12 @@ const headInRange = (v, min, max) => {
 };
 const headExcluded = (v, list) => list.includes(parseHead(v));
 
+// The one challan currently used to bootstrap the receipt-side Treasury
+// Balance (see getTreasuryBalanceReceiptBootstrap below) — declared here
+// so it can also be excluded from Total Revenue Receipts (COUNCIL) to
+// avoid double-counting it.
+const TREASURY_BALANCE_BOOTSTRAP_CHALLAN_NO = "KAAC-27-1615";
+
 // ─────────────────────────────────────────────────────────────
 // amountType values used in `challanFromBill`, mapped from the
 // corresponding Expenditure deduction field name. Used to build the
@@ -138,7 +144,7 @@ const COUNCIL_OTHER_DEPOSITS_TYPES = [
 ];
 
 // majorHeads excluded from Council "Total Revenue Receipts" challan pull
-const COUNCIL_REVENUE_RECEIPT_EXCLUDED_HEADS = [661, 662, 663, 664];
+const COUNCIL_REVENUE_RECEIPT_EXCLUDED_HEADS = [661, 662, 663, 664, 8443];
 
 // ─────────────────────────────────────────────────────────────
 // RECEIPT SIDE FUNCTIONS
@@ -222,6 +228,8 @@ const getTotalRevenueReceipts = async (sector, dateRange) => {
                 where: {
                     isActive: true,
                     challanType: "COUNCIL",
+
+                    majorHead: { not: '8443' },
                     ...(dateRange ? { challanDate: dateRange } : {}),
                 },
                 select: {
@@ -1012,18 +1020,29 @@ const getClosingCashBalance = async (sector, dateRange) => {
 
     const closingBalance = cashTotal - challanTotal;
 
-    console.log(
-        `[getClosingCashBalance] sector=${sector ?? "CONSOLIDATED"} range=${JSON.stringify(dateRange)}`
-    );
-    console.table([
-        { table: "cashReceipt", rows: cashReceipts.length, sum: cashTotal },
-        { table: "challan", rows: challans.length, sum: challanTotal },
-    ]);
-    console.log(
-        `[getClosingCashBalance] cashTotal=${cashTotal} - challanTotal=${challanTotal} = closingBalance=${closingBalance}`
-    );
-
     return closingBalance;
+};
+
+// FROZEN BOOTSTRAP — Treasury Balance as Cash Book (RECEIPT side).
+// There is no transaction table to derive this from (unlike cash, which
+// is a pure sum over cashReceipt/challan). Until closing balances are
+// persisted per period (see discussion — a StatementPeriodClosing-style
+// table keyed by statementName/sector/period), this seeds the
+// receipt-side Treasury Balance with a fixed amount, shown identically
+// for BOTH the previous and current columns — EXCEPT for CONSOLIDATED's
+// current-year column, which is overridden further below in
+// getStatement1Data per a different, disbursement-derived formula.
+//
+// Deliberately NOT a live DB lookup: this value originated from challan
+// KAAC-27-1615's amount at the time it was captured, but is hardcoded
+// here so that editing/reducing that challan later does NOT change this
+// statement's Treasury Balance — the two are intentionally decoupled.
+// (KAAC-27-1615 itself is still excluded from Total Revenue Receipts
+// (COUNCIL) above, to avoid double-counting it there.)
+const TREASURY_BALANCE_RECEIPT_BOOTSTRAP_AMOUNT = 2961936280.00;
+
+const getTreasuryBalanceReceiptBootstrap = async () => {
+    return TREASURY_BALANCE_RECEIPT_BOOTSTRAP_AMOUNT;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1091,6 +1110,13 @@ const buildColumn = ({
     // roll the previous column's own Treasury Balance (disbursement side)
     // into the current column's Treasury Balance.
     carryForwardTreasuryBalance = 0,
+    // Feeds ONLY treasuryBalanceReceiptSide — independent of
+    // prevTreasuryBalance/carryForwardTreasuryBalance, which remain
+    // disbursement-side-only. Used to seed the receipt-side Treasury
+    // Balance from a known bootstrap value (e.g. a specific challan), OR
+    // from the CONSOLIDATED current-column derived-from-disbursement
+    // value computed in getStatement1Data.
+    receiptSideTreasuryBalance = 0,
 }) => {
     // ── Part I: Revenue ──────────────────────────────────────
     const revenueDiff = revenueReceipts - revenueExpenditure;
@@ -1141,7 +1167,7 @@ const buildColumn = ({
     const totalDisbursements = totalDisbursementPart1 + totalDisbursementPart2;
 
     // ── Balances ─────────────────────────────────────────────
-    const treasuryBalanceReceiptSide = prevTreasuryBalance;
+    const treasuryBalanceReceiptSide = receiptSideTreasuryBalance;
     const treasuryBalanceDisbursementSide =
         (totalReceipts - totalDisbursements) + prevTreasuryBalance + carryForwardTreasuryBalance;
 
@@ -1260,9 +1286,7 @@ export const getStatement1Data = async (sector, from, to) => {
             // roll-forward below carry the TRUE running balance instead of
             // just this single year's net movement.
             (async () => {
-                console.log(`[getStatement1Data] fetching CURRENT closing cash — cumulative upto to=${to}`);
                 const val = await getClosingCashBalance(sector, getUptoDateRange(to));
-                console.log(`[getStatement1Data] CURRENT closing cash (cumulative upto ${to}) = ${val}`);
                 return val;
             })(),
         ]);
@@ -1310,9 +1334,7 @@ export const getStatement1Data = async (sector, from, to) => {
             // only, no gte) — the TRUE running closing balance for that FY,
             // not just that FY's own net movement.
             (async () => {
-                console.log(`[getStatement1Data] fetching PREVIOUS closing cash — cumulative upto previousTo=${previousTo}`);
                 const val = await getClosingCashBalance(sector, getUptoDateRange(previousTo));
-                console.log(`[getStatement1Data] PREVIOUS closing cash (cumulative upto ${previousTo}) = ${val}`);
                 return val;
             })(),
         ]);
@@ -1339,12 +1361,10 @@ export const getStatement1Data = async (sector, from, to) => {
         const rolledPrevClosingCashBalance = prevClosingCashBalance;
         const rolledCurrClosingCashBalance = currClosingCashBalance;
 
-        console.log(`[getStatement1Data] ROLL-FORWARD sector=${sector ?? "CONSOLIDATED"}`);
-        console.table([
-            { row: "Opening Balance (both columns)", value: rolledOpeningCashBalance },
-            { row: "Closing Balance (previous column)", value: rolledPrevClosingCashBalance },
-            { row: "Closing Balance (current column)", value: rolledCurrClosingCashBalance },
-        ]);
+        // Receipt-side Treasury Balance bootstrap — same value shown for
+        // both columns by default (overridden for CONSOLIDATED's current
+        // column further below).
+        const treasuryBalanceReceiptBootstrap = await getTreasuryBalanceReceiptBootstrap();
 
         const prevColumn = buildColumn({
             revenueReceipts: prevRevenueReceipts,
@@ -1367,9 +1387,23 @@ export const getStatement1Data = async (sector, from, to) => {
             openingCashBalance: rolledOpeningCashBalance,
             closingCashBalance: rolledPrevClosingCashBalance,
             prevTreasuryBalance: 0,
+            // The previous column's own disbursement-side Treasury Balance
+            // must ALSO include the bootstrap amount (from challan
+            // KAAC-27-1615, frozen — see TREASURY_BALANCE_RECEIPT_BOOTSTRAP_AMOUNT),
+            // not just the receipt side. Without this, the current column's
+            // carry-forward (below) silently missed it too, since it just
+            // rolls forward whatever prevColumn.treasuryBalanceDisbursementSide
+            // computed to.
+            carryForwardTreasuryBalance: treasuryBalanceReceiptBootstrap,
+            receiptSideTreasuryBalance: treasuryBalanceReceiptBootstrap,
         });
 
-        const currColumn = buildColumn({
+        // Initial pass for the current column — uses the same frozen
+        // bootstrap for receiptSideTreasuryBalance as prevColumn. For
+        // CONSOLIDATED requests this gets overridden below with a
+        // disbursement-derived value; for STATE/COUNCIL-only requests
+        // this initial build IS the final currColumn.
+        let currColumn = buildColumn({
             revenueReceipts: currRevenueReceipts,
             revenueExpenditure: currRevenueExpenditure,
             capitalReceipts: currCapitalReceipts,
@@ -1393,19 +1427,66 @@ export const getStatement1Data = async (sector, from, to) => {
             // Rolls the previous column's own Treasury Balance (disbursement
             // side) into the current column's — e.g. 3066841548.00 (previous)
             // + -30360825.00 (current's own) = 3036480723.00 shown as the
-            // current column's Treasury Balance as Cash Book.
+            // current column's Treasury Balance as Cash Book (disbursement side).
             carryForwardTreasuryBalance: prevColumn.treasuryBalanceDisbursementSide,
+            receiptSideTreasuryBalance: treasuryBalanceReceiptBootstrap,
         });
+
+        // ── CONSOLIDATED-only override ──────────────────────────────────
+        // Current column's receipt-side Treasury Balance as Cash Book is
+        // NOT the frozen bootstrap here — it's derived from the current
+        // column's own already-computed disbursement-side numbers:
+        //
+        //   treasuryBalanceReceiptSide (current, CONSOLIDATED only)
+        //     = grandTotalDisbursement - closingCashBalance - totalReceipts
+        //
+        // This only changes the CURRENT year column, and only for
+        // CONSOLIDATED (sector undefined/null/"CONSOLIDATED") — STATE-only
+        // and COUNCIL-only requests, and the PREVIOUS column, keep using
+        // the frozen bootstrap as built above.
+        const isConsolidatedRequest = !sector || sector === "CONSOLIDATED";
+
+        if (isConsolidatedRequest) {
+            const derivedReceiptSideTreasuryBalance =
+                currColumn.grandTotalDisbursement -
+                currColumn.closingCashBalance -
+                currColumn.totalReceipts;
+
+            currColumn = buildColumn({
+                revenueReceipts: currRevenueReceipts,
+                revenueExpenditure: currRevenueExpenditure,
+                capitalReceipts: currCapitalReceipts,
+                capitalExpenditure: currCapitalExpenditure,
+                loanStateGovt: currLoanStateGovt,
+                loanOtherSources: currLoanOtherSources,
+                recoveriesLoans: currRecoveriesLoans,
+                recoveriesAdvances: currRecoveriesAdvances,
+                loanRepayGovt: currLoanRepayGovt,
+                loanRepayOther: currLoanRepayOther,
+                disbursementLoans: currDisbursementLoans,
+                disbursementAdvances: currDisbursementAdvances,
+                taxesDeducted: currTaxesDeducted,
+                securityDeducted: currSecurityDeducted,
+                otherRecoveries: currOtherRecoveries,
+                securityRefunded: currSecurityRefunded,
+                otherDeposits: currOtherDeposits,
+                openingCashBalance: rolledOpeningCashBalance,
+                closingCashBalance: rolledCurrClosingCashBalance,
+                prevTreasuryBalance: 0,
+                carryForwardTreasuryBalance: prevColumn.treasuryBalanceDisbursementSide,
+                receiptSideTreasuryBalance: derivedReceiptSideTreasuryBalance,
+            });
+        }
 
         const fmt = (n) => Number(n ?? 0).toFixed(2);
         const pair = (key) => [fmt(prevColumn[key]), fmt(currColumn[key])];
 
         // ── Sector breakdown — CONSOLIDATED only ──────────────────
         // Computes COUNCIL and STATE separately (current + previous
-        // period) so the frontend can show them as extra rows next to
+        // period) so the frontend can show them as extra rows alongside
         // the combined CONSOLIDATED totals. null for STATE/COUNCIL-only
         // requests, since there's nothing to break down there.
-        const isConsolidatedForBreakdown = !sector || sector === "CONSOLIDATED";
+        const isConsolidatedForBreakdown = isConsolidatedRequest;
 
         let sectorBreakdown = null;
 

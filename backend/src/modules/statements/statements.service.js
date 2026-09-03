@@ -1395,34 +1395,32 @@ export const getStatement4Data = async (sector, from, to) => {
 
 
 
-
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 2 - Capital Outlay - Progressive Capital Outlay
 // Data source: Expenditure table
 //
-// STATE:   grouped by the full head-of-account chain (major →
-//          subDetail), majorHead 4001–5999, label resolved via the
-//          Heads table full-chain match (same helpers Statement 5
-//          uses above: buildNormalizedCodeKey + getHeadsNameMap).
+// STATE:   grouped by majorHead ONLY, majorHead 4001–5999, label
+//          resolved via getMajorHeadNameMap (major-code -> name).
 // COUNCIL: grouped by majorHead ONLY, majorHead 440–443, label
-//          resolved via a dedicated major-only Heads lookup
-//          (getMajorHeadNameMap below).
+//          resolved via getMajorHeadNameMap.
 // CONSOLIDATED: union of the COUNCIL row set + the STATE row set
 //          (each computed with its own sector's rules above).
 //
-// PREVIOUS PERIOD: same convention as Statement 1 — the from/to
-// window shifted back one year via shiftYear(), same sector rules,
-// merged into the same grouping key so a head's previousYear and
-// currentYear sit on one row.
+// PREVIOUS YEAR column = the TWO financial years before the
+// selected one, merged together (e.g. selecting FY 2025-2026 shows
+// FY 2023-2024 + FY 2024-2025 combined in one "Previous Year"
+// figure). Because financial years run Apr->Mar back-to-back, two
+// consecutive FYs are one continuous date range, so this is a
+// single query with a wider window — not two queries summed.
+//
+// CURRENT YEAR column = the selected from/to as-is.
+// TOTAL = previousYear + currentYear.
 //
 // Date filtering uses voucherDate range (from/to).
 // ─────────────────────────────────────────────────────────────
 
-// Shifts a "YYYY-MM-DD" string by `delta` whole years (e.g. -1 for the
-// previous financial year), keeping month/day fixed. Used to build the
-// "previous period" column from the same from/to filter the user picked.
-// (Statement-2-local — was missing from this file, unlike Statement 1's
-// separate service where it already exists.)
+// Shifts a "YYYY-MM-DD" string by `delta` whole years (e.g. -1, -2),
+// keeping month/day fixed.
 const shiftYear = (dateStr, delta) => {
     if (!dateStr) return null;
     const d = new Date(`${dateStr}T00:00:00.000Z`);
@@ -1430,9 +1428,36 @@ const shiftYear = (dateStr, delta) => {
     return d.toISOString().slice(0, 10);
 };
 
-// ── COUNCIL: major-only name lookup against Heads ──────────────
-// COUNCIL rows only ever have a majorHead code (no sub-levels), so
-// this is a simple code -> name map, not a full-chain match.
+// Builds an Indian financial-year label ("2025-2026") from a from/to
+// date pair. Assumes from/to were chosen as a financial-year window
+// (Apr 1 -> Mar 31). Falls back gracefully if only one bound exists.
+const getFinancialYearLabel = (from, to) => {
+    const fromYear = from ? new Date(`${from}T00:00:00.000Z`).getUTCFullYear() : null;
+    const toYear = to ? new Date(`${to}T00:00:00.000Z`).getUTCFullYear() : null;
+
+    if (fromYear && toYear) {
+        return fromYear === toYear ? `${fromYear}` : `${fromYear}-${toYear}`;
+    }
+    if (fromYear) return `${fromYear}`;
+    if (toYear) return `${toYear}`;
+    return "Current Period";
+};
+
+// Label for the merged two-FY "previous year" window, e.g.
+// "2023-2024 & 2024-2025".
+const getMergedPreviousLabel = (from, to) => {
+    const oneYearAgoLabel = getFinancialYearLabel(shiftYear(from, -1), shiftYear(to, -1));
+    const twoYearsAgoLabel = getFinancialYearLabel(shiftYear(from, -2), shiftYear(to, -2));
+    if (twoYearsAgoLabel === "Current Period" || oneYearAgoLabel === "Current Period") {
+        return "Previous Period";
+    }
+    return `${twoYearsAgoLabel} & ${oneYearAgoLabel}`;
+};
+
+// ── Major-only name lookup against Heads ────────────────────────
+// Both STATE and COUNCIL rows in Statement 2 only ever need a
+// majorHead code -> name mapping (no sub-levels), so this is a
+// simple code -> name map, not a full-chain match.
 const getMajorHeadNameMap = async (sector) => {
     const where = { isActive: true };
     if (sector) where.sector = sector;
@@ -1472,138 +1497,13 @@ const currentYearAmountOf = (item) =>
     Number(item.payEstablishment ?? 0) +
     Number(item.allowanceHonorary ?? 0);
 
-// ── STATE: full head-chain grouping, majorHead 4001–5999, names
-// resolved via the same full-chain Heads match Statement 5 uses.
-// Fetches both the current and previous date windows and merges
-// them into one row per head-chain. ──
-const buildStateRows = async (currentDateRange, previousDateRange) => {
-    const isCapitalHead = (majorHead) => {
+// Shared builder — one sector, two windows (previous = merged 2 FYs,
+// current = selected FY), grouped by majorHead code only.
+const buildMajorHeadRows = async ({ sector, currentDateRange, previousDateRange, minCode, maxCode }) => {
+    const isInRange = (majorHead) => {
         if (!majorHead) return false;
         const num = parseInt(majorHead, 10);
-        return !Number.isNaN(num) && num >= 4001 && num <= 5999;
-    };
-
-    const selectFields = {
-        majorHead: true,
-        subMajorHead: true,
-        minorHead: true,
-        subHead: true,
-        subSubHead: true,
-        detailHead: true,
-        subDetailHead: true,
-        works: true,
-        grantsInAid: true,
-        contingencies: true,
-        payOfficers: true,
-        payEstablishment: true,
-        allowanceHonorary: true,
-    };
-
-    const [currentExpenditures, previousExpenditures] = await Promise.all([
-        prisma.expenditure.findMany({
-            where: {
-                isActive: true,
-                sector: "STATE",
-                ...(currentDateRange ? { voucherDate: currentDateRange } : {}),
-            },
-            select: selectFields,
-        }),
-        prisma.expenditure.findMany({
-            where: {
-                isActive: true,
-                sector: "STATE",
-                ...(previousDateRange ? { voucherDate: previousDateRange } : {}),
-            },
-            select: selectFields,
-        }),
-    ]);
-
-    const currentCapital = currentExpenditures.filter((item) => isCapitalHead(item.majorHead));
-    const previousCapital = previousExpenditures.filter((item) => isCapitalHead(item.majorHead));
-
-    logger.info(
-        `[STATEMENT2] STATE capital expenditure rows — current: ${currentCapital.length}, previous: ${previousCapital.length}`
-    );
-
-    // Reuses getHeadsNameMap (declared above for Statement 5) —
-    // full 7-level exact-chain match against the Heads table.
-    const headsNameMap = await getHeadsNameMap("STATE");
-
-    const buildHeadKey = (item) =>
-        [
-            item.majorHead,
-            item.subMajorHead,
-            item.minorHead,
-            item.subHead,
-            item.subSubHead,
-            item.detailHead,
-            item.subDetailHead,
-        ]
-            .filter((p) => p && p.trim() !== "" && p !== "-")
-            .join("-");
-
-    const buildLabel = (item, headKey) => {
-        const codeKey = buildNormalizedCodeKey({
-            majorHeadCode: item.majorHead,
-            subMajorCode: item.subMajorHead,
-            minorHeadCode: item.minorHead,
-            subHeadCode: item.subHead,
-            subSubHeadCode: item.subSubHead,
-            detailHeadCode: item.detailHead,
-            subDetailHeadCode: item.subDetailHead,
-        });
-        const names = headsNameMap.get(codeKey) ?? {};
-
-        const levels = [
-            { code: item.majorHead, name: names.majorHeadName },
-            { code: item.subMajorHead, name: names.subMajorName },
-            { code: item.minorHead, name: names.minorHeadName },
-            { code: item.subHead, name: names.subHeadName },
-            { code: item.subSubHead, name: names.subSubHeadName },
-            { code: item.detailHead, name: names.detailHeadName },
-            { code: item.subDetailHead, name: names.subDetailHeadName },
-        ].filter((l) => l.code && String(l.code).trim() !== "" && l.code !== "-");
-
-        return levels.length
-            ? levels.map((l) => (l.name ? `${l.code} - ${l.name}` : l.code)).join(" / ")
-            : headKey; // fallback: raw joined codes if nothing resolves
-    };
-
-    const groupMap = new Map();
-
-    const ensureGroup = (item, headKey) => {
-        if (!groupMap.has(headKey)) {
-            groupMap.set(headKey, {
-                majorHead: buildLabel(item, headKey),
-                previousYear: 0,
-                currentYear: 0,
-            });
-        }
-        return groupMap.get(headKey);
-    };
-
-    for (const item of currentCapital) {
-        const headKey = buildHeadKey(item);
-        ensureGroup(item, headKey).currentYear += currentYearAmountOf(item);
-    }
-
-    for (const item of previousCapital) {
-        const headKey = buildHeadKey(item);
-        ensureGroup(item, headKey).previousYear += currentYearAmountOf(item);
-    }
-
-    return Array.from(groupMap.values());
-};
-
-// ── COUNCIL: grouped by majorHead only, majorHead 440–443,
-// "code - name" label via getMajorHeadNameMap. Fetches both the
-// current and previous date windows and merges them into one row
-// per major head. ──
-const buildCouncilRows = async (currentDateRange, previousDateRange) => {
-    const isCouncilCapitalHead = (majorHead) => {
-        if (!majorHead) return false;
-        const num = parseInt(majorHead, 10);
-        return !Number.isNaN(num) && num >= 440 && num <= 443;
+        return !Number.isNaN(num) && num >= minCode && num <= maxCode;
     };
 
     const selectFields = {
@@ -1620,7 +1520,7 @@ const buildCouncilRows = async (currentDateRange, previousDateRange) => {
         prisma.expenditure.findMany({
             where: {
                 isActive: true,
-                sector: "COUNCIL",
+                sector,
                 ...(currentDateRange ? { voucherDate: currentDateRange } : {}),
             },
             select: selectFields,
@@ -1628,21 +1528,22 @@ const buildCouncilRows = async (currentDateRange, previousDateRange) => {
         prisma.expenditure.findMany({
             where: {
                 isActive: true,
-                sector: "COUNCIL",
+                sector,
+                // previousDateRange spans BOTH prior financial years merged
                 ...(previousDateRange ? { voucherDate: previousDateRange } : {}),
             },
             select: selectFields,
         }),
     ]);
 
-    const currentCapital = currentExpenditures.filter((item) => isCouncilCapitalHead(item.majorHead));
-    const previousCapital = previousExpenditures.filter((item) => isCouncilCapitalHead(item.majorHead));
+    const currentCapital = currentExpenditures.filter((item) => isInRange(item.majorHead));
+    const previousCapital = previousExpenditures.filter((item) => isInRange(item.majorHead));
 
     logger.info(
-        `[STATEMENT2] COUNCIL capital expenditure rows — current: ${currentCapital.length}, previous: ${previousCapital.length}`
+        `[STATEMENT2] ${sector} capital expenditure rows — current: ${currentCapital.length}, previous (2 FYs merged): ${previousCapital.length}`
     );
 
-    const majorHeadNameMap = await getMajorHeadNameMap("COUNCIL");
+    const majorHeadNameMap = await getMajorHeadNameMap(sector);
 
     const groupMap = new Map();
 
@@ -1670,6 +1571,14 @@ const buildCouncilRows = async (currentDateRange, previousDateRange) => {
     return Array.from(groupMap.values());
 };
 
+// STATE: majorHead 4001–5999
+const buildStateRows = (currentDateRange, previousDateRange) =>
+    buildMajorHeadRows({ sector: "STATE", currentDateRange, previousDateRange, minCode: 4001, maxCode: 5999 });
+
+// COUNCIL: majorHead 440–443
+const buildCouncilRows = (currentDateRange, previousDateRange) =>
+    buildMajorHeadRows({ sector: "COUNCIL", currentDateRange, previousDateRange, minCode: 440, maxCode: 443 });
+
 export const getStatement2Data = async (sector, from, to) => {
     try {
         logger.info(
@@ -1678,11 +1587,18 @@ export const getStatement2Data = async (sector, from, to) => {
 
         const currentDateRange = getDateRangeFromParams(from, to);
 
-        // Previous period = same from/to window, shifted back one year —
-        // same convention as Statement 1.
-        const previousFrom = shiftYear(from, -1);
+        // Previous window = the two FYs immediately before the selected
+        // one, merged into a single continuous range:
+        //   selected FY 2025-2026 (2025-04-01 -> 2026-03-31)
+        //   -> previous window: 2023-04-01 (shiftYear(from,-2))
+        //                    -> 2025-03-31 (shiftYear(to,-1))
+        //      which is exactly FY2023-2024 + FY2024-2025 back to back.
+        const previousFrom = shiftYear(from, -2);
         const previousTo = shiftYear(to, -1);
         const previousDateRange = getDateRangeFromParams(previousFrom, previousTo);
+
+        const currentFyLabel = getFinancialYearLabel(from, to);
+        const previousFyLabel = getMergedPreviousLabel(from, to);
 
         let combinedRows = [];
 
@@ -1707,14 +1623,8 @@ export const getStatement2Data = async (sector, from, to) => {
             total: (item.previousYear + item.currentYear).toFixed(2),
         }));
 
-        const grandTotalPreviousYear = rows.reduce(
-            (sum, r) => sum + Number(r.previousYear),
-            0
-        );
-        const grandTotalCurrentYear = rows.reduce(
-            (sum, r) => sum + Number(r.currentYear),
-            0
-        );
+        const grandTotalPreviousYear = rows.reduce((sum, r) => sum + Number(r.previousYear), 0);
+        const grandTotalCurrentYear = rows.reduce((sum, r) => sum + Number(r.currentYear), 0);
         const grandTotal = grandTotalPreviousYear + grandTotalCurrentYear;
 
         logger.info(`[STATEMENT2] Total rows returned: ${rows.length}`, {
@@ -1729,6 +1639,10 @@ export const getStatement2Data = async (sector, from, to) => {
                 currentYear: grandTotalCurrentYear.toFixed(2),
                 total: grandTotal.toFixed(2),
             },
+            period: {
+                current: currentFyLabel,
+                previous: previousFyLabel,
+            },
         };
     } catch (error) {
         logger.error(`Error fetching Statement 2 data: ${error.message}`, {
@@ -1737,7 +1651,6 @@ export const getStatement2Data = async (sector, from, to) => {
         throw error;
     }
 };
-
 
 
 

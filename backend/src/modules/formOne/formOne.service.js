@@ -47,6 +47,139 @@ const COUNCIL_STATE_TREASURY_TYPES = [
     "MC Forest Royalty",
 ];
 
+// ─────────────────────────────────────────────────────────────
+// NEW — Counterfoil carry-forward balance logic.
+//
+// A CashReceipt (e.g. counterfoilNo "C725") is a lump sum collected in
+// cash. Over time, Challan rows sharing that SAME counterfoilNo get
+// posted, depositing pieces of that lump sum into treasury. Whatever
+// hasn't yet been deposited is still "sitting in cash" and needs to
+// keep showing up on the receipt (DR) side's cash column, in every
+// subsequent period's cashbook, until the balance nets to zero.
+//
+// Rule used here (see chat for the explicit assumptions):
+//   balance(counterfoilNo, asOf) =
+//       SUM(CashReceipt.rupeesInCash WHERE counterfoilNo = X AND date <= asOf)
+//     - SUM(Challan.amount          WHERE counterfoilNo = X AND challanDate <= asOf)
+//
+// A synthetic row is added to a period's cashbook for counterfoil X
+// only if:
+//   - X's CashReceipt originated BEFORE this period's `from` (so the
+//     original entry isn't already shown in full by the normal
+//     CashReceipt pull for this same period — avoids double counting)
+//   - balance(X, to) > CF_BALANCE_THRESHOLD (i.e. not yet fully
+//     deposited/closed out)
+// ─────────────────────────────────────────────────────────────
+const CF_BALANCE_THRESHOLD = 0.01;
+
+const computeCounterfoilCarryForwards = async (sector, from, to) => {
+    const isConsolidated = sector === "CONSOLIDATED";
+
+    // Same scoping convention used everywhere else in this file:
+    // CONSOLIDATED = no sector/type filter (i.e. STATE + COUNCIL summed
+    // in a single query), never two merged per-sector calls — this is
+    // what keeps CONSOLIDATED from double-counting a counterfoil.
+    const cashReceiptSectorFilter = !isConsolidated ? { sector } : {};
+    const challanTypeFilter = !isConsolidated ? { challanType: sector } : {};
+
+    // Pull every CashReceipt / Challan row sharing a counterfoilNo, up
+    // through the END of this period (`to`) — we need full history
+    // (not just this period's window) to compute the true cumulative
+    // balance.
+    const [allCashReceipts, allChallans] = await Promise.all([
+        prisma.cashReceipt.findMany({
+            where: {
+                isActive: true,
+                date: { lte: to },
+                counterfoilNo: { not: null },
+                ...cashReceiptSectorFilter,
+            },
+            select: { counterfoilNo: true, rupeesInCash: true, date: true },
+        }),
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanDate: { lte: to },
+                counterfoilNo: { not: null },
+                ...challanTypeFilter,
+            },
+            select: { counterfoilNo: true, amount: true },
+        }),
+    ]);
+
+    // Group CashReceipts by counterfoilNo: total originally received
+    // (cumulative), and the EARLIEST date that counterfoil was ever
+    // received on — used to decide whether it originates in a prior
+    // period (and therefore needs a carry-forward row) or in this one
+    // (already shown via the normal CashReceipt pull, so skip here).
+    const receiptsByCounterfoil = new Map();
+    allCashReceipts.forEach((r) => {
+        const key = (r.counterfoilNo ?? "").trim();
+        if (!key || key === "0") return;
+
+        const amt = r.rupeesInCash ? parseFloat(r.rupeesInCash) : 0;
+        const existing = receiptsByCounterfoil.get(key) ?? {
+            total: 0,
+            earliestDate: null,
+        };
+        existing.total += amt;
+        if (!existing.earliestDate || (r.date && r.date < existing.earliestDate)) {
+            existing.earliestDate = r.date;
+        }
+        receiptsByCounterfoil.set(key, existing);
+    });
+
+    // Group Challans by counterfoilNo: cumulative amount deposited to
+    // treasury against that counterfoil, through `to`.
+    const challansByCounterfoil = new Map();
+    allChallans.forEach((c) => {
+        const key = (c.counterfoilNo ?? "").trim();
+        if (!key || key === "0") return;
+
+        const amt = c.amount ? parseFloat(c.amount) : 0;
+        challansByCounterfoil.set(
+            key,
+            (challansByCounterfoil.get(key) ?? 0) + amt
+        );
+    });
+
+    const carryForwardRows = [];
+
+    for (const [counterfoilNo, { total, earliestDate }] of receiptsByCounterfoil.entries()) {
+        // Skip counterfoils whose original CashReceipt falls INSIDE this
+        // period — that row is already shown in full by the normal DR-side
+        // CashReceipt pull (Condition 1 below). Only counterfoils carried
+        // over from an earlier period get a synthetic balance row here.
+        const originatesBeforePeriod = earliestDate && earliestDate < from;
+        if (!originatesBeforePeriod) continue;
+
+        const challanTotal = challansByCounterfoil.get(counterfoilNo) ?? 0;
+        const balance = total - challanTotal;
+
+        if (balance <= CF_BALANCE_THRESHOLD) continue;
+
+        const row = createEmptyRow();
+        row.id = `CF-${sector ?? "CONSOLIDATED"}-${counterfoilNo}`;
+        row.receiptDate = formatDisplayDate(to);
+        row.receiptDateKey = sortableDateKey(to);
+        row.receiptCounterfoilNo = counterfoilNo;
+        row.receiptParticulars = `Balance carried forward - ${counterfoilNo}`;
+        row.receiptCashAmount = parseFloat(balance.toFixed(2));
+        row.receiptPlaColumn = null;
+        row.receiptClassification = null;
+        carryForwardRows.push(row);
+    }
+
+    logger.info(`[CASHBOOK] Counterfoil carry-forward rows computed`, {
+        sector,
+        to: to?.toISOString?.().slice(0, 10),
+        counterfoilsConsidered: receiptsByCounterfoil.size,
+        carryForwardRowsAdded: carryForwardRows.length,
+    });
+
+    return carryForwardRows;
+};
+
 // function getFyRange(year) {
 //     const from = new Date(Date.UTC(year, 3, 1, 0, 0, 0, 0));
 //     const to = new Date(Date.UTC(year + 1, 2, 31, 23, 59, 59, 999));
@@ -239,6 +372,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             expenditures,
             stateChallans,
             councilCrossStateTreasuryRows, // ← NEW
+            counterfoilCarryForwardRows, // ← NEW
         ] = await Promise.all([
             // ── CashReceipt: has sector field (default COUNCIL) ─────
             // Filter by sector unless CONSOLIDATED
@@ -320,6 +454,12 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
                     orderBy: { voucharDate: "asc" },
                 })
                 : Promise.resolve([]),
+
+            // ── NEW: counterfoil carry-forward balances (cash column,
+            // receipt side), scoped consistently with `sector` — see
+            // computeCounterfoilCarryForwards for the CONSOLIDATED
+            // double-count-avoidance rule.
+            computeCounterfoilCarryForwards(sector, from, to),
         ]);
 
         logger.info(`[CASHBOOK] Raw fetch counts`, {
@@ -330,6 +470,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             expenditures: expenditures.length,
             stateChallans: stateChallans.length,
             councilCrossStateTreasuryRows: councilCrossStateTreasuryRows.length,
+            counterfoilCarryForwardRows: counterfoilCarryForwardRows.length,
         });
 
         const challansWithoutCounterfoil = challans.filter(
@@ -387,6 +528,14 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             row.receiptClassification = null;
             rows.push(row);
         });
+
+        // ════════════════════════════════════════════════════════
+        // DR SIDE — CONDITION 1B (NEW): Counterfoil carry-forward
+        // balances — the still-undeposited portion of an earlier
+        // period's CashReceipt, keyed by counterfoilNo, shown in this
+        // period's cash column until it nets to zero.
+        // ════════════════════════════════════════════════════════
+        counterfoilCarryForwardRows.forEach((row) => rows.push(row));
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 2: Challan WITHOUT counterfoilNo
@@ -758,24 +907,13 @@ export const saveCashbookSummary = async ({
     disbursementTreasuryPla,
 }) => {
     try {
-        // 🔍 STEP 5 — what did the service function itself receive as args?
-        // console.log("🔵 [saveCashbookSummary] received fromDate:", fromDate, typeof fromDate);
-        // console.log("🔵 [saveCashbookSummary] received toDate:", toDate, typeof toDate);
-
-        // logger.info(
-        //     `Saving cashbook summary for sector: ${sector}, year: ${year}, range: ${fromDate ?? "-"} to ${toDate ?? "-"}`
-        // );
-
         await prisma.cashbookInformations.updateMany({
             where: { sector: sector ?? undefined, isActive: true },
             data: { isActive: false },
         });
 
-        // 🔍 STEP 6 — what are we about to write into Prisma's `data` object?
         const parsedFromDate = fromDate ? new Date(fromDate) : null;
         const parsedToDate = toDate ? new Date(toDate) : null;
-        // console.log("🔵 [saveCashbookSummary] parsedFromDate:", parsedFromDate, "valid:", parsedFromDate && !isNaN(parsedFromDate));
-        // console.log("🔵 [saveCashbookSummary] parsedToDate:", parsedToDate, "valid:", parsedToDate && !isNaN(parsedToDate));
 
         const createData = {
             sector: sector ?? null,
@@ -790,20 +928,13 @@ export const saveCashbookSummary = async ({
             disbursementTreasuryPla: disbursementTreasuryPla ?? 0,
             isActive: true,
         };
-        // console.log("🔵 [saveCashbookSummary] final prisma.create data:", createData);
 
         const newEntry = await prisma.cashbookInformations.create({
             data: createData,
         });
 
-        // 🔍 STEP 7 — what did Prisma actually persist and return?
-        // console.log("🟢 [saveCashbookSummary] newEntry from Prisma:", newEntry);
-
-        // logger.info(`Cashbook summary saved — id: ${newEntry.id}`);
         return newEntry;
     } catch (error) {
-        // console.log("🔴 [saveCashbookSummary] error:", error.message);
-        // logger.error(`Error saving cashbook summary: ${error.message}`);
         throw error;
     }
 };
@@ -811,35 +942,25 @@ export const saveCashbookSummary = async ({
 // ─────────────────────────────────────────────────────────────
 // DEDUP NOTE — read before relying on CONSOLIDATED totals
 //
-// Your frontend (Form1.jsx) does NOT call this service with
-// sector = "CONSOLIDATED". It calls it twice — once with "COUNCIL",
-// once with "STATE" — and merges the two row arrays client-side.
+// If your frontend still calls this service twice (once "COUNCIL",
+// once "STATE") and merges client-side rather than calling it once
+// with sector = "CONSOLIDATED":
+//   • The 4-type STATE treasury ChallanFromBill rows will appear
+//     TWICE when merged (see the original note this replaces) unless
+//     you filter out one prefix before combining.
+//   • The NEW counterfoil carry-forward rows will NOT double-count in
+//     that merge scenario, because each per-sector call only sums
+//     CashReceipts/Challans belonging to that same sector — a given
+//     counterfoilNo's CashReceipt.sector determines which single call
+//     produces its carry-forward row.
+//   • Day-total rows still won't merge into one combined total per
+//     date across two separate calls — that logic would need to move
+//     to the frontend after merging, same as before.
 //
-// With this change:
-//   • sector = "COUNCIL"  → now ALSO includes the 4 treasury-type
-//     ChallanFromBill rows where the underlying record's sector is
-//     STATE (id prefix "CFB-DR-STATE-FOR-COUNCIL-{id}").
-//   • sector = "STATE"    → unchanged — cfbStateRows already
-//     produces its own receipt entry for those same records
-//     (id prefix "CFB-DR-STATE-{id}").
-//
-// So when the frontend merges COUNCIL + STATE for a CONSOLIDATED
-// view, each of these 4-type STATE treasury records will appear
-// TWICE — once under each prefix — and CONSOLIDATED's receipt
-// Treasury PLA total will be inflated by that overlap.
-//
-// If that double-counting is not intended for CONSOLIDATED, the
-// simplest fix is a frontend-side filter when merging: drop rows
-// whose id starts with "CFB-DR-STATE-FOR-COUNCIL-" from the STATE
-// call's contribution (or vice versa) before combining. Let me
-// know and I'll send that Form1.jsx change too.
-//
-// NOTE ON DAY-TOTAL ROWS: since Form1.jsx merges two separate calls
-// (COUNCIL + STATE) for a CONSOLIDATED view, each call now returns
-// its OWN day-total rows independently — merging them client-side
-// will produce two separate day-total rows per date (one from each
-// sector's fetch) rather than one combined total. If you want a
-// single merged day-total for CONSOLIDATED, that logic needs to move
-// to Form1.jsx after the merge, using the same buildDayTotalRow
-// approach on the combined array. Let me know if you want that.
+// If instead you call this service ONCE with sector = "CONSOLIDATED",
+// all three concerns above are avoided by construction: every filter
+// in this file (including the new carry-forward logic) drops its
+// sector/challanType scoping and sums across both sectors in a single
+// query, matching the pattern already used by CONSOLIDATED elsewhere
+// in this codebase.
 // ─────────────────────────────────────────────────────────────

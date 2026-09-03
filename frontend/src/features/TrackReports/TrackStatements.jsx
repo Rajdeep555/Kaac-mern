@@ -16,13 +16,13 @@ const SECTOR_LABELS = {
 };
 
 const STATEMENT_LABELS = {
-  1: "Opening Balance",
-  2: "Receipts Summary",
-  3: "Expenditure Summary",
-  4: "Bank Reconciliation",
-  5: "Fund Position",
-  6: "Scheme-wise Statement",
-  7: "Closing Balance",
+  1: "Statement",
+  2: "Statement",
+  3: "Statement",
+  4: "Statement",
+  5: "Statement",
+  6: "Statement",
+  7: "Statement",
 };
 
 const TrackStatements = () => {
@@ -74,7 +74,7 @@ const TrackStatements = () => {
   // ✅ Download statement metadata as CSV
   const handleDownload = useCallback(() => {
     const rows = [
-      ["Statement No", "Statement Name", "Sector", "From", "To"],
+      ["Statement No", "Sector", "From", "To"],
       [
         activeStep,
         STATEMENT_LABELS[activeStep] || "",
@@ -664,8 +664,7 @@ const TrackStatements = () => {
                   fontWeight: "600",
                   fontSize: "13px",
                 }}>
-                Statement No. {activeStep} —{" "}
-                {STATEMENT_LABELS[activeStep] || "Register"}
+                Statement No. {activeStep}
               </span>
             </div>
             <span
