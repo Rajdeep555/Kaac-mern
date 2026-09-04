@@ -1117,6 +1117,13 @@ const buildColumn = ({
     // from the CONSOLIDATED current-column derived-from-disbursement
     // value computed in getStatement1Data.
     receiptSideTreasuryBalance = 0,
+    // NEW — CONSOLIDATED-only, current-column-only adjustment folded into
+    // Treasury Balance as Cash Book (DISBURSEMENT side). Equal to
+    // closingBalanceDiff = prevClosingCashBalance - currClosingCashBalance,
+    // computed once in getStatement1Data and passed in here. The previous
+    // column always leaves this at its default of 0 — "previous year no
+    // changes required" per spec.
+    treasuryBalanceDisbursementAdjustment = 0,
 }) => {
     // ── Part I: Revenue ──────────────────────────────────────
     const revenueDiff = revenueReceipts - revenueExpenditure;
@@ -1169,7 +1176,10 @@ const buildColumn = ({
     // ── Balances ─────────────────────────────────────────────
     const treasuryBalanceReceiptSide = receiptSideTreasuryBalance;
     const treasuryBalanceDisbursementSide =
-        (totalReceipts - totalDisbursements) + prevTreasuryBalance + carryForwardTreasuryBalance;
+        (totalReceipts - totalDisbursements) +
+        prevTreasuryBalance +
+        carryForwardTreasuryBalance +
+        treasuryBalanceDisbursementAdjustment;
 
     const grandTotalReceipt =
         totalReceipts + openingCashBalance + treasuryBalanceReceiptSide;
@@ -1366,6 +1376,55 @@ export const getStatement1Data = async (sector, from, to) => {
         // column further below).
         const treasuryBalanceReceiptBootstrap = await getTreasuryBalanceReceiptBootstrap();
 
+        // CONSOLIDATED-only request flag — declared here (before the
+        // column builds) since it now also gates the Other
+        // Recoveries/Other Deposits adjustment below, not just the
+        // Treasury Balance receipt-side override further down.
+        const isConsolidatedRequest = !sector || sector === "CONSOLIDATED";
+
+        // ── CONSOLIDATED-only: Other Recoveries / Other Deposits adjustment ──
+        // Current year column only. Bumped by the year-over-year closing
+        // cash balance diff:
+        //   closingBalanceDiff = previous FY closing cash - current FY closing cash
+        //   diff > 0  -> add diff to Other Deposits (disbursement side)
+        //   diff < 0  -> add abs(diff) to Other Recoveries (receipt side)
+        //   diff == 0 -> no adjustment either way
+        // Computed fresh from the already-rolled closing balances each
+        // time, so this keeps working correctly for future years without
+        // further code changes — "current" and "previous" just shift
+        // forward automatically. STATE-only/COUNCIL-only requests and the
+        // previous column are untouched (adjustedCurr* fall back to the
+        // plain fetched values).
+        //
+        // closingBalanceDiff is also reused below, unchanged, to bump the
+        // current column's Treasury Balance as Cash Book (disbursement
+        // side) by the same amount — "applied in two places per spec,
+        // computed once here."
+        let adjustedCurrOtherDeposits = currOtherDeposits;
+        let adjustedCurrOtherRecoveries = currOtherRecoveries;
+        let closingBalanceDiff = 0;
+
+
+        if (isConsolidatedRequest) {
+            closingBalanceDiff = rolledPrevClosingCashBalance - rolledCurrClosingCashBalance;
+
+           
+
+            if (closingBalanceDiff > 0) {
+                adjustedCurrOtherDeposits = currOtherDeposits + closingBalanceDiff;
+                console.log(
+                    `[OtherRecoveries/Deposits adjustment] diff>0 -> adjustedCurrOtherDeposits=${adjustedCurrOtherDeposits}`
+                );
+            } else if (closingBalanceDiff < 0) {
+                adjustedCurrOtherRecoveries = currOtherRecoveries + Math.abs(closingBalanceDiff);
+                console.log(
+                    `[OtherRecoveries/Deposits adjustment] diff<0 -> adjustedCurrOtherRecoveries=${adjustedCurrOtherRecoveries}`
+                );
+            } else {
+                console.log(`[OtherRecoveries/Deposits adjustment] diff===0 -> no adjustment`);
+            }
+        }
+
         const prevColumn = buildColumn({
             revenueReceipts: prevRevenueReceipts,
             revenueExpenditure: prevRevenueExpenditure,
@@ -1396,6 +1455,7 @@ export const getStatement1Data = async (sector, from, to) => {
             // computed to.
             carryForwardTreasuryBalance: treasuryBalanceReceiptBootstrap,
             receiptSideTreasuryBalance: treasuryBalanceReceiptBootstrap,
+            // Previous year: no changes required — left at its default (0).
         });
 
         // Initial pass for the current column — uses the same frozen
@@ -1418,9 +1478,9 @@ export const getStatement1Data = async (sector, from, to) => {
             disbursementAdvances: currDisbursementAdvances,
             taxesDeducted: currTaxesDeducted,
             securityDeducted: currSecurityDeducted,
-            otherRecoveries: currOtherRecoveries,
+            otherRecoveries: adjustedCurrOtherRecoveries,
             securityRefunded: currSecurityRefunded,
-            otherDeposits: currOtherDeposits,
+            otherDeposits: adjustedCurrOtherDeposits,
             openingCashBalance: rolledOpeningCashBalance,
             closingCashBalance: rolledCurrClosingCashBalance,
             prevTreasuryBalance: 0,
@@ -1430,27 +1490,34 @@ export const getStatement1Data = async (sector, from, to) => {
             // current column's Treasury Balance as Cash Book (disbursement side).
             carryForwardTreasuryBalance: prevColumn.treasuryBalanceDisbursementSide,
             receiptSideTreasuryBalance: treasuryBalanceReceiptBootstrap,
+            // CONSOLIDATED-only, current column only: fold the same
+            // closingBalanceDiff used for Other Recoveries/Other Deposits
+            // above into the Treasury Balance (disbursement side) too.
+            // STATE-only/COUNCIL-only requests keep this at 0.
+            treasuryBalanceDisbursementAdjustment: isConsolidatedRequest ? closingBalanceDiff : 0,
         });
+
+        console.log(
+            `[currColumn initial build] otherRecoveries(passed)=${adjustedCurrOtherRecoveries} otherDeposits(passed)=${adjustedCurrOtherDeposits} closingBalanceDiff=${closingBalanceDiff} -> result: otherRecoveries=${currColumn.otherRecoveries} otherDeposits=${currColumn.otherDeposits} totalDisbursementPart2=${currColumn.totalDisbursementPart2} treasuryBalanceDisbursementSide=${currColumn.treasuryBalanceDisbursementSide}`
+        );
 
         // ── CONSOLIDATED-only override ──────────────────────────────────
         // Current column's receipt-side Treasury Balance as Cash Book is
-        // NOT the frozen bootstrap here — it's derived from the current
-        // column's own already-computed disbursement-side numbers:
+        // NOT the frozen bootstrap here — it now just mirrors the PREVIOUS
+        // column's own disbursement-side Treasury Balance as Cash Book
+        // (prevColumn.treasuryBalanceDisbursementSide), e.g. 3066841548.00.
         //
         //   treasuryBalanceReceiptSide (current, CONSOLIDATED only)
-        //     = grandTotalDisbursement - closingCashBalance - totalReceipts
+        //     = prevColumn.treasuryBalanceDisbursementSide
         //
         // This only changes the CURRENT year column, and only for
         // CONSOLIDATED (sector undefined/null/"CONSOLIDATED") — STATE-only
         // and COUNCIL-only requests, and the PREVIOUS column, keep using
-        // the frozen bootstrap as built above.
-        const isConsolidatedRequest = !sector || sector === "CONSOLIDATED";
-
+        // the frozen bootstrap as built above ("previous year keep as it
+        // is").
         if (isConsolidatedRequest) {
             const derivedReceiptSideTreasuryBalance =
-                currColumn.grandTotalDisbursement -
-                currColumn.closingCashBalance -
-                currColumn.totalReceipts;
+                prevColumn.treasuryBalanceDisbursementSide;
 
             currColumn = buildColumn({
                 revenueReceipts: currRevenueReceipts,
@@ -1467,19 +1534,32 @@ export const getStatement1Data = async (sector, from, to) => {
                 disbursementAdvances: currDisbursementAdvances,
                 taxesDeducted: currTaxesDeducted,
                 securityDeducted: currSecurityDeducted,
-                otherRecoveries: currOtherRecoveries,
+                otherRecoveries: adjustedCurrOtherRecoveries,
                 securityRefunded: currSecurityRefunded,
-                otherDeposits: currOtherDeposits,
+                otherDeposits: adjustedCurrOtherDeposits,
                 openingCashBalance: rolledOpeningCashBalance,
                 closingCashBalance: rolledCurrClosingCashBalance,
                 prevTreasuryBalance: 0,
                 carryForwardTreasuryBalance: prevColumn.treasuryBalanceDisbursementSide,
                 receiptSideTreasuryBalance: derivedReceiptSideTreasuryBalance,
+                // Keep the same closingBalanceDiff adjustment in the
+                // disbursement side on the rebuild too, so the rebuilt
+                // currColumn stays internally consistent with the value
+                // that fed derivedReceiptSideTreasuryBalance above.
+                treasuryBalanceDisbursementAdjustment: closingBalanceDiff,
             });
+
+            console.log(
+                `[currColumn CONSOLIDATED override rebuild] derivedReceiptSideTreasuryBalance=${derivedReceiptSideTreasuryBalance} (= prevColumn.treasuryBalanceDisbursementSide) closingBalanceDiff=${closingBalanceDiff} -> final: otherRecoveries=${currColumn.otherRecoveries} otherDeposits=${currColumn.otherDeposits} totalDisbursementPart2=${currColumn.totalDisbursementPart2} totalDisbursements=${currColumn.totalDisbursements} treasuryBalanceReceiptSide=${currColumn.treasuryBalanceReceiptSide} treasuryBalanceDisbursementSide=${currColumn.treasuryBalanceDisbursementSide} grandTotalReceipt=${currColumn.grandTotalReceipt} grandTotalDisbursement=${currColumn.grandTotalDisbursement}`
+            );
         }
 
         const fmt = (n) => Number(n ?? 0).toFixed(2);
         const pair = (key) => [fmt(prevColumn[key]), fmt(currColumn[key])];
+
+        console.log(
+            `[getStatement1Data RESPONSE] otherRecoveries=${JSON.stringify(pair("otherRecoveries"))} otherDeposits=${JSON.stringify(pair("otherDeposits"))} closingCashBalance=${JSON.stringify(pair("closingCashBalance"))} treasuryBalanceDisbursementSide=${JSON.stringify(pair("treasuryBalanceDisbursementSide"))} grandTotalDisbursement=${JSON.stringify(pair("grandTotalDisbursement"))}`
+        );
 
         // ── Sector breakdown — CONSOLIDATED only ──────────────────
         // Computes COUNCIL and STATE separately (current + previous

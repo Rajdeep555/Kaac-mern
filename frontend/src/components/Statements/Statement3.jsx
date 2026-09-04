@@ -7,7 +7,7 @@ import {
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
-    <span className="flex items-center justify-center gap-1">
+    <span className="flex items-center justify-end gap-1">
       <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
     </span>
@@ -69,22 +69,22 @@ const Statement3 = ({ sector, dateRange }) => {
         <table className="min-w-280 mx-auto border border-black text-[11px] text-center">
           <thead>
             <tr>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Nature of Dept
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Balance of 1st <br /> April
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Receipts during <br /> the year
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Repayments during <br /> the year
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Balance during 31st <br /> March
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Net Increase(+) <br /> Decrease(-)
               </th>
             </tr>
@@ -147,19 +147,19 @@ const Statement3 = ({ sector, dateRange }) => {
         <table className="min-w-280 mx-auto border border-black text-[11px] text-center">
           <thead>
             <tr>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Month
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Opening Balance
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Receipt
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Disbursement
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font capitalize tracking-wide py-2">
                 Closing Balance
               </th>
             </tr>
@@ -175,7 +175,7 @@ const Statement3 = ({ sector, dateRange }) => {
 
             {waysAndMeansData?.map((item) => (
               <tr key={item.monthNum} className="border">
-                <td className="border px-4 py-2">{item.month}</td>
+                <td className="border px-4 py-2 text-left">{item.month}</td>
                 <AmountCell value={item.openingBalance} />
                 <AmountCell value={item.receipt} />
                 <AmountCell value={item.disbursement} />

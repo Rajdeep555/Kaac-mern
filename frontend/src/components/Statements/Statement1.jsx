@@ -129,6 +129,15 @@ const Statement1 = ({ sector, dateRange }) => {
     ? `${Number(currentFY.slice(0, 4)) - 1}-${Number(currentFY.slice(0, 4))}`
     : "Previous Year";
 
+  // CONSOLIDATED requests come back with a sectorBreakdown (COUNCIL/STATE
+  // split). When that's present, the combined "Total Revenue Receipts" /
+  // "Total Expenditure on Revenue Account" and "Total Capital Receipts" /
+  // "Total Expenditure on Capital Account" rows are hidden — the
+  // COUNCIL/STATE breakdown rows below already cover that same data.
+  // Revenue/Capital Deficit and Surplus combined rows are unaffected and
+  // still shown either way.
+  const isConsolidated = Boolean(d.sectorBreakdown);
+
   return (
     <div className="w-full overflow-x-auto border-2 bg-white">
       {/* =========================
@@ -214,19 +223,23 @@ const Statement1 = ({ sector, dateRange }) => {
             ========================== */}
             <SectionHeader label="1. Revenue" />
 
-            {/* <DataRow
-              receiptLabel="Total Revenue Receipts"
-              receiptPair={d.revenueReceipts}
-              disbursementLabel="Total Expenditure on Revenue Account"
-              disbursementPair={d.revenueExpenditure}
-            /> */}
+            {!isConsolidated && (
+              <DataRow
+                receiptLabel="Total Revenue Receipts"
+                receiptPair={d.revenueReceipts}
+                disbursementLabel="Total Expenditure on Revenue Account"
+                disbursementPair={d.revenueExpenditure}
+              />
+            )}
 
-            {/* <DataRow
-              receiptLabel="Revenue Deficit"
-              receiptPair={d.revenueDeficit}
-              disbursementLabel="Revenue Surplus"
-              disbursementPair={d.revenueSurplus}
-            /> */}
+            {!isConsolidated && (
+              <DataRow
+                receiptLabel="Revenue Deficit"
+                receiptPair={d.revenueDeficit}
+                disbursementLabel="Revenue Surplus"
+                disbursementPair={d.revenueSurplus}
+              />
+            )}
 
             {/* CONSOLIDATED - COUNCIL / STATE */}
             {d.sectorBreakdown && (
@@ -268,19 +281,23 @@ const Statement1 = ({ sector, dateRange }) => {
             ========================== */}
             <SectionHeader label="2. Capital" />
 
-            <DataRow
-              receiptLabel="Total Capital Receipts"
-              receiptPair={d.capitalReceipts}
-              disbursementLabel="Total Expenditure on Capital Account"
-              disbursementPair={d.capitalExpenditure}
-            />
+            {!isConsolidated && (
+              <DataRow
+                receiptLabel="Total Capital Receipts"
+                receiptPair={d.capitalReceipts}
+                disbursementLabel="Total Expenditure on Capital Account"
+                disbursementPair={d.capitalExpenditure}
+              />
+            )}
 
-            <DataRow
-              receiptLabel="Capital Deficit"
-              receiptPair={d.capitalDeficit}
-              disbursementLabel="Capital Surplus"
-              disbursementPair={d.capitalSurplus}
-            />
+            {!isConsolidated && (
+              <DataRow
+                receiptLabel="Capital Deficit"
+                receiptPair={d.capitalDeficit}
+                disbursementLabel="Capital Surplus"
+                disbursementPair={d.capitalSurplus}
+              />
+            )}
 
             {/* CONSOLIDATED - COUNCIL / STATE */}
             {d.sectorBreakdown && (

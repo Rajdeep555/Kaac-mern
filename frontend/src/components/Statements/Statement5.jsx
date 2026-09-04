@@ -12,26 +12,28 @@ const AmountCell = ({ value, bold = false }) => (
 );
 
 const HeadsCell = ({ group }) => (
-  <td className="border px-4 py-2 text-left align-top">
-    {group.headsLines.map((line, idx) => (
-      <div
-        key={idx}
-        className={idx < group.headsLines.length - 1 ? "text-gray-500" : ""}>
-        {line}
-      </div>
-    ))}
-    <div className="mt-1 flex gap-1">
-      {!group.matched && (
-        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-700">
-          Unmapped
-        </span>
-      )}
-      {group.hasMultiple && (
-        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">
-          {group.rows.length} combined
-        </span>
-      )}
+  <td className="border px-3 py-2 text-left align-top">
+    <div className="leading-snug">
+      {group.headsLines.map((line, idx) => {
+        const isLast = idx === group.headsLines.length - 1;
+        return (
+          <span key={idx}>
+            <span
+              className={
+                isLast ? "font-medium text-gray-900" : "text-gray-500"
+              }>
+              {line}
+            </span>
+            {!isLast && <span className="mx-1 text-gray-300">›</span>}
+          </span>
+        );
+      })}
     </div>
+    {!group.matched && (
+      <span className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-700">
+        Unmapped
+      </span>
+    )}
   </td>
 );
 
@@ -108,7 +110,7 @@ const Statement5 = ({ sector, dateRange }) => {
             {statement5Data?.map((group, groupIndex) => (
               <tr key={`group-${groupIndex}-${group.heads}`} className="border">
                 <HeadsCell group={group} />
-                <AmountCell value={group.total} bold={group.hasMultiple} />
+                <AmountCell value={group.total} />
               </tr>
             ))}
 

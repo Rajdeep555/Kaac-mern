@@ -4,7 +4,7 @@ import { useStatement4 } from "../../hooks/admin/useStatement4";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
-    <span className="flex items-center justify-center gap-1">
+    <span className="flex items-center justify-end gap-1">
       <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
     </span>
@@ -41,14 +41,14 @@ const Statement4 = ({ sector, dateRange }) => {
     <div className="w-full overflow-x-auto border-2 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 4</h1>
-        {sector && (
+        {/* {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
         )}
         {(dateRange?.from || dateRange?.to) && (
           <p className="text-xs text-gray-500">
             {dateRange?.from || "…"} to {dateRange?.to || "…"}
           </p>
-        )}
+        )} */}
         <h2 className="py-4 font-semibold">
           Loans and Advances by the Council
         </h2>
@@ -60,22 +60,22 @@ const Statement4 = ({ sector, dateRange }) => {
         <table className="min-w-280 mx-4 border border-black text-[11px] text-center">
           <thead>
             <tr>
-              <th className="border font uppercase tracking-wide px-2 py-2">
-                Categories of <br /> Loans and Advances
+              <th className="border font capitalize tracking-wide px-2 py-2">
+                Categories of Loans and Advances
               </th>
-              <th className="border font uppercase tracking-wide px-2 py-2">
+              <th className="border font capitalize tracking-wide px-2 py-2">
                 Balance <br /> outstanding on <br /> 1st April
               </th>
-              <th className="border font uppercase tracking-wide px-2 py-2">
+              <th className="border font capitalize tracking-wide px-2 py-2">
                 Amount paid <br /> during the year
               </th>
-              <th className="border font uppercase tracking-wide px-2 py-2">
+              <th className="border font capitalize tracking-wide px-2 py-2">
                 Amount Recovered <br /> during the year
               </th>
-              <th className="border font uppercase tracking-wide px-2 py-2">
+              <th className="border font capitalize tracking-wide px-2 py-2">
                 Balance <br /> outstanding on <br /> 31st March
               </th>
-              <th className="border font uppercase tracking-wide px-2 py-2">
+              <th className="border font capitalize tracking-wide px-2 py-2">
                 Net Increase(+) <br /> Decrease(-) <br /> during the year
               </th>
             </tr>
@@ -108,8 +108,10 @@ const Statement4 = ({ sector, dateRange }) => {
               <tr className="bg-gray-300 border">
                 <td
                   colSpan={2}
-                  className="border px-4 py-3 text-right font-bold tracking-wider text-sm">
-                  TOTAL
+                  className="border px-3 py-3 text-left font-bold tracking-wide text-[10px] leading-snug">
+                  Total Loan disbursed to Autonomous Council Employees under
+                  Major Head 661 - Loans &amp; Advances to Autonomous Council
+                  Employees
                 </td>
                 <AmountCell value={total.amountPaid} bold />
                 <AmountCell value={total.amountRecover} bold />
