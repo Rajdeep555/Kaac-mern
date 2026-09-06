@@ -24,8 +24,8 @@ const AmtBold = ({ value }) => (
   </td>
 );
 
-const Form5D = ({ sector }) => {
-  const { form5DData, loading, error } = useForm5D({ sector });
+const Form5D = ({ sector,dateRange }) => {
+  const { form5DData, loading, error } = useForm5D({ sector, dateRange });
 
   // Zip receipt and payment rows side-by-side
   const zippedRows = useMemo(() => {

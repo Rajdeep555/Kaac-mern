@@ -1,33 +1,24 @@
-import React from "react";
-import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm10 } from "../../hooks/admin/useForm10";
 
 const COLUMNS = [
-  { key: "voucherNo", label: "CASH BOOK ITEM NO.", number: 1 },
-  { key: "workName", label: "NAME OF THE WORK/SCHEME", number: 2 },
+  { key: "cashBookItemNo", label: "CASH BOOK ITEM NO.", number: 1 },
+  { key: "workScheme", label: "NAME OF THE WORK/SCHEME", number: 2 },
   { key: "receipt", label: "RECEIPTS", number: 3 },
   { key: "payment", label: "PAYMENTS", number: 4 },
   { key: "remarks", label: "REMARKS", number: 5 },
 ];
 
 // Text columns — no rupee sign
-const TEXT_KEYS = new Set(["voucherNo", "workName", "remarks"]);
+const TEXT_KEYS = new Set(["cashBookItemNo", "workScheme", "remarks"]);
 
 const AmountCell = ({ value }) => (
-  <span className="flex items-center justify-center gap-1">
-    {value > 0 ? (
-      <>
-        <LiaRupeeSignSolid />
-        {Number(value).toFixed(2)}
-      </>
-    ) : (
-      "-"
-    )}
+  <span className="flex items-center justify-end gap-1">
+    {value > 0 ? <>{Number(value).toFixed(2)}</> : "-"}
   </span>
 );
 
-const Form10 = ({ sector }) => {
-  const { form10Data, loading, error } = useForm10({ sector });
+const Form10 = ({ sector, dateRange }) => {
+  const { form10Data, loading, error } = useForm10({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {
@@ -111,9 +102,10 @@ const Form10 = ({ sector }) => {
             {rows.map((row) => (
               <tr key={row.id} className="border">
                 {COLUMNS.map((col) => (
-                  <td key={col.key} className="border py-2 px-2">
+                  <td
+                    key={col.key}
+                    className={`border py-2 px-2 ${col.key === "workScheme" ? "whitespace-pre-line text-left" : ""}`}>
                     {TEXT_KEYS.has(col.key) ? (
-                      // Show "-" for empty text fields
                       row[col.key] && row[col.key] !== "-" ? (
                         row[col.key]
                       ) : (

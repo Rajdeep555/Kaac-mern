@@ -1,5 +1,6 @@
 import React from "react";
 import { useStatement1 } from "../../hooks/admin/useStatement1";
+import { Loader } from "../ui/Loader";
 
 // Convert date into Indian Financial Year format
 // Example:
@@ -95,7 +96,7 @@ const Statement1 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Statement 1 data...</p>
+        <Loader />
       </div>
     );
   }

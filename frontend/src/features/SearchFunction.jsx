@@ -79,12 +79,14 @@ const SearchFunction = ({ onFilter, onDownload, onPrint }) => {
 
         <div className="flex items-center gap-2">
           <button
+            className="text-white"
             onClick={handleDownload}
             disabled={isDownloading} /* ...unchanged... */
           >
             {isDownloading ? "Generating PDF…" : "Download"}
           </button>
           <button
+            className="text-white"
             onClick={handlePrint}
             disabled={isPrinting} /* ...unchanged... */
           >

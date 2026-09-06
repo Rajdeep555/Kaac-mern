@@ -451,26 +451,38 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 };
 
 
-
-
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 5 - Detailed Account of Revenue Receipt by Minor Heads
 // Data comes from 3 tables: challan, challanFromBill, stateChallan
 //
+// NOTHING in the data-sourcing logic changed in this pass — COUNCIL/
+// STATE/CONSOLIDATED sourcing, majorHead range filters, date fields,
+// ChallanFromBill code derivation (still code-only, no name
+// resolution), and the "matched"/Unmapped flag are all exactly as
+// before.
+//
+// ONLY groupStatement5Rows changed: instead of returning one flat row
+// per (major,sub,minor) leaf with a breadcrumb string, it now returns
+// a flat but TAGGED list of display rows so the table can render the
+// hierarchy properly:
+//   - type: "major"  → header row, no amount, once per major head
+//   - type: "sub"    → header row, no amount, once per distinct sub
+//                       head within that major head
+//   - type: "minor"  → leaf row, has the amount + matched flag
+//   - type: "total"  → "Total under Major Head X" row, once per major
+//                       head, summing that major head's leaf amounts
+// Rows are ordered ascending by major head code (numeric), so output
+// is always 001, 002, 003 ... 011, not arbitrary DB order.
+//
 // COUNCIL: challan (challanType COUNCIL, majorHead 001–016) +
 //   challanFromBill (majorHead 001–016, derived from amountType via
 //   CHALLAN_FROM_BILL_HEAD_CODES) — merged into ONE grouped list.
-//   (Previously had a separate majorHead-017 bucket and a synthetic
-//   "Total Revenue Receipt" row; both removed per latest spec — see
-//   chat note if these need to come back.)
 //
-// STATE: stateChallan, sector STATE, majorHead 2011–3999 only
-//   (previously unfiltered by majorHead — now range-filtered).
+// STATE: stateChallan, sector STATE, majorHead 2011–3999 only.
 //
 // Heads display: TRUNCATED to major → subMajor → minor ONLY (no
 // subHead/subSubHead/detailHead/subDetailHead). A code with no
-// resolved name (e.g. "00") now displays as "<code> - Null" instead
-// of the bare code.
+// resolved name (e.g. "00") still displays as "<code> - Null".
 //
 // CONSOLIDATED: Council's grouped result + State's grouped result,
 // concatenated.
@@ -543,9 +555,6 @@ const getChallanFromBillHeadCode = (amountType, rowSector) => {
 
 // ─────────────────────────────────────────────────────────────
 // Shared level definitions — TRUNCATED to major → subMajor → minor.
-// (Previously included subHead/subSubHead/detailHead/subDetailHead;
-// dropped so the Heads column stays compact and stops rendering
-// 4-7 stacked lines per row.)
 // ─────────────────────────────────────────────────────────────
 const HEAD_CODE_LEVELS = ["majorHeadCode", "subMajorCode", "minorHeadCode"];
 const HEAD_NAME_LEVELS = ["majorHeadName", "subMajorName", "minorHeadName"];
@@ -570,10 +579,7 @@ const isHeadCodeInRange = (code, min, max) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Heads table (used ONLY for StateChallan) — key building now
-// truncates to major/subMajor/minor automatically via the shared
-// HEAD_CODE_LEVELS above. Deeper duplicate rows just overwrite the
-// same key, which is fine since we only display up to minor head.
+// Heads table (used ONLY for StateChallan).
 // ─────────────────────────────────────────────────────────────
 const getHeadsNameMap = async (sector) => {
     const where = { isActive: true };
@@ -694,8 +700,8 @@ const mapStatement5ChallanFromBillRow = (row) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Get rows from StateChallan table — now range-filtered to
-// majorHead 2011–3999 (previously unfiltered by majorHead).
+// Get rows from StateChallan table — range-filtered to majorHead
+// 2011–3999.
 // ─────────────────────────────────────────────────────────────
 const STATEMENT5_STATE_HEAD_MIN = 2011;
 const STATEMENT5_STATE_HEAD_MAX = 5999;
@@ -762,9 +768,12 @@ const getStatement5StateChallanRows = async (dateRange) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Group identical head chains together into display rows.
-// Grouping key now uses ONLY major/subMajor/minor (matches the
-// truncated HEAD_CODE_LEVELS used for display).
+// Group identical head chains together (UNCHANGED from baseline: same
+// key, same "levels"/"matched" computation), then reshape into a
+// flat, TAGGED hierarchy of display rows:
+//   major header → sub header → minor leaf (amount) → ... →
+//   "Total under Major Head X" (sum of that major's leaves)
+// ordered ascending by major head code (numeric).
 // ─────────────────────────────────────────────────────────────
 const groupStatement5Rows = (rows) => {
     const grouped = rows.reduce((acc, row) => {
@@ -777,7 +786,7 @@ const groupStatement5Rows = (rows) => {
         return acc;
     }, {});
 
-    return Object.entries(grouped).map(([heads, groupedRows]) => {
+    const leafGroups = Object.entries(grouped).map(([heads, groupedRows]) => {
         const total = groupedRows.reduce((sum, row) => sum + row.amount, 0);
         const [sample] = groupedRows;
 
@@ -790,29 +799,116 @@ const groupStatement5Rows = (rows) => {
             return acc;
         }, []);
 
-        // Code with no resolved name (e.g. "00") now shows "<code> - Null"
-        // instead of just the bare code.
-        const headsLines = levels.length
-            ? levels.map((l) => `${l.code} - ${l.name || "Null"}`)
-            : [heads]; // fallback: raw grouping key if no code fields exist
-
         const matched = levels.length > 0 && levels.every((l) => l.name);
 
         return {
             heads,
-            headsLines,
+            levels, // [{code,name}] up to 3 entries: major, sub, minor
             matched,
             rows: groupedRows,
             total: parseFloat(total.toFixed(2)),
             hasMultiple: groupedRows.length > 1,
         };
     });
+
+    // Ascending numeric sort by MAJOR head code — groups with no
+    // resolvable major code sort last (Infinity), then alphabetically
+    // by their leaf key so ordering stays stable.
+    const majorSortValue = (code) => {
+        const n = parseInt(code, 10);
+        return Number.isNaN(n) ? Number.POSITIVE_INFINITY : n;
+    };
+    leafGroups.sort((a, b) => {
+        const diff = majorSortValue(a.levels[0]?.code) - majorSortValue(b.levels[0]?.code);
+        if (diff !== 0) return diff;
+        return a.heads.localeCompare(b.heads);
+    });
+
+    // Expand into the tagged display-row list.
+    const displayRows = [];
+    let currentMajorCode = null;
+    let currentSubCode = null;
+    let majorTotal = 0;
+    let majorLabel = null;
+
+    const flushMajorTotal = () => {
+        if (currentMajorCode !== null) {
+            displayRows.push({
+                type: "total",
+                heads: `${currentMajorCode}-total`,
+                headsLines: [`Total under Major Head ${majorLabel}`],
+                total: parseFloat(majorTotal.toFixed(2)),
+                matched: true,
+            });
+        }
+    };
+
+    for (const group of leafGroups) {
+        const [major, sub, minor] = group.levels;
+        const majorCode = major?.code ?? null;
+        const majorName = major?.name ?? null;
+
+        if (majorCode !== currentMajorCode) {
+            flushMajorTotal();
+            currentMajorCode = majorCode;
+            currentSubCode = null;
+            majorTotal = 0;
+            majorLabel = majorCode ? `${majorCode} - ${majorName || "Null"}` : null;
+
+            if (majorCode) {
+                displayRows.push({
+                    type: "major",
+                    heads: `${majorCode}-header`,
+                    headsLines: [majorLabel],
+                    total: null,
+                    matched: true,
+                });
+            }
+        }
+
+        const subCode = sub?.code ?? null;
+        const subName = sub?.name ?? null;
+
+        if (subCode) {
+            if (subCode !== currentSubCode) {
+                currentSubCode = subCode;
+                displayRows.push({
+                    type: "sub",
+                    heads: `${majorCode}-${subCode}-header`,
+                    headsLines: [`${subCode} - ${subName || "Null"}`],
+                    total: null,
+                    matched: true,
+                });
+            }
+        } else {
+            currentSubCode = null;
+        }
+
+        const minorCode = minor?.code ?? null;
+        const minorName = minor?.name ?? null;
+        const minorLabel = minorCode ? `${minorCode} - ${minorName || "Null"}` : (group.heads || "Unknown");
+
+        displayRows.push({
+            type: "minor",
+            heads: group.heads,
+            headsLines: [minorLabel],
+            total: group.total,
+            matched: group.matched,
+            hasMultiple: group.hasMultiple,
+            rows: group.rows,
+        });
+
+        majorTotal += group.total;
+    }
+
+    flushMajorTotal();
+
+    return displayRows;
 };
 
 // ─────────────────────────────────────────────────────────────
 // COUNCIL — challan (majorHead 1-16) + challanFromBill (majorHead
-// 1-16), merged into a single grouped list. (Total-revenue synthetic
-// row and majorHead-017 bucket removed — see chat note.)
+// 1-16), merged into a single grouped list.
 // ─────────────────────────────────────────────────────────────
 const STATEMENT5_COUNCIL_REVENUE_HEAD_MIN = 1;
 const STATEMENT5_COUNCIL_REVENUE_HEAD_MAX = 16;
@@ -912,6 +1008,9 @@ export const getStatement5Data = async (sector, from, to) => {
         throw error;
     }
 };
+
+
+
 
 
 // ─────────────────────────────────────────────────────────────
@@ -1719,13 +1818,14 @@ export const getStatement3DebtData = async (sector, from, to) => {
     }
 };
 
-
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 3 - PART 2: Ways and Means (Month-wise)
 //
 // COUNCIL:
 //   - Receipt: challanFromBill, majorHead IN (001,007,013,661,664),
-//     sector IN (STATE, COUNCIL) — all matching rows, no further filter.
+//     sector IN (STATE, COUNCIL) — all matching rows, no further filter,
+//     PLUS all Challan rows where challanType = COUNCIL (no majorHead
+//     restriction, every row counted).
 //   - Disbursement: all Expenditure entries where sector = COUNCIL.
 //
 // STATE:
@@ -1744,6 +1844,11 @@ export const getStatement3DebtData = async (sector, from, to) => {
 // Every month after April carries forward the previous month's closing
 // balance, same as before.
 // Closing Balance = Opening Balance + Receipt - Disbursement.
+//
+// The bottom "Total" row shows the FY's Opening Balance (April's
+// opening balance) rather than 0/blank, plus the sum of Receipt and
+// Disbursement across all 12 months and the final month's Closing
+// Balance.
 // ─────────────────────────────────────────────────────────────
 
 // Financial year months: April(4) to March(3)
@@ -1946,14 +2051,18 @@ export const getStatement3WaysAndMeansData = async (sector, from, to) => {
             };
         });
 
-        // ── Bottom total row — sums receipt/disbursement across all
-        // 12 months; closingBalance is the final month's running
-        // balance (already the cumulative total); openingBalance is
-        // left blank since summing 12 opening balances isn't meaningful. ──
+        // ── Bottom total row ─────────────────────────────────────
+        // openingBalance = the FY's starting balance (April's opening
+        // balance), NOT a sum of all 12 opening balances (that figure
+        // isn't meaningful since each month after April is just a
+        // carry-forward of the previous month's closing balance).
+        // receipt/disbursement = summed across all 12 months.
+        // closingBalance = the final month's (March's) running balance,
+        // which is already the cumulative net position.
         rows.push({
             monthNum: null,
             month: "Total",
-            openingBalance: "",
+            openingBalance: WAYS_AND_MEANS_APRIL_OPENING_BALANCE.toFixed(2),
             receipt: totalReceipt.toFixed(2),
             disbursement: totalDisbursement.toFixed(2),
             closingBalance: carryForward.toFixed(2),

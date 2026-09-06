@@ -1,11 +1,9 @@
-import React from "react";
-import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useStatement4 } from "../../hooks/admin/useStatement4";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
     <span className="flex items-center justify-end gap-1">
-      <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
     </span>
   </td>
@@ -20,7 +18,7 @@ const Statement4 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Statement 4 data...</p>
+        <Loader />
       </div>
     );
   }

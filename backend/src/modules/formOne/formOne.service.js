@@ -31,6 +31,23 @@ const CASH_AMOUNT_TYPES = [
 ];
 
 // ─────────────────────────────────────────────────────────────
+// 🔸 CHANGED — Cash column now holds ONLY two sources:
+//   Receipt (DR) side:      CashReceipt rows + counterfoil carry-
+//                            forward balances.
+//   Disbursement (CR) side: Challan rows where counterfoilNo IS
+//                            present (i.e. cash physically deposited
+//                            via a counterfoil).
+// Every other source that previously wrote into either cash column —
+// specifically the CASH_AMOUNT_TYPES slice of ChallanFromBill on both
+// DR and CR — now posts to the PLA column instead. PLA_AMOUNT_TYPES
+// and CASH_AMOUNT_TYPES are combined below into one PLA-routed group
+// for non-STATE ChallanFromBill rows, since both now land in the same
+// column; the constant names/lists are kept only so amountType-level
+// filtering elsewhere (e.g. the initial query's `amountType: { in }`
+// clause) doesn't need to change.
+// ─────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────
 // NEW — COUNCIL Receipt side, Treasury PLA Column: in addition to
 // COUNCIL's own ChallanFromBill rows, also pull ChallanFromBill rows
 // where sector = STATE and amountType is one of these 4 treasury
@@ -47,59 +64,54 @@ const COUNCIL_STATE_TREASURY_TYPES = [
     "MC Forest Royalty",
 ];
 
-// ─────────────────────────────────────────────────────────────
-// NEW — Counterfoil carry-forward balance logic.
-//
-// A CashReceipt (e.g. counterfoilNo "C725") is a lump sum collected in
-// cash. Over time, Challan rows sharing that SAME counterfoilNo get
-// posted, depositing pieces of that lump sum into treasury. Whatever
-// hasn't yet been deposited is still "sitting in cash" and needs to
-// keep showing up on the receipt (DR) side's cash column, in every
-// subsequent period's cashbook, until the balance nets to zero.
-//
-// Rule used here (see chat for the explicit assumptions):
-//   balance(counterfoilNo, asOf) =
-//       SUM(CashReceipt.rupeesInCash WHERE counterfoilNo = X AND date <= asOf)
-//     - SUM(Challan.amount          WHERE counterfoilNo = X AND challanDate <= asOf)
-//
-// A synthetic row is added to a period's cashbook for counterfoil X
-// only if:
-//   - X's CashReceipt originated BEFORE this period's `from` (so the
-//     original entry isn't already shown in full by the normal
-//     CashReceipt pull for this same period — avoids double counting)
-//   - balance(X, to) > CF_BALANCE_THRESHOLD (i.e. not yet fully
-//     deposited/closed out)
-// ─────────────────────────────────────────────────────────────
-const CF_BALANCE_THRESHOLD = 0.01;
 
+const CF_BALANCE_THRESHOLD = 0.01;
+// ─────────────────────────────────────────────────────────────
+// Counterfoil carry-forward balance logic.
+//
+// 🔸 FIXED — the cutoff for both queries is now `from` (the START of
+// the CURRENT period), using a STRICT "< from" comparison — not `to`.
+//
+// Balance carried INTO this period:
+//   balance(counterfoilNo, from) =
+//       SUM(CashReceipt.rupeesInCash WHERE counterfoilNo = X AND date < from)
+//     - SUM(Challan.amount          WHERE counterfoilNo = X AND challanDate < from)
+//
+// This is a fixed "opening" figure for the WHOLE current period. Any
+// Challan posted against X during the CURRENT period (from <= date <=
+// to) is intentionally excluded from this calculation — it already
+// appears as its own DR/CR pair via Condition 4 below. Subtracting it
+// here too would double-count that same deposit: once as its own row,
+// once by shrinking the carry-forward balance in the same period it
+// was posted in.
+//
+// Because this cutoff is always `from`, the balance no longer drifts
+// as `to` moves within the same period — it only changes once you
+// move into a later financial year (when that year's own `from`
+// finally passes the deposit's date).
+// ─────────────────────────────────────────────────────────────
 const computeCounterfoilCarryForwards = async (sector, from, to) => {
     const isConsolidated = sector === "CONSOLIDATED";
 
-    // Same scoping convention used everywhere else in this file:
-    // CONSOLIDATED = no sector/type filter (i.e. STATE + COUNCIL summed
-    // in a single query), never two merged per-sector calls — this is
-    // what keeps CONSOLIDATED from double-counting a counterfoil.
     const cashReceiptSectorFilter = !isConsolidated ? { sector } : {};
     const challanTypeFilter = !isConsolidated ? { challanType: sector } : {};
 
-    // Pull every CashReceipt / Challan row sharing a counterfoilNo, up
-    // through the END of this period (`to`) — we need full history
-    // (not just this period's window) to compute the true cumulative
-    // balance.
-    const [allCashReceipts, allChallans] = await Promise.all([
+    // Only rows strictly BEFORE this period's start — everything from
+    // prior periods, nothing from the period currently being viewed.
+    const [priorCashReceipts, priorChallans] = await Promise.all([
         prisma.cashReceipt.findMany({
             where: {
                 isActive: true,
-                date: { lte: to },
+                date: { lt: from },
                 counterfoilNo: { not: null },
                 ...cashReceiptSectorFilter,
             },
-            select: { counterfoilNo: true, rupeesInCash: true, date: true },
+            select: { counterfoilNo: true, rupeesInCash: true },
         }),
         prisma.challan.findMany({
             where: {
                 isActive: true,
-                challanDate: { lte: to },
+                challanDate: { lt: from },
                 counterfoilNo: { not: null },
                 ...challanTypeFilter,
             },
@@ -107,52 +119,29 @@ const computeCounterfoilCarryForwards = async (sector, from, to) => {
         }),
     ]);
 
-    // Group CashReceipts by counterfoilNo: total originally received
-    // (cumulative), and the EARLIEST date that counterfoil was ever
-    // received on — used to decide whether it originates in a prior
-    // period (and therefore needs a carry-forward row) or in this one
-    // (already shown via the normal CashReceipt pull, so skip here).
+    // Cumulative amount originally received per counterfoil, from all
+    // prior periods.
     const receiptsByCounterfoil = new Map();
-    allCashReceipts.forEach((r) => {
+    priorCashReceipts.forEach((r) => {
         const key = (r.counterfoilNo ?? "").trim();
         if (!key || key === "0") return;
-
         const amt = r.rupeesInCash ? parseFloat(r.rupeesInCash) : 0;
-        const existing = receiptsByCounterfoil.get(key) ?? {
-            total: 0,
-            earliestDate: null,
-        };
-        existing.total += amt;
-        if (!existing.earliestDate || (r.date && r.date < existing.earliestDate)) {
-            existing.earliestDate = r.date;
-        }
-        receiptsByCounterfoil.set(key, existing);
+        receiptsByCounterfoil.set(key, (receiptsByCounterfoil.get(key) ?? 0) + amt);
     });
 
-    // Group Challans by counterfoilNo: cumulative amount deposited to
-    // treasury against that counterfoil, through `to`.
+    // Cumulative amount deposited to treasury per counterfoil, from
+    // all prior periods.
     const challansByCounterfoil = new Map();
-    allChallans.forEach((c) => {
+    priorChallans.forEach((c) => {
         const key = (c.counterfoilNo ?? "").trim();
         if (!key || key === "0") return;
-
         const amt = c.amount ? parseFloat(c.amount) : 0;
-        challansByCounterfoil.set(
-            key,
-            (challansByCounterfoil.get(key) ?? 0) + amt
-        );
+        challansByCounterfoil.set(key, (challansByCounterfoil.get(key) ?? 0) + amt);
     });
 
     const carryForwardRows = [];
 
-    for (const [counterfoilNo, { total, earliestDate }] of receiptsByCounterfoil.entries()) {
-        // Skip counterfoils whose original CashReceipt falls INSIDE this
-        // period — that row is already shown in full by the normal DR-side
-        // CashReceipt pull (Condition 1 below). Only counterfoils carried
-        // over from an earlier period get a synthetic balance row here.
-        const originatesBeforePeriod = earliestDate && earliestDate < from;
-        if (!originatesBeforePeriod) continue;
-
+    for (const [counterfoilNo, total] of receiptsByCounterfoil.entries()) {
         const challanTotal = challansByCounterfoil.get(counterfoilNo) ?? 0;
         const balance = total - challanTotal;
 
@@ -160,8 +149,10 @@ const computeCounterfoilCarryForwards = async (sector, from, to) => {
 
         const row = createEmptyRow();
         row.id = `CF-${sector ?? "CONSOLIDATED"}-${counterfoilNo}`;
-        row.receiptDate = formatDisplayDate(to);
-        row.receiptDateKey = sortableDateKey(to);
+        // Shown as the opening entry for this period, dated at the
+        // period's start rather than its end.
+        row.receiptDate = formatDisplayDate(from);
+        row.receiptDateKey = sortableDateKey(from);
         row.receiptCounterfoilNo = counterfoilNo;
         row.receiptParticulars = `Balance carried forward - ${counterfoilNo}`;
         row.receiptCashAmount = parseFloat(balance.toFixed(2));
@@ -172,7 +163,7 @@ const computeCounterfoilCarryForwards = async (sector, from, to) => {
 
     logger.info(`[CASHBOOK] Counterfoil carry-forward rows computed`, {
         sector,
-        to: to?.toISOString?.().slice(0, 10),
+        from: from?.toISOString?.().slice(0, 10),
         counterfoilsConsidered: receiptsByCounterfoil.size,
         carryForwardRowsAdded: carryForwardRows.length,
     });
@@ -242,8 +233,6 @@ const buildClassification = (...parts) =>
                 String(p).trim() !== "0"
         )
         .join("-") || null;
-
-
 
 
 // Builds day-total marker row(s) for a given date. Returns an array of
@@ -480,32 +469,28 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             (c) => c.counterfoilNo && c.counterfoilNo.trim() !== ""
         );
 
-        // STATE-sector challanFromBill rows have no cash-column activity:
-        // every amountType (all 23 types — the old PLA_AMOUNT_TYPES +
-        // CASH_AMOUNT_TYPES combined) posts to the receipt PLA column,
-        // and to the disbursement PLA column too EXCEPT "Advance
-        // Payment", which is receipt-side only.
-        // Non-STATE (COUNCIL) rows keep the original split: PLA types go
-        // to the receipt PLA column only, cash types go to both cash
-        // columns.
+        // STATE-sector challanFromBill rows are handled entirely
+        // separately below (Condition 3C) — untouched by this change.
         const cfbStateRows = challanFromBills.filter(
             (cfb) => cfb.sector === "STATE"
         );
+
+        // 🔸 CHANGED — non-STATE ChallanFromBill rows (both the old
+        // PLA_AMOUNT_TYPES and the old CASH_AMOUNT_TYPES) now ALL post
+        // to the PLA column, on both DR and CR sides. There is no
+        // longer a cash-column destination for any ChallanFromBill
+        // row outside the STATE-sector block below. Kept as one
+        // combined array rather than two filtered ones, since both
+        // groups are now treated identically.
         const cfbNonStateRows = challanFromBills.filter(
             (cfb) => cfb.sector !== "STATE"
-        );
-
-        const cfbPlaRows = cfbNonStateRows.filter((cfb) =>
-            PLA_AMOUNT_TYPES.includes(cfb.amountType)
-        );
-        const cfbCashRows = cfbNonStateRows.filter((cfb) =>
-            CASH_AMOUNT_TYPES.includes(cfb.amountType)
         );
 
         const rows = [];
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 1: CashReceipt
+        // (Cash column source #1 — unchanged)
         // ════════════════════════════════════════════════════════
         cashReceipts.forEach((r) => {
             const row = createEmptyRow();
@@ -530,15 +515,14 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 1B (NEW): Counterfoil carry-forward
-        // balances — the still-undeposited portion of an earlier
-        // period's CashReceipt, keyed by counterfoilNo, shown in this
-        // period's cash column until it nets to zero.
+        // DR SIDE — CONDITION 1B: Counterfoil carry-forward balances
+        // (Cash column source #2 — unchanged)
         // ════════════════════════════════════════════════════════
         counterfoilCarryForwardRows.forEach((row) => rows.push(row));
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 2: Challan WITHOUT counterfoilNo
+        // (PLA column — unchanged)
         // ════════════════════════════════════════════════════════
         challansWithoutCounterfoil.forEach((c) => {
             const row = createEmptyRow();
@@ -564,9 +548,14 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 3A: ChallanFromBill (PLA types) — own sector
+        // DR SIDE — CONDITION 3A (🔸 CHANGED): ChallanFromBill, own
+        // sector, ALL non-STATE rows — now always PLA column, never
+        // cash, regardless of amountType. Previously this loop only
+        // covered PLA_AMOUNT_TYPES; the CASH_AMOUNT_TYPES rows that
+        // used to go to receiptCashAmount below (old Condition 3B)
+        // are now included here instead.
         // ════════════════════════════════════════════════════════
-        cfbPlaRows.forEach((cfb) => {
+        cfbNonStateRows.forEach((cfb) => {
             const row = createEmptyRow();
             row.id = `CFB-DR-PLA-${cfb.id}`;
             row.receiptDate = formatDisplayDate(cfb.voucharDate);
@@ -587,9 +576,9 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 3A-2 (NEW): ChallanFromBill treasury rows
+        // DR SIDE — CONDITION 3A-2: ChallanFromBill treasury rows
         // from STATE sector, surfaced under COUNCIL's receipt Treasury
-        // PLA column.
+        // PLA column. (Already PLA-only — unchanged.)
         // ════════════════════════════════════════════════════════
         councilCrossStateTreasuryRows.forEach((cfb) => {
             const row = createEmptyRow();
@@ -611,31 +600,14 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             rows.push(row);
         });
 
-        // ════════════════════════════════════════════════════════
-        // DR SIDE — CONDITION 3B: ChallanFromBill (Cash types)
-        // ════════════════════════════════════════════════════════
-        cfbCashRows.forEach((cfb) => {
-            const row = createEmptyRow();
-            row.id = `CFB-DR-CASH-${cfb.id}`;
-            row.receiptDate = formatDisplayDate(cfb.voucharDate);
-            row.receiptDateKey = sortableDateKey(cfb.voucharDate);
-            row.receiptItemNo = cfb.challanNo ?? null;
-            row.receiptCounterfoilNo = null;
-            row.receiptParticulars = cfb.amountType ?? null;
-            row.receiptCashAmount = cfb.amount
-                ? parseFloat(cfb.amount.toString())
-                : null;
-            row.receiptPlaColumn = null;
-            row.receiptClassification = buildClassification(
-                cfb.majorHead,
-                cfb.subMajor,
-                cfb.minorHead
-            );
-            rows.push(row);
-        });
+        // 🔸 REMOVED — old Condition 3B (ChallanFromBill Cash types,
+        // DR side, writing to receiptCashAmount) is gone. Those same
+        // rows are now included in the merged cfbNonStateRows loop
+        // above (Condition 3A), posting to receiptPlaColumn instead.
 
         // ════════════════════════════════════════════════════════
         // DR + CR SIDE — CONDITION 3C: ChallanFromBill (STATE-sector rows)
+        // (Already PLA-only on both sides — unchanged.)
         // ════════════════════════════════════════════════════════
         cfbStateRows.forEach((cfb) => {
             const cfbDateKey = sortableDateKey(cfb.voucharDate);
@@ -682,6 +654,8 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 4: Challan WITH counterfoilNo (DR + CR pair)
+        // CR side of this pair is the ONLY disbursement cash-column
+        // source, per spec — unchanged.
         // ════════════════════════════════════════════════════════
         challansWithCounterfoil.forEach((c) => {
             const challanDateKey = sortableDateKey(c.challanDate);
@@ -728,6 +702,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 5: ChallanTwo
+        // (PLA column — unchanged)
         // ════════════════════════════════════════════════════════
         challanTwoRows.forEach((ct) => {
             const row = createEmptyRow();
@@ -751,6 +726,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
 
         // ════════════════════════════════════════════════════════
         // DR SIDE — CONDITION 6: StateChallan (STATE or CONSOLIDATED only)
+        // (PLA column — unchanged)
         // ════════════════════════════════════════════════════════
         stateChallans.forEach((sc) => {
             const row = createEmptyRow();
@@ -779,6 +755,7 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
 
         // ════════════════════════════════════════════════════════
         // CR SIDE — CONDITION 2: Expenditure
+        // (PLA column — unchanged)
         // ════════════════════════════════════════════════════════
         expenditures.forEach((e) => {
             const row = createEmptyRow();
@@ -806,9 +783,13 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
         });
 
         // ════════════════════════════════════════════════════════
-        // CR SIDE — CONDITION 3: ChallanFromBill (Cash types)
+        // CR SIDE — CONDITION 3 (🔸 CHANGED): ChallanFromBill, own
+        // sector, ALL non-STATE rows — now always PLA column, never
+        // cash. Previously this loop only covered CASH_AMOUNT_TYPES
+        // and wrote to disbursementCashAmount; those rows now post to
+        // plaColumnPayment instead, same treatment as the DR side.
         // ════════════════════════════════════════════════════════
-        cfbCashRows.forEach((cfb) => {
+        cfbNonStateRows.forEach((cfb) => {
             const row = createEmptyRow();
             row.id = `CFB-CR-${cfb.id}`;
             row.disbursementDate = formatDisplayDate(cfb.voucharDate);
@@ -816,11 +797,11 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             row.voucherNo = cfb.challanNo ?? null;
             row.disbursementCounterfoilNo = null;
             row.disbursementDetails = cfb.amountType ?? null;
-            row.disbursementCashAmount = cfb.amount
+            row.disbursementCashAmount = null;
+            row.chequeNo = cfb.chequeNo ?? null;
+            row.plaColumnPayment = cfb.amount
                 ? parseFloat(cfb.amount.toString())
                 : null;
-            row.chequeNo = cfb.chequeNo ?? null;
-            row.plaColumnPayment = null;
             row.treasuryClassification = buildClassification(
                 cfb.majorHead,
                 cfb.subMajor,
@@ -948,7 +929,7 @@ export const saveCashbookSummary = async ({
 //   • The 4-type STATE treasury ChallanFromBill rows will appear
 //     TWICE when merged (see the original note this replaces) unless
 //     you filter out one prefix before combining.
-//   • The NEW counterfoil carry-forward rows will NOT double-count in
+//   • The counterfoil carry-forward rows will NOT double-count in
 //     that merge scenario, because each per-sector call only sums
 //     CashReceipts/Challans belonging to that same sector — a given
 //     counterfoilNo's CashReceipt.sector determines which single call
@@ -959,7 +940,7 @@ export const saveCashbookSummary = async ({
 //
 // If instead you call this service ONCE with sector = "CONSOLIDATED",
 // all three concerns above are avoided by construction: every filter
-// in this file (including the new carry-forward logic) drops its
+// in this file (including the carry-forward logic) drops its
 // sector/challanType scoping and sums across both sectors in a single
 // query, matching the pattern already used by CONSOLIDATED elsewhere
 // in this codebase.

@@ -13,8 +13,8 @@ const AmountCell = ({ value, bold = false, colSpan = 1 }) => (
   </td>
 );
 
-const Form7B = ({ sector }) => {
-  const { form7BData, loading, error } = useForm7B({ sector });
+const Form7B = ({ sector, dateRange }) => {
+  const { form7BData, loading, error } = useForm7B({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {

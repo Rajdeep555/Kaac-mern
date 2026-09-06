@@ -46,9 +46,9 @@ export const getForm5B = async (req, res) => {
 // GET /forms/form5c?sector=COUNCIL
 export const getForm5C = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form5C controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm5CData(sector);
+        const data = await getForm5CData(sector, from, to);
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form5C controller error: ${error.message}`);
@@ -62,9 +62,9 @@ export const getForm5C = async (req, res) => {
 // GET /forms/form5d?sector=COUNCIL
 export const getForm5D = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form5D controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm5DData(sector);
+        const data = await getForm5DData(sector, from, to);
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form5D controller error: ${error.message}`);
@@ -95,9 +95,9 @@ export const getForm5E = async (req, res) => {
 // GET /forms/form6?sector=COUNCIL
 export const getForm6 = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form6 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm6Data(sector);
+        const data = await getForm6Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form6 controller error: ${error.message}`);
@@ -112,9 +112,9 @@ export const getForm6 = async (req, res) => {
 // GET /forms/form7?sector=COUNCIL
 export const getForm7 = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form7 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm7Data(sector);
+        const data = await getForm7Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form7 controller error: ${error.message}`);
@@ -125,13 +125,12 @@ export const getForm7 = async (req, res) => {
     }
 };
 
-
 // GET /forms/form7a?sector=COUNCIL
 export const getForm7A = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form7A controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm7AData(sector);
+        const data = await getForm7AData(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form7A controller error: ${error.message}`);
@@ -144,9 +143,9 @@ export const getForm7A = async (req, res) => {
 
 export const getForm7B = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form7B controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm7BData(sector);
+        const data = await getForm7BData(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form7B controller error: ${error.message}`);
@@ -159,9 +158,9 @@ export const getForm7B = async (req, res) => {
 
 export const getForm8 = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form8 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm8Data(sector);
+        const data = await getForm8Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form8 controller error: ${error.message}`);
@@ -176,9 +175,9 @@ export const getForm8 = async (req, res) => {
 // GET /forms/form9?sector=COUNCIL
 export const getForm9 = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form9 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm9Data(sector);
+        const data = await getForm9Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form9 controller error: ${error.message}`);
@@ -192,9 +191,9 @@ export const getForm9 = async (req, res) => {
 
 export const getForm10 = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form10 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm10Data(sector);
+        const data = await getForm10Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form10 controller error: ${error.message}`);
@@ -208,9 +207,9 @@ export const getForm10 = async (req, res) => {
 // GET /forms/form11?sector=COUNCIL
 export const getForm11 = async (req, res) => {
     try {
-        const { sector } = req.query;
+        const { sector, from, to } = req.query;
         logger.info(`Form11 controller hit — sector: ${sector ?? "ALL"}`);
-        const data = await getForm11Data(sector);
+        const data = await getForm11Data(sector, { from, to });
         return res.status(200).json(data);
     } catch (error) {
         logger.error(`Form11 controller error: ${error.message}`);

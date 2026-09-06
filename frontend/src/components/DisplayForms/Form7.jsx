@@ -38,8 +38,8 @@ const HeadCodeCell = ({ classification, headCode }) => {
   ));
 };
 
-const Form7 = ({ sector }) => {
-  const { form7Data, loading, error } = useForm7({ sector });
+const Form7 = ({ sector, dateRange }) => {
+  const { form7Data, loading, error } = useForm7({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {

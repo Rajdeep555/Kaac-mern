@@ -1,10 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { getForm7B } from "../../api/forms.api.js";
 
-export const useForm7B = ({ sector } = {}, { enabled = true } = {}) => {
+export const useForm7B = ({ sector, dateRange } = {}, { enabled = true } = {}) => {
     const [form7BData, setForm7BData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+
+    const from = dateRange?.from;
+    const to = dateRange?.to;
 
     const fetchData = useCallback(async () => {
         if (!enabled) return;
@@ -12,6 +16,8 @@ export const useForm7B = ({ sector } = {}, { enabled = true } = {}) => {
         setError(null);
         try {
             const params = sector ? { sector } : {};
+            if (from) params.from = from;
+            if (to) params.to = to;
             const { data } = await getForm7B(params);
             setForm7BData(data ?? null);
         } catch (err) {
@@ -19,11 +25,11 @@ export const useForm7B = ({ sector } = {}, { enabled = true } = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [sector, enabled]);
+    }, [sector, from, to, enabled]);
 
     useEffect(() => {
         fetchData();
-    }, [fetchData]);
+    }, [sector, from, to, enabled]);
 
     return { form7BData, loading, error, refetch: fetchData };
-};
+};  

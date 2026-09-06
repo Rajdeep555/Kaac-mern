@@ -1,6 +1,5 @@
-import React from "react";
-
 import { useStatement2 } from "../../hooks/admin/useStatement2";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-3 text-right ${bold ? "font-bold" : ""}`}>
@@ -17,7 +16,7 @@ const Statement2 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Statement 2 data...</p>
+        <Loader />
       </div>
     );
   }

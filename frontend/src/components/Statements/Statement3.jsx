@@ -1,14 +1,14 @@
 import React from "react";
-import { LiaRupeeSignSolid } from "react-icons/lia";
+// import { LiaRupeeSignSolid } from "react-icons/lia";
 import {
   useStatement3Debt,
   useStatement3WaysAndMeans,
 } from "../../hooks/admin/useStatement3";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 ${bold ? "font-bold" : ""}`}>
     <span className="flex items-center justify-end gap-1">
-      <LiaRupeeSignSolid />
       {Number(value ?? 0).toFixed(2)}
     </span>
   </td>
@@ -30,7 +30,7 @@ const Statement3 = ({ sector, dateRange }) => {
   if (debtLoading || wamLoading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Statement 3 data...</p>
+        <Loader />
       </div>
     );
   }
@@ -173,15 +173,29 @@ const Statement3 = ({ sector, dateRange }) => {
               </tr>
             )}
 
-            {waysAndMeansData?.map((item) => (
-              <tr key={item.monthNum} className="border">
-                <td className="border px-4 py-2 text-left">{item.month}</td>
-                <AmountCell value={item.openingBalance} />
-                <AmountCell value={item.receipt} />
-                <AmountCell value={item.disbursement} />
-                <AmountCell value={item.closingBalance} />
-              </tr>
-            ))}
+            {waysAndMeansData?.map((item) => {
+              const isTotalRow =
+                item.monthNum === null || item.monthNum === undefined;
+
+              return (
+                <tr
+                  key={item.month}
+                  className={`border ${isTotalRow ? "bg-gray-300" : ""}`}>
+                  <td
+                    className={`border px-4 py-2 text-left ${
+                      isTotalRow
+                        ? "font-bold tracking-wider text-sm text-right"
+                        : ""
+                    }`}>
+                    {isTotalRow ? "TOTAL" : item.month}
+                  </td>
+                  <AmountCell value={item.openingBalance} bold={isTotalRow} />
+                  <AmountCell value={item.receipt} bold={isTotalRow} />
+                  <AmountCell value={item.disbursement} bold={isTotalRow} />
+                  <AmountCell value={item.closingBalance} bold={isTotalRow} />
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

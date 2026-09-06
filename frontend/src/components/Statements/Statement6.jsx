@@ -1,12 +1,10 @@
-import React from "react";
-import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useStatement6 } from "../../hooks/admin/useStatement6";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, isTotal = false }) => (
   <td
     className={`border px-4 py-2 align-top ${isTotal ? "font-bold text-gray-900" : ""}`}>
-    <span className="flex items-center justify-center gap-1">
-      <LiaRupeeSignSolid />
+    <span className="flex items-center justify-end gap-1">
       {Number(value ?? 0).toFixed(2)}
     </span>
   </td>
@@ -38,7 +36,7 @@ const Statement6 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Statement 6 data...</p>
+        <Loader />
       </div>
     );
   }

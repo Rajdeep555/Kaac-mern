@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { getForm6 } from "../../api/forms.api.js";
 
-export const useForm6 = ({ sector } = {}, { enabled = true } = {}) => {
+export const useForm6 = ({ sector, dateRange } = {}, { enabled = true } = {}) => {
     // form6Data will be { rows, grandTotalMonths, grandTotal }
     const [form6Data, setForm6Data] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const from = dateRange?.from;
+    const to = dateRange?.to;
 
     const fetchData = useCallback(async () => {
         if (!enabled) return;
@@ -13,6 +16,9 @@ export const useForm6 = ({ sector } = {}, { enabled = true } = {}) => {
         setError(null);
         try {
             const params = sector ? { sector } : {};
+            if (from) params.from = from;
+            if (to) params.to = to;
+
             const { data } = await getForm6(params);
             setForm6Data(data ?? null);
         } catch (err) {
@@ -20,11 +26,11 @@ export const useForm6 = ({ sector } = {}, { enabled = true } = {}) => {
         } finally {
             setLoading(false);
         }
-    }, [sector, enabled]);
+    }, [sector, from, to, enabled]);
 
     useEffect(() => {
         fetchData();
-    }, [fetchData]);
+    }, [sector, from, to, enabled]); // primitives only, not fetchData — but all deps included this time
 
     return { form6Data, loading, error, refetch: fetchData };
 };

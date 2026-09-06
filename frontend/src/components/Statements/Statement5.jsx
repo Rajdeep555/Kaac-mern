@@ -1,39 +1,33 @@
-import React from "react";
-import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useStatement5 } from "../../hooks/admin/useStatement5";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 align-top ${bold ? "font-bold" : ""}`}>
-    <span className="flex items-center justify-center gap-1">
-      <LiaRupeeSignSolid />
+    <span className="flex items-center justify-end gap-1">
       {Number(value ?? 0).toFixed(2)}
     </span>
   </td>
 );
 
-const HeadsCell = ({ group }) => (
+// Row-type-aware Heads cell:
+// - "major": bold, no indent — top of the hierarchy
+// - "sub": indented once, medium weight
+// - "minor": indented twice, normal weight, carries the Unmapped badge
+// - "total": bold "Total under Major Head X" line
+const HEADS_CELL_STYLES = {
+  major: "font-bold text-gray-900 pl-3",
+  sub: "font-medium text-gray-700 pl-8",
+  minor: "text-gray-800 pl-12",
+  total: "font-bold text-gray-900 pl-3",
+};
+
+const HeadsCell = ({ row }) => (
   <td className="border px-3 py-2 text-left align-top">
-    <div className="leading-snug">
-      {group.headsLines.map((line, idx) => {
-        const isLast = idx === group.headsLines.length - 1;
-        return (
-          <span key={idx}>
-            <span
-              className={
-                isLast ? "font-medium text-gray-900" : "text-gray-500"
-              }>
-              {line}
-            </span>
-            {!isLast && <span className="mx-1 text-gray-300">›</span>}
-          </span>
-        );
-      })}
+    <div className={`leading-snug ${HEADS_CELL_STYLES[row.type] ?? ""}`}>
+      {row.headsLines.map((line, idx) => (
+        <span key={idx}>{line}</span>
+      ))}
     </div>
-    {!group.matched && (
-      <span className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-700">
-        Unmapped
-      </span>
-    )}
   </td>
 );
 
@@ -46,7 +40,7 @@ const Statement5 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Statement 5 data...</p>
+        <Loader />
       </div>
     );
   }
@@ -61,10 +55,12 @@ const Statement5 = ({ sector, dateRange }) => {
     );
   }
 
-  const grandTotal = (statement5Data ?? []).reduce(
-    (sum, group) => sum + Number(group.total ?? 0),
-    0,
-  );
+  // Grand total is the sum of leaf ("minor") amounts only — "total"
+  // rows already ARE the sum of their major head's leaves, so
+  // including them here would double-count.
+  const grandTotal = (statement5Data ?? [])
+    .filter((row) => row.type === "minor")
+    .reduce((sum, row) => sum + Number(row.total ?? 0), 0);
 
   return (
     <div className="w-full overflow-x-auto border-2 bg-white">
@@ -107,12 +103,22 @@ const Statement5 = ({ sector, dateRange }) => {
               </tr>
             )}
 
-            {statement5Data?.map((group, groupIndex) => (
-              <tr key={`group-${groupIndex}-${group.heads}`} className="border">
-                <HeadsCell group={group} />
-                <AmountCell value={group.total} />
-              </tr>
-            ))}
+            {statement5Data?.map((row, idx) => {
+              const isHeaderRow = row.type === "major" || row.type === "sub";
+              const isTotalRow = row.type === "total";
+              return (
+                <tr
+                  key={`row-${idx}-${row.heads}`}
+                  className={`border ${isTotalRow ? "bg-gray-100" : ""}`}>
+                  <HeadsCell row={row} />
+                  {isHeaderRow ? (
+                    <td className="border px-4 py-2" />
+                  ) : (
+                    <AmountCell value={row.total} bold={isTotalRow} />
+                  )}
+                </tr>
+              );
+            })}
 
             {statement5Data && statement5Data.length > 0 && (
               <tr className="bg-gray-300 border">

@@ -238,26 +238,13 @@ const buildStateChallanClassification = (row, headsFullChainMap) => {
     ]);
 };
 
+
+
+
+
 // ═════════════════════════════════════════════════════════════
 // FORM 4 - Register of Remittances to Treasury (PLA)
-// Data comes from 4 tables: challan, challanTwo, challanFromBill,
-// stateChallan
-// (STATE sector: only from StateChallan table — see getForm4Data)
-//
-// COUNCIL — matches Form 1 (Cashbook) Receipt side Treasury PLA
-// column: in addition to COUNCIL's own ChallanFromBill rows, also
-// pulls ChallanFromBill rows where sector = STATE and amountType is
-// one of the 4 treasury types below — same cross-sector pull as
-// councilCrossStateTreasuryRows in cashbookService.js. STATE's own
-// fetching/handling is completely untouched.
-//
-// `year` is optional. When passed, every table is filtered to the
-// same financial-year window (April 1 → March 31) that
-// getCashbookRowsByFy uses, on the same date field per table
-// (challanDate / kaacChallanDate / voucharDate), so COUNCIL's Form 4
-// total reconciles against Form 1's COUNCIL Receipt Treasury PLA
-// total. If omitted, date filtering is skipped (old all-time
-// behavior) for backward compatibility.
+// ...
 // ═════════════════════════════════════════════════════════════
 
 const ALLOWED_AMOUNT_TYPES = [
@@ -274,13 +261,15 @@ const ALLOWED_AMOUNT_TYPES = [
     "Other Deductions",
 ];
 
-// Same cross-sector addition as cashbookService.js's
-// COUNCIL_STATE_TREASURY_TYPES — only applies when sector = COUNCIL.
-const COUNCIL_STATE_TREASURY_TYPES = [
-    "Professional Tax",
-    "Monopoly",
-    "Forest Royalty",
-    "MC Forest Royalty",
+// ─────────────────────────────────────────────────────────────
+// Amount Remitted majorHead range: 001–016, plus 661 and 664.
+// Used for COUNCIL / CONSOLIDATED "amount remitted" pulls from
+// Challan + challanFromBill (sectors COUNCIL + STATE).
+// ─────────────────────────────────────────────────────────────
+const AMOUNT_REMITTED_MAJOR_HEADS = [
+    ...Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(3, "0")), // 001..016
+    "661",
+    "664",
 ];
 
 // Same financial-year window Cashbook uses (April 1 → March 31).
@@ -404,17 +393,57 @@ const getForm4ChallanFromBillRows = async (sector, dateRange, heads3LevelMap) =>
 };
 
 // ─────────────────────────────────────────────────────────────
-// ChallanFromBill rows where sector = STATE and amountType is one of
-// the 4 treasury types, shown under COUNCIL. Only ever called when
-// sector = "COUNCIL". Same row shape as getForm4ChallanFromBillRows;
-// distinct id prefix so the source is traceable; `sector` on the row
-// stays "STATE" (the record's real sector) rather than "COUNCIL".
+// NEW: "Amount Remitted" pull for COUNCIL / CONSOLIDATED.
+// Pulls Challan + challanFromBill rows for the given sectors
+// (e.g. ["COUNCIL", "STATE"]) whose majorHead falls in
+// AMOUNT_REMITTED_MAJOR_HEADS (001-016, 661, 664).
+// No amountType restriction, no ChallanTwo — this replaces the
+// old ALLOWED_AMOUNT_TYPES-based ChallanFromBill fetch and the
+// amountType-based cross-sector helper for these two sectors.
 // ─────────────────────────────────────────────────────────────
-const getForm4CouncilCrossStateTreasuryRows = async (dateRange, heads3LevelMap) => {
+const getForm4RemittanceChallanRows = async (sectors, dateRange) => {
     const where = {
         isActive: true,
-        sector: "STATE",
-        amountType: { in: COUNCIL_STATE_TREASURY_TYPES },
+        challanType: { in: sectors },
+        majorHead: { in: AMOUNT_REMITTED_MAJOR_HEADS },
+    };
+
+    if (dateRange) {
+        where.challanDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.challan.findMany({ where });
+
+    logger.info(
+        `Fetched ${rows.length} rows from Challan table (amount-remitted, majorHead-filtered) for sectors: ${sectors.join(",")}`
+    );
+
+    const challanHeadsMap = await getChallanHeadsNameMap();
+
+    return rows.map((row) => ({
+        id: `challan-${row.id}`,
+        clnNo: row.challanNo ?? "-",
+        date: row.challanDate ?? row.createdAt,
+        treasury: row.treasuryCode ?? "-",
+        amount: parseFloat(row.amount ?? "0"),
+        refItemNo: row.treasuryChallanNo ?? "-",
+        classification: buildChallanClassification(
+            row.majorHead,
+            row.subMajorHead,
+            row.minorHead,
+            challanHeadsMap
+        ),
+        remarks: row.remarks ?? "-",
+        sector: row.challanType ?? null,
+        source: "challan",
+    }));
+};
+
+const getForm4RemittanceChallanFromBillRows = async (sectors, dateRange, heads3LevelMap) => {
+    const where = {
+        isActive: true,
+        sector: { in: sectors },
+        majorHead: { in: AMOUNT_REMITTED_MAJOR_HEADS },
     };
 
     if (dateRange) {
@@ -424,11 +453,11 @@ const getForm4CouncilCrossStateTreasuryRows = async (dateRange, heads3LevelMap) 
     const rows = await prisma.challanFromBill.findMany({ where });
 
     logger.info(
-        `Fetched ${rows.length} STATE-sector treasury rows from ChallanFromBill for COUNCIL's Form 4`
+        `Fetched ${rows.length} rows from ChallanFromBill table (amount-remitted, majorHead-filtered) for sectors: ${sectors.join(",")}`
     );
 
     return rows.map((row) => ({
-        id: `challanFromBill-state-for-council-${row.id}`,
+        id: `challanFromBill-${row.id}`,
         clnNo: row.challanNo ?? "-",
         date: row.voucharDate ?? row.createdAt,
         treasury: row.treasuryCode ?? "-",
@@ -441,8 +470,8 @@ const getForm4CouncilCrossStateTreasuryRows = async (dateRange, heads3LevelMap) 
             heads3LevelMap
         ),
         remarks: row.amountType ?? "-",
-        sector: row.sector ?? null, // "STATE" — the record's real sector
-        source: "challanFromBill-stateForCouncil",
+        sector: row.sector ?? null,
+        source: "challanFromBill",
     }));
 };
 
@@ -489,25 +518,22 @@ const getForm4StateChallanRows = async (dateRange) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Main Form 4 function
+// Main Form 4 function — "Amount Remitted" rules
 //
 // SECTOR RULES:
-// - sector === "STATE"        → StateChallan ONLY (challan, challanTwo,
-//                                 challanFromBill are skipped) — UNCHANGED
-// - sector === "COUNCIL"      → Challan + ChallanTwo + ChallanFromBill
-//                                 (COUNCIL only), PLUS ChallanFromBill
-//                                 rows where sector = STATE and
-//                                 amountType is one of the 4 treasury
-//                                 types (matches Cashbook's COUNCIL
-//                                 Receipt Treasury PLA column)
-// - sector === "CONSOLIDATED" → Challan + ChallanTwo + ChallanFromBill
-//                                 (all sectors, unfiltered — already
-//                                 includes the STATE treasury rows via
-//                                 the unfiltered ChallanFromBill fetch,
-//                                 so the cross-rows helper does NOT run
-//                                 here — no double counting) + StateChallan
-// - any other sector          → Challan + ChallanTwo + ChallanFromBill
-//                                 (that sector only), no StateChallan
+// - sector === "STATE"        → StateChallan ONLY — UNCHANGED
+// - sector === "COUNCIL"      → Challan + challanFromBill where
+//                                 majorHead IN (001-016, 661, 664)
+//                                 and sector IN (COUNCIL, STATE).
+//                                 (ChallanTwo dropped for this sector.)
+// - sector === "CONSOLIDATED" → same Challan + challanFromBill pull
+//                                 as COUNCIL above (sectors COUNCIL,
+//                                 STATE, majorHead-filtered)
+//                                 + all StateChallan rows.
+//                                 (ChallanTwo dropped here too.)
+// - any other sector          → UNCHANGED: Challan + ChallanTwo +
+//                                 ChallanFromBill (ALLOWED_AMOUNT_TYPES,
+//                                 that sector only), no StateChallan.
 // ─────────────────────────────────────────────────────────────
 export const getForm4Data = async (sector, from, to) => {
     try {
@@ -517,59 +543,63 @@ export const getForm4Data = async (sector, from, to) => {
 
         const isStateSector = sector === "STATE";
         const isCouncilSector = sector === "COUNCIL";
-        const includeStateChallans =
-            !sector || sector === "CONSOLIDATED" || sector === "STATE";
+        const isConsolidatedSector = sector === "CONSOLIDATED";
 
         const dateRange = getDateRangeFromParams(from, to);
 
-        let challanRows = [];
-        let challanTwoRows = [];
-        let challanFromBillRows = [];
-        let stateChallanRows = [];
-        let councilCrossStateTreasuryRows = [];
+        let allRows = [];
 
         if (isStateSector) {
             // ── STATE sector: ONLY StateChallan table ──
             logger.info(
                 `Form4: sector=STATE → skipping Challan, ChallanTwo & ChallanFromBill, using StateChallan only`
             );
-            stateChallanRows = await getForm4StateChallanRows(dateRange);
-        } else {
-            // Shared Heads 3-level lookup for challanTwo/challanFromBill
-            // (and the COUNCIL cross-sector rows), loaded once per call.
+            allRows = await getForm4StateChallanRows(dateRange);
+        } else if (isCouncilSector || isConsolidatedSector) {
+            // ── COUNCIL / CONSOLIDATED: majorHead-based Amount Remitted ──
             const heads3LevelMap = await getHeads3LevelMap();
+            const remittanceSectors = ["COUNCIL", "STATE"];
 
-            [challanRows, challanTwoRows, challanFromBillRows, stateChallanRows, councilCrossStateTreasuryRows] =
+            const [remittanceChallanRows, remittanceChallanFromBillRows, stateChallanRows] =
                 await Promise.all([
-                    getForm4ChallanRows(sector, dateRange),
-                    getForm4ChallanTwoRows(sector, dateRange, heads3LevelMap),
-                    getForm4ChallanFromBillRows(sector, dateRange, heads3LevelMap),
-                    includeStateChallans
+                    getForm4RemittanceChallanRows(remittanceSectors, dateRange),
+                    getForm4RemittanceChallanFromBillRows(remittanceSectors, dateRange, heads3LevelMap),
+                    isConsolidatedSector
                         ? getForm4StateChallanRows(dateRange)
                         : Promise.resolve([]),
-                    // Only fires for sector = COUNCIL — CONSOLIDATED
-                    // already gets these rows via the unfiltered
-                    // getForm4ChallanFromBillRows("CONSOLIDATED") call
-                    // above, so running this too would double-count.
-                    isCouncilSector
-                        ? getForm4CouncilCrossStateTreasuryRows(dateRange, heads3LevelMap)
-                        : Promise.resolve([]),
                 ]);
+
+            logger.info(
+                `Form4 (${sector}): Rows going into merge — remittanceChallan: ${remittanceChallanRows.length}, ` +
+                `remittanceChallanFromBill: ${remittanceChallanFromBillRows.length}, stateChallan: ${stateChallanRows.length}`
+            );
+
+            allRows = [
+                ...remittanceChallanRows,
+                ...remittanceChallanFromBillRows,
+                ...stateChallanRows,
+            ];
+        } else {
+            // ── Any other sector: UNCHANGED behavior ──
+            const heads3LevelMap = await getHeads3LevelMap();
+
+            const [challanRows, challanTwoRows, challanFromBillRows] = await Promise.all([
+                getForm4ChallanRows(sector, dateRange),
+                getForm4ChallanTwoRows(sector, dateRange, heads3LevelMap),
+                getForm4ChallanFromBillRows(sector, dateRange, heads3LevelMap),
+            ]);
+
+            logger.info(
+                `Form4: Rows going into merge — challan: ${challanRows.length}, challanTwo: ${challanTwoRows.length}, ` +
+                `challanFromBill: ${challanFromBillRows.length}`
+            );
+
+            allRows = [
+                ...challanRows,
+                ...challanTwoRows,
+                ...challanFromBillRows,
+            ];
         }
-
-        const allRows = [
-            ...challanRows,
-            ...challanTwoRows,
-            ...challanFromBillRows,
-            ...stateChallanRows,
-            ...councilCrossStateTreasuryRows,
-        ];
-
-        logger.info(
-            `Form4: Rows going into merge — challan: ${challanRows.length}, challanTwo: ${challanTwoRows.length}, ` +
-            `challanFromBill: ${challanFromBillRows.length}, stateChallan: ${stateChallanRows.length}, ` +
-            `councilCrossStateTreasuryRows: ${councilCrossStateTreasuryRows.length}`
-        );
 
         const sorted = allRows.sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -582,14 +612,21 @@ export const getForm4Data = async (sector, from, to) => {
     }
 };
 
+
+
+
+
+
+
 // ═════════════════════════════════════════════════════════════
 // FORM 5A - Classified Abstract of Receipts
 //
 // SECTOR RULES:
 // - sector === "STATE"        → StateChallan ONLY, majorHead in [2011, 3999].
-// - sector === "COUNCIL"      → Challan (majorHead 1-16, COUNCIL only) +
-//                                 ChallanFromBill (sector IN COUNCIL, STATE,
-//                                 treasury amountTypes).
+// - sector === "COUNCIL"      → Challan (majorHead 001-016, sector IN
+//                                 COUNCIL, STATE) + ChallanFromBill
+//                                 (majorHead 001-016, sector IN COUNCIL,
+//                                 STATE).
 // - sector === "CONSOLIDATED" → STATE's rule + COUNCIL's rule combined.
 // - any other sector          → empty result.
 //
@@ -600,16 +637,6 @@ export const getForm4Data = async (sector, from, to) => {
 //   - source === "stateChallan"     → Heads
 //   - source === "challanFromBill"  → Heads
 // ═════════════════════════════════════════════════════════════
-// ═════════════════════════════════════════════════════════════
-// FORM 5A - Classified Abstract of Receipts
-// ═════════════════════════════════════════════════════════════
-
-const FORM5A_ALLOWED_AMOUNT_TYPES = [
-    "Professional Tax",
-    "Monopoly",
-    "Forest Royalty",
-    "MC Forest Royalty",
-];
 
 const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}, dateRange) => {
     const where = {
@@ -667,16 +694,23 @@ const getForm5AStateChallanRows = async ({ majorHeadRangeOnly = false } = {}, da
     }));
 };
 
+// Shared majorHead range check for the COUNCIL Form 5A pull
+// (Challan + ChallanFromBill), both filtered to 001-016.
 const isMajorHeadInCouncilRangeForm5A = (majorHead) => {
     if (!majorHead) return false;
     const num = parseInt(majorHead, 10);
     return !Number.isNaN(num) && num >= 1 && num <= 16;
 };
 
+// ─────────────────────────────────────────────────────────────
+// Challan rows for COUNCIL's Form 5A pull.
+// sector IN (COUNCIL, STATE) — was COUNCIL-only before.
+// Filtered to majorHead 001-016.
+// ─────────────────────────────────────────────────────────────
 const getForm5ACouncilChallanRows = async (dateRange) => {
     const where = {
         isActive: true,
-        challanType: "COUNCIL",
+        challanType: { in: ["COUNCIL", "STATE"] },
     };
 
     if (dateRange) {
@@ -686,13 +720,13 @@ const getForm5ACouncilChallanRows = async (dateRange) => {
     const rows = await prisma.challan.findMany({ where });
 
     logger.info(
-        `Form5A: Fetched ${rows.length} COUNCIL Challan rows (pre majorHead 1-16 filter)`
+        `Form5A: Fetched ${rows.length} Challan rows (sector IN COUNCIL, STATE) (pre majorHead 1-16 filter)`
     );
 
     const filtered = rows.filter((row) => isMajorHeadInCouncilRangeForm5A(row.majorHead));
 
     logger.info(
-        `Form5A: COUNCIL Challan rows after majorHead 1-16 filter: ${filtered.length} (excluded ${rows.length - filtered.length})`
+        `Form5A: Challan rows after majorHead 1-16 filter: ${filtered.length} (excluded ${rows.length - filtered.length})`
     );
 
     const challanHeadsMap = await getChallanHeadsNameMap();
@@ -713,10 +747,15 @@ const getForm5ACouncilChallanRows = async (dateRange) => {
     }));
 };
 
+// ─────────────────────────────────────────────────────────────
+// ChallanFromBill rows for COUNCIL's Form 5A pull.
+// sector IN (COUNCIL, STATE), filtered to majorHead 001-016.
+// amountType filter (FORM5A_ALLOWED_AMOUNT_TYPES) is dropped —
+// majorHead now does that job.
+// ─────────────────────────────────────────────────────────────
 const getForm5ACouncilChallanFromBillRows = async (dateRange) => {
     const where = {
         isActive: true,
-        amountType: { in: FORM5A_ALLOWED_AMOUNT_TYPES },
         sector: { in: ["COUNCIL", "STATE"] },
     };
 
@@ -727,12 +766,18 @@ const getForm5ACouncilChallanFromBillRows = async (dateRange) => {
     const rows = await prisma.challanFromBill.findMany({ where });
 
     logger.info(
-        `Form5A: Fetched ${rows.length} ChallanFromBill rows for COUNCIL (sector IN COUNCIL, STATE)`
+        `Form5A: Fetched ${rows.length} ChallanFromBill rows (sector IN COUNCIL, STATE) (pre majorHead 1-16 filter)`
+    );
+
+    const filtered = rows.filter((row) => isMajorHeadInCouncilRangeForm5A(row.majorHead));
+
+    logger.info(
+        `Form5A: ChallanFromBill rows after majorHead 1-16 filter: ${filtered.length} (excluded ${rows.length - filtered.length})`
     );
 
     const heads3LevelMap = await getHeads3LevelMap();
 
-    return rows.map((row) => ({
+    return filtered.map((row) => ({
         majorHead: row.majorHead ?? "Unknown",
         subMajor: row.subMajor ?? "-",
         minorHead: row.minorHead ?? "-",
@@ -835,13 +880,18 @@ export const getForm5AData = async (sector, from, to) => {
 
 
 
-
-
-
 // ─────────────────────────────────────────────────────────────
 // FORM 5B - Classified Abstract of Expenditure
-// (sector rules unchanged — see comments below on getForm5BData)
-// 🔸 Every row now also carries `classification`: an array of
+//
+// SECTOR RULES:
+// - sector === "STATE"        → Expenditure (sector=STATE), majorHead
+//                                 in [2011, 3999].
+// - sector === "COUNCIL"      → Expenditure (sector=COUNCIL), majorHead
+//                                 in [201, 224].
+// - sector === "CONSOLIDATED" → STATE's rule + COUNCIL's rule combined.
+// - any other sector          → empty result.
+//
+// 🔸 Every row also carries `classification`: an array of
 // { level, code, name } resolved via the shared Heads 3-level map
 // (expenditure always resolves through Heads, per source table —
 // regardless of sector), same shape/rules as Form 4/5A, including
@@ -852,6 +902,13 @@ const isMajorHeadInStateRangeForm5B = (majorHead) => {
     if (!majorHead) return false;
     const num = parseInt(majorHead, 10);
     return !Number.isNaN(num) && num >= 2011 && num <= 3999;
+};
+
+// NEW: COUNCIL's Form 5B majorHead range check — 201 to 224.
+const isMajorHeadInCouncilRangeForm5B = (majorHead) => {
+    if (!majorHead) return false;
+    const num = parseInt(majorHead, 10);
+    return !Number.isNaN(num) && num >= 201 && num <= 224;
 };
 
 const getForm5BStateRows = async (dateRange) => {
@@ -892,10 +949,16 @@ const getForm5BCouncilRows = async (dateRange) => {
     const rows = await prisma.expenditure.findMany({ where });
 
     logger.info(
-        `Form5B: Fetched ${rows.length} COUNCIL rows from Expenditure table (all, unfiltered by type)`
+        `Form5B: Fetched ${rows.length} COUNCIL rows from Expenditure table (pre majorHead-range filter)`
     );
 
-    return rows;
+    const filtered = rows.filter((row) => isMajorHeadInCouncilRangeForm5B(row.majorHead));
+
+    logger.info(
+        `Form5B: COUNCIL rows after majorHead 201-224 filter: ${filtered.length} (excluded ${rows.length - filtered.length})`
+    );
+
+    return filtered;
 };
 
 export const getForm5BData = async (sector, from, to) => {
@@ -1004,11 +1067,17 @@ export const getForm5BData = async (sector, from, to) => {
 
 // ─────────────────────────────────────────────────────────────
 // FORM 5C - Classified Abstract of Capital Expenditure
-// (sector rules unchanged — see comments below on getForm5CData)
+//
+// SECTOR RULES:
+// - sector === "STATE"        → Expenditure (sector=STATE), majorHead
+//                                 in [4001, 5999].
+// - sector === "COUNCIL"      → Expenditure (sector=COUNCIL), majorHead
+//                                 in [440, 449].
+// - sector === "CONSOLIDATED" → STATE's rule + COUNCIL's rule combined.
+// - any other sector          → empty result.
+//
 // 🔸 Same classification addition as Form 5B above.
 // ─────────────────────────────────────────────────────────────
-
-const COUNCIL_MAJOR_HEADS = ["440", "441", "442", "443"];
 
 const isMajorHeadInStateRangeForm5C = (majorHead) => {
     if (!majorHead) return false;
@@ -1016,13 +1085,30 @@ const isMajorHeadInStateRangeForm5C = (majorHead) => {
     return !Number.isNaN(num) && num >= 4001 && num <= 5999;
 };
 
-const getForm5CStateRows = async () => {
-    const rows = await prisma.expenditure.findMany({
-        where: {
-            isActive: true,
-            sector: "STATE",
-        },
-    });
+// NEW: numeric range check for COUNCIL, replacing the exact-string
+// COUNCIL_MAJOR_HEADS `in` list — robust to majorHead padding, and
+// consistent with how STATE's range is checked above.
+const isMajorHeadInCouncilRangeForm5C = (majorHead) => {
+    if (!majorHead) return false;
+    const num = parseInt(majorHead, 10);
+    return !Number.isNaN(num) && num >= 440 && num <= 449;
+};
+
+// FIX: now actually accepts and applies `dateRange` — previously
+// defined as `async ()` with no params, so any dateRange passed by
+// the caller was silently ignored and Form5C always returned
+// all-time data.
+const getForm5CStateRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        sector: "STATE",
+    };
+
+    if (dateRange) {
+        where.voucherDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.expenditure.findMany({ where });
 
     logger.info(
         `Form5C: Fetched ${rows.length} STATE rows from Expenditure table (pre majorHead-range filter)`
@@ -1037,40 +1123,59 @@ const getForm5CStateRows = async () => {
     return filtered;
 };
 
-const getForm5CCouncilRows = async () => {
-    const rows = await prisma.expenditure.findMany({
-        where: {
-            isActive: true,
-            sector: "COUNCIL",
-            majorHead: { in: COUNCIL_MAJOR_HEADS },
-        },
-    });
+// FIX: same as above — now accepts `dateRange`, and majorHead
+// filtering moved to the same numeric-range style as STATE (was a
+// Prisma-level exact-string `in` filter on COUNCIL_MAJOR_HEADS).
+const getForm5CCouncilRows = async (dateRange) => {
+    const where = {
+        isActive: true,
+        sector: "COUNCIL",
+    };
+
+    if (dateRange) {
+        where.voucherDate = { gte: dateRange.from, lte: dateRange.to };
+    }
+
+    const rows = await prisma.expenditure.findMany({ where });
 
     logger.info(
-        `Form5C: Fetched ${rows.length} COUNCIL rows from Expenditure table (majorHead in ${COUNCIL_MAJOR_HEADS.join(", ")})`
+        `Form5C: Fetched ${rows.length} COUNCIL rows from Expenditure table (pre majorHead-range filter)`
     );
 
-    return rows;
+    const filtered = rows.filter((row) => isMajorHeadInCouncilRangeForm5C(row.majorHead));
+
+    logger.info(
+        `Form5C: COUNCIL rows after majorHead 440-449 filter: ${filtered.length} (excluded ${rows.length - filtered.length})`
+    );
+
+    return filtered;
 };
 
-export const getForm5CData = async (sector) => {
+export const getForm5CData = async (sector, from, to) => {
     try {
-        logger.info(`Fetching Form 5C data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 5C data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
+        );
 
         const isStateSector = sector === "STATE";
         const isCouncilSector = sector === "COUNCIL";
         const isConsolidated = sector === "CONSOLIDATED";
 
+        const dateRange = getDateRangeFromParams(from, to);
+
+        // console.log("Form5C dateRange resolved to:", dateRange);
+
         let rows = [];
 
         if (isStateSector) {
-            rows = await getForm5CStateRows();
+            rows = await getForm5CStateRows(dateRange);
         } else if (isCouncilSector) {
-            rows = await getForm5CCouncilRows();
+            rows = await getForm5CCouncilRows(dateRange);
         } else if (isConsolidated) {
+            // FIX: dateRange was previously not passed at all here.
             const [stateRows, councilRows] = await Promise.all([
-                getForm5CStateRows(),
-                getForm5CCouncilRows(),
+                getForm5CStateRows(dateRange),
+                getForm5CCouncilRows(dateRange),
             ]);
             rows = [...stateRows, ...councilRows];
         } else {
@@ -1151,71 +1256,67 @@ export const getForm5CData = async (sector) => {
 
 
 
-
 // ─────────────────────────────────────────────────────────────
 // FORM 5D - Register of Loans/Advances & Related Recoveries
 //
 // SECTOR RULES:
-// - sector === "STATE"        → UNCHANGED. ChallanFromBill only,
-//                                 sector = STATE, amountType in
-//                                 FORM5D_STATE_AMOUNT_TYPES (all 23
-//                                 types except "Advance Payment").
-//                                 Receipt: "Other categories" column
-//                                 only. Payment: "Total Payment"
-//                                 column only. All other columns nil.
-// - sector === "COUNCIL"      → REPLACED. No longer uses ChallanTwo
-//                                 or most of Expenditure's fields.
-//                                 • Receipt: ChallanFromBill rows,
-//                                   sector = COUNCIL, amountType =
-//                                   "Building Loan" → H/B Loan column,
-//                                   amountType = "Car Loan" → Car Loan
-//                                   column. loansGovt, loansOther,
-//                                   otherReceipts are nil.
-//                                 • Payment: Expenditure rows, sector =
-//                                   COUNCIL, where loansAdvances field
-//                                   is non-zero → Loans/Advances payment
-//                                   column = that row's grossAmount
-//                                   (not the loansAdvances field value
-//                                   itself). repayGovt, repayOther are
-//                                   nil.
-// - sector === "CONSOLIDATED" → Combines STATE's rule (unchanged) +
-//                                 COUNCIL's new rule above, merged
-//                                 before computing totals.
-// - any other sector          → no rule defined, empty result.
+//
+// COUNCIL — Receipt side:
+//   • LOANS FROM GOVT.        → Challan, subMajorHead = "66001",
+//                                 challanType = COUNCIL → loansGovt
+//   • LOANS FROM OTHER SOURCES→ Challan, subMajorHead = "66002",
+//                                 challanType = COUNCIL → loansOther
+//   • H/B LOAN                → ChallanFromBill, sector = COUNCIL,
+//                                 amountType = "Building Loan" → hbLoan
+//   • Car Loan                → ChallanFromBill, sector = COUNCIL,
+//                                 amountType = "Car Loan" → carLoan
+//   • OTHER RECEIPTS          → Nil
+//
+// COUNCIL — Payment side:
+//   • REPAYMENT LOANS (GOVT)  → Expenditure, sector = COUNCIL,
+//                                 loanRepayGovt non-zero → repayGovt
+//                                 = grossAmount
+//   • REPAYMENT LOANS (OTHER) → Expenditure, sector = COUNCIL,
+//                                 loanRepayOther non-zero → repayOther
+//                                 = grossAmount
+//   • PAYMENTS LOANS/ADVANCES → Expenditure, sector = COUNCIL,
+//                                 majorHead = "661" → loansAdvances
+//                                 = grossAmount
+//
+// STATE — Receipt side:
+//   • LOANS FROM GOVT.        → StateChallan, majorHead = "7610",
+//                                 sector = STATE → loansGovt =
+//                                 totalAmount
+//   • LOANS FROM OTHER SOURCES, H/B LOAN, Car Loan, OTHER RECEIPTS
+//     → Nil
+//
+// STATE — Payment side:
+//   • REPAYMENT LOANS (GOVT)  → Expenditure, sector = STATE,
+//                                 loanRepayGovt non-zero → repayGovt
+//                                 = grossAmount
+//   • REPAYMENT LOANS (OTHER) → Expenditure, sector = STATE,
+//                                 loanRepayOther non-zero → repayOther
+//                                 = grossAmount
+//   • PAYMENTS LOANS/ADVANCES → Nil
+//
+// CONSOLIDATED → STATE's rows + COUNCIL's rows, merged.
+// any other sector → no rule defined, empty result.
+//
+// All queries below are date-filtered when `dateRange` is provided
+// (Challan → challanDate, ChallanFromBill → voucharDate,
+// StateChallan → challanDate, Expenditure → voucherDate) — this
+// mirrors getDateRangeFromParams / getFyRange usage in Forms 4/5A/5B/5C.
 // ─────────────────────────────────────────────────────────────
 
-// STATE-sector amount types for Form 5D — all 23 challanFromBill
-// types EXCEPT "Advance Payment" (excluded from both receipt and
-// payment side per spec)
-const FORM5D_STATE_AMOUNT_TYPES = [
-    "CGST",
-    "SGST",
-    "IGST",
-    "ITAX",
-    "MDRRF",
-    "DMFT",
-    "Labour Cess",
-    "IT Forest Royalty",
-    "VAT",
-    "CPF Council Share",
-    "CPF Contribution",
-    "CPF Advance",
-    "Earnest Money",
-    "Professional Tax",
-    "Car Loan",
-    "Building Loan",
-    "House Rent",
-    "Security Deposits",
-    "Monopoly",
-    "Forest Royalty",
-    "MC Forest Royalty",
-    "Other Deductions",
-    // "Advance Payment" — intentionally excluded
-];
+const FORM5D_COUNCIL_HB_LOAN_AMOUNT_TYPE = "Building Loan";
+const FORM5D_COUNCIL_CAR_LOAN_AMOUNT_TYPE = "Car Loan";
 
-// COUNCIL-sector receipt amount types — only these two, mapped to
-// the H/B Loan and Car Loan columns respectively.
-const FORM5D_COUNCIL_RECEIPT_AMOUNT_TYPES = ["Building Loan", "Car Loan"];
+const FORM5D_COUNCIL_LOANS_GOVT_SUBMAJOR = "66001";
+const FORM5D_COUNCIL_LOANS_OTHER_SUBMAJOR = "66002";
+
+const FORM5D_STATE_LOANS_GOVT_MAJORHEAD = "7610";
+
+const FORM5D_COUNCIL_LOANS_ADVANCES_MAJORHEAD = "661";
 
 const safe = (v) => {
     if (v === null || v === undefined) return 0;
@@ -1223,158 +1324,336 @@ const safe = (v) => {
     return isNaN(n) ? 0 : n;
 };
 
-// ════════════════════════════════════════════════════════════
-// STATE — UNCHANGED logic, extracted into its own function so
-// CONSOLIDATED can call it alongside the new COUNCIL function.
-// ════════════════════════════════════════════════════════════
-const getForm5DStateRows = async () => {
-    const challanFromBillRows = await prisma.challanFromBill.findMany({
-        where: {
-            isActive: true,
-            sector: "STATE",
-            amountType: { in: FORM5D_STATE_AMOUNT_TYPES },
-        },
-        orderBy: { voucharDate: "asc" },
-    });
+const emptyReceipt = () => ({
+    loansGovt: 0,
+    loansOther: 0,
+    hbLoan: 0,
+    carLoan: 0,
+    otherReceipts: 0,
+});
 
-    logger.info(
-        `Form5D (STATE): Fetched ${challanFromBillRows.length} rows from ChallanFromBill`
-    );
-
-    // ── Receipt rows — "Other categories" column only ────
-    const receiptRows = challanFromBillRows.map((row) => {
-        const amount = safe(row.amount);
-        return {
-            id: `CFB-RCPT-${row.id}`,
-            source: "challanFromBill",
-            cashBookItemNo: row.challanNo ?? "-",
-            loansGovt: 0,
-            loansOther: 0,
-            hbLoan: 0,
-            carLoan: 0,
-            otherReceipts: amount,
-            totalReceipts: amount,
-        };
-    });
-
-    // ── Payment rows — "Total Payment" column only ───────
-    const paymentRows = challanFromBillRows.map((row) => {
-        const amount = safe(row.amount);
-        return {
-            id: `CFB-PMT-${row.id}`,
-            vrNo: row.challanNo ?? "-",
-            repayGovt: 0,
-            repayOther: 0,
-            loansAdvances: 0,
-            totalPayments: amount,
-        };
-    });
-
-    return { receiptRows, paymentRows };
-};
+const emptyPayment = () => ({
+    repayGovt: 0,
+    repayOther: 0,
+    loansAdvances: 0,
+});
 
 // ════════════════════════════════════════════════════════════
-// NEW — COUNCIL logic.
-// Receipt: ChallanFromBill, sector = COUNCIL, amountType in
-//   ["Building Loan", "Car Loan"] → H/B Loan / Car Loan columns.
-// Payment: Expenditure, sector = COUNCIL, rows where loansAdvances
-//   is non-zero → Loans/Advances payment column = grossAmount.
+// COUNCIL — Receipt side
 // ════════════════════════════════════════════════════════════
-const getForm5DCouncilRows = async () => {
-    const [challanFromBillRows, expenditureRows] = await Promise.all([
+const getForm5DCouncilReceiptRows = async (dateRange) => {
+    const challanDateWhere = dateRange
+        ? { challanDate: { gte: dateRange.from, lte: dateRange.to } }
+        : {};
+    const cfbDateWhere = dateRange
+        ? { voucharDate: { gte: dateRange.from, lte: dateRange.to } }
+        : {};
+
+    const [loansGovtRows, loansOtherRows, hbLoanRows, carLoanRows] = await Promise.all([
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanType: "COUNCIL",
+                subMajorHead: FORM5D_COUNCIL_LOANS_GOVT_SUBMAJOR,
+                ...challanDateWhere,
+            },
+            orderBy: { challanDate: "asc" },
+        }),
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanType: "COUNCIL",
+                subMajorHead: FORM5D_COUNCIL_LOANS_OTHER_SUBMAJOR,
+                ...challanDateWhere,
+            },
+            orderBy: { challanDate: "asc" },
+        }),
         prisma.challanFromBill.findMany({
             where: {
                 isActive: true,
                 sector: "COUNCIL",
-                amountType: { in: FORM5D_COUNCIL_RECEIPT_AMOUNT_TYPES },
+                amountType: FORM5D_COUNCIL_HB_LOAN_AMOUNT_TYPE,
+                ...cfbDateWhere,
             },
             orderBy: { voucharDate: "asc" },
         }),
-        prisma.expenditure.findMany({
-            where: { isActive: true, sector: "COUNCIL" },
-            select: {
-                id: true,
-                voucherNo: true,
-                voucherDate: true,
-                loansAdvances: true,
-                grossAmount: true,
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                amountType: FORM5D_COUNCIL_CAR_LOAN_AMOUNT_TYPE,
+                ...cfbDateWhere,
             },
-            orderBy: { voucherDate: "asc" },
+            orderBy: { voucharDate: "asc" },
         }),
     ]);
 
     logger.info(
-        `Form5D (COUNCIL): Fetched ${challanFromBillRows.length} ChallanFromBill rows (Building/Car Loan), ${expenditureRows.length} Expenditure rows (pre loansAdvances filter)`
+        `Form5D (COUNCIL receipt): loansGovt(Challan 66001)=${loansGovtRows.length}, ` +
+        `loansOther(Challan 66002)=${loansOtherRows.length}, hbLoan(CFB)=${hbLoanRows.length}, ` +
+        `carLoan(CFB)=${carLoanRows.length}`
     );
 
-    // ── Receipt rows — H/B Loan / Car Loan only ──────────────
-    const receiptRows = challanFromBillRows.map((row) => {
-        const amount = safe(row.amount);
-        const isBuildingLoan = row.amountType === "Building Loan";
-
-        return {
-            id: `CFB-RCPT-COUNCIL-${row.id}`,
-            source: "challanFromBill",
-            cashBookItemNo: row.challanNo ?? "-",
-            loansGovt: 0,
-            loansOther: 0,
-            hbLoan: isBuildingLoan ? amount : 0,
-            carLoan: isBuildingLoan ? 0 : amount,
-            otherReceipts: 0,
-            totalReceipts: amount,
-        };
-    });
-
-    // ── Payment rows — Loans/Advances = grossAmount, only for ──
-    // rows where loansAdvances field is non-zero
-    const paymentRows = expenditureRows
-        .map((row) => {
-            const hasLoanAdvance = safe(row.loansAdvances) !== 0;
-            if (!hasLoanAdvance) return null;
-
-            const amount = safe(row.grossAmount);
-
+    const rows = [
+        ...loansGovtRows.map((row) => {
+            const amount = safe(row.amount);
             return {
-                id: `E-PMT-COUNCIL-${row.id}`,
+                id: `CH-RCPT-COUNCIL-GOVT-${row.id}`,
+                source: "challan",
+                cashBookItemNo: row.challanNo ?? "-",
+                ...emptyReceipt(),
+                loansGovt: amount,
+                totalReceipts: amount,
+            };
+        }),
+        ...loansOtherRows.map((row) => {
+            const amount = safe(row.amount);
+            return {
+                id: `CH-RCPT-COUNCIL-OTHER-${row.id}`,
+                source: "challan",
+                cashBookItemNo: row.challanNo ?? "-",
+                ...emptyReceipt(),
+                loansOther: amount,
+                totalReceipts: amount,
+            };
+        }),
+        ...hbLoanRows.map((row) => {
+            const amount = safe(row.amount);
+            return {
+                id: `CFB-RCPT-COUNCIL-HB-${row.id}`,
+                source: "challanFromBill",
+                cashBookItemNo: row.challanNo ?? "-",
+                ...emptyReceipt(),
+                hbLoan: amount,
+                totalReceipts: amount,
+            };
+        }),
+        ...carLoanRows.map((row) => {
+            const amount = safe(row.amount);
+            return {
+                id: `CFB-RCPT-COUNCIL-CAR-${row.id}`,
+                source: "challanFromBill",
+                cashBookItemNo: row.challanNo ?? "-",
+                ...emptyReceipt(),
+                carLoan: amount,
+                totalReceipts: amount,
+            };
+        }),
+    ];
+
+    return rows;
+};
+
+// ════════════════════════════════════════════════════════════
+// COUNCIL — Payment side
+// ════════════════════════════════════════════════════════════
+const getForm5DCouncilPaymentRows = async (dateRange) => {
+    const dateWhere = dateRange
+        ? { voucherDate: { gte: dateRange.from, lte: dateRange.to } }
+        : {};
+
+    const [repayGovtRows, repayOtherRows, loansAdvancesRows] = await Promise.all([
+        prisma.expenditure.findMany({
+            where: { isActive: true, sector: "COUNCIL", ...dateWhere },
+            select: { id: true, voucherNo: true, loanRepayGovt: true, grossAmount: true },
+            orderBy: { voucherDate: "asc" },
+        }),
+        prisma.expenditure.findMany({
+            where: { isActive: true, sector: "COUNCIL", ...dateWhere },
+            select: { id: true, voucherNo: true, loanRepayOther: true, grossAmount: true },
+            orderBy: { voucherDate: "asc" },
+        }),
+        prisma.expenditure.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                majorHead: FORM5D_COUNCIL_LOANS_ADVANCES_MAJORHEAD,
+                ...dateWhere,
+            },
+            select: { id: true, voucherNo: true, grossAmount: true },
+            orderBy: { voucherDate: "asc" },
+        }),
+    ]);
+
+    const repayGovtFiltered = repayGovtRows.filter((row) => safe(row.loanRepayGovt) !== 0);
+    const repayOtherFiltered = repayOtherRows.filter((row) => safe(row.loanRepayOther) !== 0);
+
+    logger.info(
+        `Form5D (COUNCIL payment): repayGovt=${repayGovtFiltered.length} ` +
+        `(of ${repayGovtRows.length}), repayOther=${repayOtherFiltered.length} ` +
+        `(of ${repayOtherRows.length}), loansAdvances(majorHead 661)=${loansAdvancesRows.length}`
+    );
+
+    const rows = [
+        ...repayGovtFiltered.map((row) => {
+            const amount = safe(row.grossAmount);
+            return {
+                id: `E-PMT-COUNCIL-REPAYGOVT-${row.id}`,
                 vrNo: row.voucherNo ?? "-",
-                repayGovt: 0,
-                repayOther: 0,
+                ...emptyPayment(),
+                repayGovt: amount,
+                totalPayments: amount,
+            };
+        }),
+        ...repayOtherFiltered.map((row) => {
+            const amount = safe(row.grossAmount);
+            return {
+                id: `E-PMT-COUNCIL-REPAYOTHER-${row.id}`,
+                vrNo: row.voucherNo ?? "-",
+                ...emptyPayment(),
+                repayOther: amount,
+                totalPayments: amount,
+            };
+        }),
+        ...loansAdvancesRows.map((row) => {
+            const amount = safe(row.grossAmount);
+            return {
+                id: `E-PMT-COUNCIL-LOANADV-${row.id}`,
+                vrNo: row.voucherNo ?? "-",
+                ...emptyPayment(),
                 loansAdvances: amount,
                 totalPayments: amount,
             };
-        })
-        .filter(Boolean);
+        }),
+    ];
 
-    logger.info(
-        `Form5D (COUNCIL): receiptRows=${receiptRows.length}, paymentRows=${paymentRows.length} (after loansAdvances filter)`
-    );
+    return rows;
+};
 
+const getForm5DCouncilRows = async (dateRange) => {
+    const [receiptRows, paymentRows] = await Promise.all([
+        getForm5DCouncilReceiptRows(dateRange),
+        getForm5DCouncilPaymentRows(dateRange),
+    ]);
     return { receiptRows, paymentRows };
 };
 
-export const getForm5DData = async (sector) => {
+// ════════════════════════════════════════════════════════════
+// STATE — Receipt side
+// ════════════════════════════════════════════════════════════
+const getForm5DStateReceiptRows = async (dateRange) => {
+    const dateWhere = dateRange
+        ? { challanDate: { gte: dateRange.from, lte: dateRange.to } }
+        : {};
+
+    const rows = await prisma.stateChallan.findMany({
+        where: {
+            sector: "STATE",
+            majorHead: FORM5D_STATE_LOANS_GOVT_MAJORHEAD,
+            ...dateWhere,
+        },
+        orderBy: { challanDate: "asc" },
+    });
+
+    logger.info(`Form5D (STATE receipt): loansGovt(StateChallan 7610)=${rows.length}`);
+
+    return rows.map((row) => {
+        const amount = safe(row.totalAmount);
+        return {
+            id: `SC-RCPT-STATE-GOVT-${row.id}`,
+            source: "stateChallan",
+            cashBookItemNo: row.challanNo ?? "-",
+            ...emptyReceipt(),
+            loansGovt: amount,
+            totalReceipts: amount,
+        };
+    });
+};
+
+// ════════════════════════════════════════════════════════════
+// STATE — Payment side
+// ════════════════════════════════════════════════════════════
+const getForm5DStatePaymentRows = async (dateRange) => {
+    const dateWhere = dateRange
+        ? { voucherDate: { gte: dateRange.from, lte: dateRange.to } }
+        : {};
+
+    const [repayGovtRows, repayOtherRows] = await Promise.all([
+        prisma.expenditure.findMany({
+            where: { isActive: true, sector: "STATE", ...dateWhere },
+            select: { id: true, voucherNo: true, loanRepayGovt: true, grossAmount: true },
+            orderBy: { voucherDate: "asc" },
+        }),
+        prisma.expenditure.findMany({
+            where: { isActive: true, sector: "STATE", ...dateWhere },
+            select: { id: true, voucherNo: true, loanRepayOther: true, grossAmount: true },
+            orderBy: { voucherDate: "asc" },
+        }),
+    ]);
+
+    const repayGovtFiltered = repayGovtRows.filter((row) => safe(row.loanRepayGovt) !== 0);
+    const repayOtherFiltered = repayOtherRows.filter((row) => safe(row.loanRepayOther) !== 0);
+
+    logger.info(
+        `Form5D (STATE payment): repayGovt=${repayGovtFiltered.length} ` +
+        `(of ${repayGovtRows.length}), repayOther=${repayOtherFiltered.length} ` +
+        `(of ${repayOtherRows.length})`
+    );
+
+    const rows = [
+        ...repayGovtFiltered.map((row) => {
+            const amount = safe(row.grossAmount);
+            return {
+                id: `E-PMT-STATE-REPAYGOVT-${row.id}`,
+                vrNo: row.voucherNo ?? "-",
+                ...emptyPayment(),
+                repayGovt: amount,
+                totalPayments: amount,
+            };
+        }),
+        ...repayOtherFiltered.map((row) => {
+            const amount = safe(row.grossAmount);
+            return {
+                id: `E-PMT-STATE-REPAYOTHER-${row.id}`,
+                vrNo: row.voucherNo ?? "-",
+                ...emptyPayment(),
+                repayOther: amount,
+                totalPayments: amount,
+            };
+        }),
+        // PAYMENTS LOANS/ADVANCES — Nil for STATE, no rows generated.
+    ];
+
+    return rows;
+};
+
+const getForm5DStateRows = async (dateRange) => {
+    const [receiptRows, paymentRows] = await Promise.all([
+        getForm5DStateReceiptRows(dateRange),
+        getForm5DStatePaymentRows(dateRange),
+    ]);
+    return { receiptRows, paymentRows };
+};
+
+export const getForm5DData = async (sector, from, to) => {
     try {
-        logger.info(`Fetching Form 5D data for sector: ${sector ?? "ALL"}`);
+        logger.info(
+            `Fetching Form 5D data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
+        );
 
         const isStateSector = sector === "STATE";
         const isCouncilSector = sector === "COUNCIL";
         const isConsolidated = sector === "CONSOLIDATED";
 
+        const dateRange = getDateRangeFromParams(from, to);
+
+        logger.info(`Form5D resolved dateRange: ${JSON.stringify(dateRange)}`);
+
         let receiptRows = [];
         let paymentRows = [];
 
         if (isStateSector) {
-            const stateData = await getForm5DStateRows();
+            const stateData = await getForm5DStateRows(dateRange);
             receiptRows = stateData.receiptRows;
             paymentRows = stateData.paymentRows;
         } else if (isCouncilSector) {
-            const councilData = await getForm5DCouncilRows();
+            const councilData = await getForm5DCouncilRows(dateRange);
             receiptRows = councilData.receiptRows;
             paymentRows = councilData.paymentRows;
         } else if (isConsolidated) {
             const [stateData, councilData] = await Promise.all([
-                getForm5DStateRows(),
-                getForm5DCouncilRows(),
+                getForm5DStateRows(dateRange),
+                getForm5DCouncilRows(dateRange),
             ]);
             receiptRows = [...stateData.receiptRows, ...councilData.receiptRows];
             paymentRows = [...stateData.paymentRows, ...councilData.paymentRows];
@@ -1421,54 +1700,95 @@ export const getForm5DData = async (sector) => {
 
 
 
-
 // ─────────────────────────────────────────────────────────────
 // FORM 5E - Classified cum Consolidated Abstract
 //           Part II Deposit Fund (Debt-Deposit-Remittances)
 //
 // SECTOR RULES:
-// - sector === "STATE"        → UNCHANGED. Extracted verbatim into
-//                                 getForm5EStateRows() below. Now also
-//                                 respects from/to date filtering.
-// - sector === "COUNCIL"      → REBUILT. See getForm5ECouncilRows()
-//                                 for the full column-by-column source
-//                                 mapping (comments inline there). Now
-//                                 also respects from/to date filtering.
-// - sector === "CONSOLIDATED" → STATE's rows + COUNCIL's rows, merged
-//                                 before computing totals.
-// - any other sector          → no rule defined, empty result.
+//
+// COUNCIL — Receipt side:
+//   RECOVERIES OF CPF SUBSCRIPTIONS → ChallanFromBill, majorHead="661",
+//     sector=COUNCIL → cpfSub. Same records ALSO feed payment-side
+//     remitCpf below (dual-posted).
+//   SECURITY DEPOSIT → ChallanFromBill, majorHead="664",
+//     amountType="Security Deposits", sector=COUNCIL → securityDep
+//   EARNEST MONEY DEPOSIT → ChallanFromBill, majorHead="664",
+//     amountType="Earnest Money", sector=COUNCIL → earnestMoney
+//   Deposit received from Govt for transferred item → Nil
+//   Cheques drawn during month → ALL Expenditure, sector=COUNCIL →
+//     chequesDrawn = grossAmount
+//
+// COUNCIL — Payment side:
+//   Payment of CPF balance advances → Expenditure, majorHead="662",
+//     sector=COUNCIL → cpfAdvances = grossAmount
+//   Remittance of CPF Contribution to P.O. → SAME ChallanFromBill
+//     majorHead="661"/sector=COUNCIL records as receipt cpfSub above
+//     (dual-posted) → remitCpf = amount
+//   Payment of security deposit → Expenditure, majorHead="664",
+//     securityDeposit field non-zero, sector=COUNCIL → paySecurityDep
+//     = grossAmount
+//   Repayment of Earnest money deposit → Expenditure, majorHead="664",
+//     earnestMoney field non-zero, sector=COUNCIL → repayEarnest =
+//     grossAmount
+//   Payment in respect of transferred item → Nil
+//   Remittance to Treasury (PLA) → Challan (challanType=COUNCIL) +
+//     ChallanFromBill (sector=COUNCIL), both filtered to majorHead IN
+//     (001-016, 661, 664) → remittanceTreasury = amount
+//
+// STATE — Receipt side (structure UNCHANGED from before, majorHead
+// filter ADDED to the deposit-type query):
+//   RECOVERIES OF CPF SUBSCRIPTIONS → Nil
+//   SECURITY DEPOSIT → ChallanFromBill, majorHead="8443",
+//     amountType="Security Deposits", sector=STATE → securityDep
+//   EARNEST MONEY DEPOSIT → ChallanFromBill, majorHead="8443",
+//     amountType="Earnest Money", sector=STATE → earnestMoney
+//   Deposit received from Govt for transferred item → ALL
+//     StateChallan (sector=STATE) → govtDeposit = totalAmount. Same
+//     records ALSO feed payment-side remittanceTreasury (dual-posted).
+//   Cheques drawn during month → ALL Expenditure, sector=STATE →
+//     chequesDrawn = grossAmount. Same records ALSO feed payment-side
+//     transferItems (dual-posted).
+//
+// STATE — Payment side:
+//   Payment of CPF balance advances → Nil
+//   Remittance of CPF Contribution to P.O. → Nil
+//   Payment of security deposit → SAME records as receipt securityDep
+//     above (dual-posted) → paySecurityDep = amount
+//   Repayment of Earnest money deposit → SAME records as receipt
+//     earnestMoney above (dual-posted) → repayEarnest = amount
+//   Payment in respect of transferred item → SAME Expenditure rows as
+//     receipt chequesDrawn above (dual-posted) → transferItems =
+//     grossAmount
+//   Remittance to Treasury (PLA) → SAME StateChallan rows as receipt
+//     govtDeposit above (dual-posted) → remittanceTreasury =
+//     totalAmount
+//
+// CONSOLIDATED → STATE's rows + COUNCIL's rows, merged.
+// any other sector → no rule defined, empty result.
+//
+// All queries are date-filtered on from/to (Expenditure→voucherDate,
+// Challan→challanDate, ChallanFromBill→voucharDate,
+// StateChallan→challanDate).
 // ─────────────────────────────────────────────────────────────
 
-const FORM5E_TREASURY_TYPES = [
-    "Professional Tax",
-    "Monopoly",
-    "MC Forest Royalty",
-    "Forest Royalty",
+// ── COUNCIL majorHead constants ──
+const FORM5E_COUNCIL_CPF_MAJORHEAD = "662";
+const FORM5E_COUNCIL_DEPOSIT_MAJORHEAD = "664"; // Security Deposit / Earnest Money source, both receipt + payment
+const FORM5E_COUNCIL_CPF_ADVANCE_MAJORHEAD = "662";
+
+// Same "Amount Remitted" majorHead range as Form 4 / Form 5A:
+// 001-016, plus 661 and 664.
+const FORM5E_AMOUNT_REMITTED_MAJOR_HEADS = [
+    ...Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(3, "0")), // 001..016
+    "661",
+    "664",
 ];
 
+// ── STATE majorHead / amountType constants ──
+const FORM5E_STATE_DEPOSIT_MAJORHEAD = "8443";
 const FORM5E_STATE_DEDUCTION_TYPES = [
     "Security Deposits",
     "Earnest Money",
-];
-
-// COUNCIL — CPF-type amountTypes, dual-posted to receipt
-// (Recoveries of CPF Subscriptions) AND payment (Payment of CPF
-// Advances) from the SAME underlying ChallanFromBill records.
-const FORM5E_COUNCIL_CPF_TYPES = [
-    "CPF Council Share",
-    "CPF Contribution",
-    "CPF Advance",
-];
-
-// COUNCIL — cross-sector treasury types pulled from STATE's
-// ChallanFromBill records and folded into COUNCIL's Remittance to
-// Treasury payment column (same pattern used in Form 4 / Form 5A /
-// cashbookService.js).
-const FORM5E_COUNCIL_STATE_TREASURY_TYPES = [
-    "Professional Tax",
-    "Monopoly",
-    "Forest Royalty",
-    "MC Forest Royalty",
 ];
 
 const safeForm5E = (v) => {
@@ -1477,10 +1797,11 @@ const safeForm5E = (v) => {
     return isNaN(n) ? 0 : n;
 };
 
+const normalizeHead = (v) => (v == null ? "" : v.toString().trim());
+
 // ─────────────────────────────
 // DATE RANGE HELPER
 // ─────────────────────────────
-// Standard gte/lte filter for models with a real DateTime column
 const buildDateFilter = (dateField, from, to) => {
     if (!from || !to) return {};
     const start = new Date(from);
@@ -1490,8 +1811,8 @@ const buildDateFilter = (dateField, from, to) => {
 };
 
 // ════════════════════════════════════════════════════════════
-// STATE — UNCHANGED logic, extracted verbatim into its own
-// function so CONSOLIDATED can call it alongside COUNCIL.
+// STATE — same structure as before; only change is the
+// majorHead="8443" filter added to the deduction-type query.
 // ════════════════════════════════════════════════════════════
 const getForm5EStateRows = async (from, to) => {
     const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
@@ -1505,17 +1826,7 @@ const getForm5EStateRows = async (from, to) => {
                 id: true,
                 voucherNo: true,
                 sector: true,
-                cpfCouncil: true,
-                cpfContribution: true,
-                cpfRecovery: true,
-                securityDepositsDeduction: true,
-                earnestMoneyDeduction: true,
                 grossAmount: true,
-                securityDeposit: true,
-                earnestMoney: true,
-                transferPayment: true,
-                grantsInAid: true,
-                works: true,
             },
             orderBy: { voucherDate: "asc" },
         }),
@@ -1528,10 +1839,12 @@ const getForm5EStateRows = async (from, to) => {
             },
             orderBy: { challanDate: "asc" },
         }),
+        // NEW: majorHead="8443" filter added, per updated spec.
         prisma.challanFromBill.findMany({
             where: {
                 isActive: true,
                 sector: "STATE",
+                majorHead: FORM5E_STATE_DEPOSIT_MAJORHEAD,
                 amountType: { in: FORM5E_STATE_DEDUCTION_TYPES },
                 ...cfbDateFilter,
             },
@@ -1546,7 +1859,8 @@ const getForm5EStateRows = async (from, to) => {
     ]);
 
     logger.info(
-        `Form5E (STATE): expenditure=${expenditureRows.length}, stateChallan=${stateChallanRows.length}, stateDeduction=${stateDeductionRows.length}`
+        `Form5E (STATE): expenditure=${expenditureRows.length}, stateChallan=${stateChallanRows.length}, ` +
+        `stateDeduction(majorHead 8443)=${stateDeductionRows.length}`
     );
 
     // ── Receipt rows ──────────────────────────────────────────
@@ -1676,53 +1990,7 @@ const getForm5EStateRows = async (from, to) => {
 };
 
 // ════════════════════════════════════════════════════════════
-// COUNCIL — REBUILT logic. Column-by-column source mapping:
-//
-// RECEIPT SIDE
-//   cpfSub (Recoveries of CPF Subscriptions)
-//     → ChallanFromBill, sector=COUNCIL, amountType in
-//       FORM5E_COUNCIL_CPF_TYPES. Same records ALSO feed the
-//       payment-side cpfAdvances column below (dual-posted).
-//   securityDep (Security Deposit)
-//     → ChallanFromBill, sector=COUNCIL, amountType="Security Deposits"
-//   earnestMoney (Earnest Money Deposit)
-//     → ChallanFromBill, sector=COUNCIL, amountType="Earnest Money"
-//   govtDeposit (Received in respect of transfer item)
-//     → Challan table, majorHead = "017" (no sector filter at all —
-//       explicitly requested)
-//   chequesDrawn (Cheques Drawn)
-//     → Expenditure, sector=COUNCIL, grossAmount, only where
-//       chequeNo IS NOT NULL
-//
-// PAYMENT SIDE
-//   cpfAdvances (Payment of CPF Advances)
-//     → SAME ChallanFromBill CPF-type records as receipt cpfSub above
-//   remitCpf (Remittance CPF to P.O.)
-//     → always 0
-//   paySecurityDep (Payment Security Deposit)
-//     → Expenditure, sector=COUNCIL, grossAmount, only where the
-//       securityDeposit field is non-zero
-//   repayEarnest (Repayment Earnest Money)
-//     → Expenditure, sector=COUNCIL, grossAmount, only where the
-//       earnestMoney field is non-zero
-//   transferItems (Transfer Items)
-//     → Expenditure, sector=COUNCIL, grossAmount, only where
-//       remarks = "Payment in respect of transferred items"
-//   remittanceTreasury (Remittance to Treasury)
-//     → THREE sources summed together:
-//       (a) ALL Challan table rows, unrestricted, no sector filter
-//           (includes majorHead="017" rows too — same records as
-//           the receipt-side govtDeposit above, dual-posted)
-//       (b) ChallanFromBill, sector=COUNCIL, amountType NOT IN
-//           FORM5E_COUNCIL_CPF_TYPES (this naturally includes the
-//           Security Deposit / Earnest Money records too — same
-//           records as the receipt-side columns above, dual-posted)
-//       (c) ChallanFromBill, sector=STATE, amountType in
-//           FORM5E_COUNCIL_STATE_TREASURY_TYPES (cross-sector pull)
-//
-// All four queries below are date-filtered on the same from/to
-// window (Expenditure→voucherDate, Challan→challanDate,
-// ChallanFromBill→voucharDate).
+// COUNCIL — REBUILT per new spec.
 // ════════════════════════════════════════════════════════════
 const getForm5ECouncilRows = async (from, to) => {
     const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
@@ -1730,109 +1998,119 @@ const getForm5ECouncilRows = async (from, to) => {
     const cfbDateFilter = buildDateFilter("voucharDate", from, to);
 
     const [
+        cpfRows,
+        securityDepositRows,
+        earnestMoneyRows,
         expenditureRows,
-        challanFromBillCouncilRows,
-        challanFromBillStateTreasuryRows,
-        challanRows,
+        remittanceChallanRows,
+        remittanceCfbRows,
     ] = await Promise.all([
+        // RECOVERIES OF CPF SUBSCRIPTIONS (receipt) / Remittance of
+        // CPF Contribution to P.O. (payment) — dual-posted from the
+        // same records.
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                majorHead: FORM5E_COUNCIL_CPF_MAJORHEAD,
+                ...cfbDateFilter,
+            },
+            select: { id: true, challanNo: true, amount: true },
+            orderBy: { voucharDate: "asc" },
+        }),
+        // SECURITY DEPOSIT (receipt)
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                majorHead: FORM5E_COUNCIL_DEPOSIT_MAJORHEAD,
+                amountType: "Security Deposits",
+                ...cfbDateFilter,
+            },
+            select: { id: true, challanNo: true, amount: true },
+            orderBy: { voucharDate: "asc" },
+        }),
+        // EARNEST MONEY DEPOSIT (receipt)
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: "COUNCIL",
+                majorHead: FORM5E_COUNCIL_DEPOSIT_MAJORHEAD,
+                amountType: "Earnest Money",
+                ...cfbDateFilter,
+            },
+            select: { id: true, challanNo: true, amount: true },
+            orderBy: { voucharDate: "asc" },
+        }),
+        // Expenditure (COUNCIL) — feeds: chequesDrawn (all rows),
+        // cpfAdvances (majorHead=662), paySecurityDep/repayEarnest
+        // (majorHead=664, respective column non-zero).
         prisma.expenditure.findMany({
             where: { isActive: true, sector: "COUNCIL", ...expenditureDateFilter },
             select: {
                 id: true,
                 voucherNo: true,
+                majorHead: true,
                 grossAmount: true,
-                chequeNo: true,
                 securityDeposit: true,
                 earnestMoney: true,
-                remarks: true,
             },
             orderBy: { voucherDate: "asc" },
         }),
-        // Fetch ALL ChallanFromBill rows for sector=COUNCIL unfiltered
-        // by amountType — split into CPF / SecDep / EarnestMoney /
-        // non-CPF buckets in JS below.
-        prisma.challanFromBill.findMany({
-            where: { isActive: true, sector: "COUNCIL", ...cfbDateFilter },
-            select: {
-                id: true,
-                challanNo: true,
-                amountType: true,
-                amount: true,
+        // Remittance to Treasury — Challan side, majorHead 001-016/661/664
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanType: "COUNCIL",
+                majorHead: { in: FORM5E_AMOUNT_REMITTED_MAJOR_HEADS },
+                ...challanDateFilter,
             },
-            orderBy: { voucharDate: "asc" },
+            select: { id: true, challanNo: true, amount: true },
+            orderBy: { challanDate: "asc" },
         }),
-        // Cross-sector: STATE's treasury-type rows, for Remittance to
-        // Treasury only.
+        // Remittance to Treasury — ChallanFromBill side, majorHead 001-016/661/664
         prisma.challanFromBill.findMany({
             where: {
                 isActive: true,
-                sector: "STATE",
-                amountType: { in: FORM5E_COUNCIL_STATE_TREASURY_TYPES },
+                sector: { in: ["COUNCIL", "STATE"] },
+                majorHead: { in: FORM5E_AMOUNT_REMITTED_MAJOR_HEADS },
                 ...cfbDateFilter,
             },
-            select: {
-                id: true,
-                challanNo: true,
-                amountType: true,
-                amount: true,
-            },
+            select: { id: true, challanNo: true, amount: true },
             orderBy: { voucharDate: "asc" },
-        }),
-        // ALL Challan rows, no sector/challanType filter at all.
-        prisma.challan.findMany({
-            where: { isActive: true, ...challanDateFilter },
-            select: {
-                id: true,
-                challanNo: true,
-                majorHead: true,
-                amount: true,
-            },
-            orderBy: { challanDate: "asc" },
         }),
     ]);
 
     logger.info(
-        `Form5E (COUNCIL): expenditure=${expenditureRows.length}, challanFromBillCouncil=${challanFromBillCouncilRows.length}, ` +
-        `challanFromBillStateTreasury=${challanFromBillStateTreasuryRows.length}, challan=${challanRows.length}`
+        `Form5E (COUNCIL): cpf(majorHead 661)=${cpfRows.length}, securityDep(664)=${securityDepositRows.length}, ` +
+        `earnestMoney(664)=${earnestMoneyRows.length}, expenditure=${expenditureRows.length}, ` +
+        `remittanceChallan=${remittanceChallanRows.length}, remittanceCfb=${remittanceCfbRows.length}`
     );
 
-    // ── Split ChallanFromBill(COUNCIL) into buckets ──────────
-    const cfbCpfRows = challanFromBillCouncilRows.filter((row) =>
-        FORM5E_COUNCIL_CPF_TYPES.includes(row.amountType)
+    // ── Split Expenditure rows into the payment-side buckets ──
+    const cpfAdvanceRows = expenditureRows.filter(
+        (row) => normalizeHead(row.majorHead) === FORM5E_COUNCIL_CPF_ADVANCE_MAJORHEAD
     );
-    const cfbSecurityDepositRows = challanFromBillCouncilRows.filter(
-        (row) => row.amountType === "Security Deposits"
+    const paySecDepRows = expenditureRows.filter(
+        (row) =>
+            normalizeHead(row.majorHead) === FORM5E_COUNCIL_DEPOSIT_MAJORHEAD &&
+            safeForm5E(row.securityDeposit) !== 0
     );
-    const cfbEarnestMoneyRows = challanFromBillCouncilRows.filter(
-        (row) => row.amountType === "Earnest Money"
-    );
-    const cfbNonCpfRows = challanFromBillCouncilRows.filter(
-        (row) => !FORM5E_COUNCIL_CPF_TYPES.includes(row.amountType)
-    );
-
-    // ── Split Challan into majorHead="017" subset + full set ──
-    const challanTransferItemRows = challanRows.filter(
-        (row) => row.majorHead?.toString().trim() === "017"
+    const repayEarnestRows = expenditureRows.filter(
+        (row) =>
+            normalizeHead(row.majorHead) === FORM5E_COUNCIL_DEPOSIT_MAJORHEAD &&
+            safeForm5E(row.earnestMoney) !== 0
     );
 
-    // ── Split Expenditure into the 3 filtered subsets ─────────
-    const expenditureChequeRows = expenditureRows.filter(
-        (row) => row.chequeNo != null && row.chequeNo.toString().trim() !== ""
-    );
-    const expenditurePaySecDepRows = expenditureRows.filter(
-        (row) => safeForm5E(row.securityDeposit) !== 0
-    );
-    const expenditureRepayEarnestRows = expenditureRows.filter(
-        (row) => safeForm5E(row.earnestMoney) !== 0
-    );
-    const expenditureTransferItemRows = expenditureRows.filter(
-        (row) => row.remarks === "Payment in respect of transferred items"
+    logger.info(
+        `Form5E (COUNCIL) expenditure buckets: cpfAdvance(662)=${cpfAdvanceRows.length}, ` +
+        `paySecDep(664,secDep≠0)=${paySecDepRows.length}, repayEarnest(664,earnest≠0)=${repayEarnestRows.length}`
     );
 
     // ══════════════════════════════════════════════════════════
     // RECEIPT ROWS
     // ══════════════════════════════════════════════════════════
-    const receiptFromCpf = cfbCpfRows.map((row) => {
+    const receiptFromCpf = cpfRows.map((row) => {
         const amt = safeForm5E(row.amount);
         if (amt === 0) return null;
         return {
@@ -1847,7 +2125,7 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const receiptFromSecurityDeposit = cfbSecurityDepositRows.map((row) => {
+    const receiptFromSecurityDeposit = securityDepositRows.map((row) => {
         const amt = safeForm5E(row.amount);
         if (amt === 0) return null;
         return {
@@ -1862,7 +2140,7 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const receiptFromEarnestMoney = cfbEarnestMoneyRows.map((row) => {
+    const receiptFromEarnestMoney = earnestMoneyRows.map((row) => {
         const amt = safeForm5E(row.amount);
         if (amt === 0) return null;
         return {
@@ -1877,22 +2155,9 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const receiptFromTransferItem = challanTransferItemRows.map((row) => {
-        const amt = safeForm5E(row.amount);
-        if (amt === 0) return null;
-        return {
-            id: `C-TI-R-${row.id}`,
-            cashBookItemNo: row.challanNo ?? "-",
-            cpfSub: 0,
-            securityDep: 0,
-            earnestMoney: 0,
-            govtDeposit: amt,
-            chequesDrawn: 0,
-            totalReceipt: amt,
-        };
-    }).filter(Boolean);
+    // "Deposit received from Govt for transferred item" → Nil, no rows.
 
-    const receiptFromCheques = expenditureChequeRows.map((row) => {
+    const receiptFromCheques = expenditureRows.map((row) => {
         const amt = safeForm5E(row.grossAmount);
         if (amt === 0) return null;
         return {
@@ -1911,19 +2176,18 @@ const getForm5ECouncilRows = async (from, to) => {
         ...receiptFromCpf,
         ...receiptFromSecurityDeposit,
         ...receiptFromEarnestMoney,
-        ...receiptFromTransferItem,
         ...receiptFromCheques,
     ];
 
     // ══════════════════════════════════════════════════════════
     // PAYMENT ROWS
     // ══════════════════════════════════════════════════════════
-    const paymentFromCpf = cfbCpfRows.map((row) => {
-        const amt = safeForm5E(row.amount);
+    const paymentFromCpfAdvance = cpfAdvanceRows.map((row) => {
+        const amt = safeForm5E(row.grossAmount);
         if (amt === 0) return null;
         return {
-            id: `CFB-CPF-P-${row.id}`,
-            vrNo: row.challanNo ?? "-",
+            id: `E-CPFADV-P-${row.id}`,
+            vrNo: row.voucherNo ?? "-",
             cpfAdvances: amt,
             remitCpf: 0,
             paySecurityDep: 0,
@@ -1934,7 +2198,24 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const paymentFromSecDep = expenditurePaySecDepRows.map((row) => {
+    // Dual-posted from the same records as receipt cpfSub above.
+    const paymentFromRemitCpf = cpfRows.map((row) => {
+        const amt = safeForm5E(row.amount);
+        if (amt === 0) return null;
+        return {
+            id: `CFB-CPF-P-${row.id}`,
+            vrNo: row.challanNo ?? "-",
+            cpfAdvances: 0,
+            remitCpf: amt,
+            paySecurityDep: 0,
+            repayEarnest: 0,
+            transferItems: 0,
+            remittanceTreasury: 0,
+            totalPayment: amt,
+        };
+    }).filter(Boolean);
+
+    const paymentFromSecDep = paySecDepRows.map((row) => {
         const amt = safeForm5E(row.grossAmount);
         if (amt === 0) return null;
         return {
@@ -1950,7 +2231,7 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const paymentFromRepayEarnest = expenditureRepayEarnestRows.map((row) => {
+    const paymentFromRepayEarnest = repayEarnestRows.map((row) => {
         const amt = safeForm5E(row.grossAmount);
         if (amt === 0) return null;
         return {
@@ -1966,23 +2247,9 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const paymentFromTransferItems = expenditureTransferItemRows.map((row) => {
-        const amt = safeForm5E(row.grossAmount);
-        if (amt === 0) return null;
-        return {
-            id: `E-TI-P-${row.id}`,
-            vrNo: row.voucherNo ?? "-",
-            cpfAdvances: 0,
-            remitCpf: 0,
-            paySecurityDep: 0,
-            repayEarnest: 0,
-            transferItems: amt,
-            remittanceTreasury: 0,
-            totalPayment: amt,
-        };
-    }).filter(Boolean);
+    // "Payment in respect of transferred item" → Nil, no rows.
 
-    const paymentFromChallanAll = challanRows.map((row) => {
+    const paymentFromRemittanceChallan = remittanceChallanRows.map((row) => {
         const amt = safeForm5E(row.amount);
         if (amt === 0) return null;
         return {
@@ -1998,7 +2265,7 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const paymentFromCfbNonCpf = cfbNonCpfRows.map((row) => {
+    const paymentFromRemittanceCfb = remittanceCfbRows.map((row) => {
         const amt = safeForm5E(row.amount);
         if (amt === 0) return null;
         return {
@@ -2014,30 +2281,13 @@ const getForm5ECouncilRows = async (from, to) => {
         };
     }).filter(Boolean);
 
-    const paymentFromCfbStateTreasury = challanFromBillStateTreasuryRows.map((row) => {
-        const amt = safeForm5E(row.amount);
-        if (amt === 0) return null;
-        return {
-            id: `CFB-STATE-RT-P-${row.id}`,
-            vrNo: row.challanNo ?? "-",
-            cpfAdvances: 0,
-            remitCpf: 0,
-            paySecurityDep: 0,
-            repayEarnest: 0,
-            transferItems: 0,
-            remittanceTreasury: amt,
-            totalPayment: amt,
-        };
-    }).filter(Boolean);
-
     const paymentRows = [
-        ...paymentFromCpf,
+        ...paymentFromCpfAdvance,
+        ...paymentFromRemitCpf,
         ...paymentFromSecDep,
         ...paymentFromRepayEarnest,
-        ...paymentFromTransferItems,
-        ...paymentFromChallanAll,
-        ...paymentFromCfbNonCpf,
-        ...paymentFromCfbStateTreasury,
+        ...paymentFromRemittanceChallan,
+        ...paymentFromRemittanceCfb,
     ];
 
     logger.info(
@@ -2049,6 +2299,8 @@ const getForm5ECouncilRows = async (from, to) => {
 
 export const getForm5EData = async (sector, dateRange = {}) => {
     const { from, to } = dateRange;
+
+    console.log("getForm5EData for filter:", from, to);
 
     try {
         logger.info(
@@ -2111,7 +2363,7 @@ export const getForm5EData = async (sector, dateRange = {}) => {
 
         logger.info(
             `Form5E done: receiptRows=${receiptRows.length}, paymentRows=${paymentRows.length}, ` +
-            `transferTotal=${paymentTotals.transferItems}`
+            `remittanceTotal=${paymentTotals.remittanceTreasury}`
         );
 
         return { receiptRows, paymentRows, receiptTotals, paymentTotals };
@@ -2122,19 +2374,10 @@ export const getForm5EData = async (sector, dateRange = {}) => {
 };
 
 
+
 // ─────────────────────────────────────────────────────────────
 // FORM 6 - Classified cum Consolidated Abstract
-// Data from: Expenditure table
-// Rows = full head code (all 7 levels), Columns = months (JAN-DEC)
-// Cell = sum of grossAmount for that head combination in that month
-// Bottom = grand total row across all heads and all months
-//
-// 🔸 Every row now also carries `classification`: an array of
-// { level, code, name } resolved via the shared Heads full-chain map
-// (buildStateChallanClassification — Expenditure rows use the exact
-// same field names as StateChallan, so the same builder applies
-// unmodified). Loaded without a sector filter since Form6 can span
-// COUNCIL, STATE, or CONSOLIDATED rows in one call.
+// (unchanged — already has the from/to filter)
 // ─────────────────────────────────────────────────────────────
 
 const MONTHS = [
@@ -2158,15 +2401,38 @@ const buildFullHeadCode = (row) => {
         .join("-");
 };
 
-export const getForm6Data = async (sector) => {
+// 🔸 Shared helper — builds a Prisma date-range `where` fragment for
+// a given date field, only when both `from` and `to` are supplied.
+// `to` is pushed to the end of that day (23:59:59.999) so the whole
+// "to" date is included. Returns `{}` when either bound is missing,
+// so callers can safely spread it into their `where` unconditionally.
+const buildDateRangeWhere = (from, to, field) => {
+    if (!from || !to) return {};
+    const start = new Date(from);
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999);
+    return { [field]: { gte: start, lte: end } };
+};
+
+export const getForm6Data = async (sector, dateRange) => {
     try {
-        logger.info(`Fetching Form 6 data for sector: ${sector ?? "ALL"}`);
+        const { from, to } = dateRange;
+        logger.info(
+            `Fetching Form 6 data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
+        );
 
         const where = { isActive: true };
 
         if (sector && sector !== "CONSOLIDATED") {
             where.sector = sector;
         }
+
+        // Apply voucherDate range filter when from/to are provided.
+        Object.assign(where, buildDateRangeWhere(from, to, "voucherDate"));
+
+        logger.info(
+            `Form6: Fetched rows from Expenditure table (date-filtered: ${!!(from && to)})`
+        );
 
         // Select only the fields we need
         const rows = await prisma.expenditure.findMany({
@@ -2216,7 +2482,6 @@ export const getForm6Data = async (sector) => {
             if (!grouped[fullHeadCode]) {
                 grouped[fullHeadCode] = {
                     headCode: fullHeadCode,
-                    // 🔸 classification: vertical, code-and-name breakdown
                     classification: buildStateChallanClassification(row, headsFullChainMap),
                     majorHead: row.majorHead ?? "-",
                     subMajorHead: row.subMajorHead ?? "-",
@@ -2233,17 +2498,15 @@ export const getForm6Data = async (sector) => {
                 };
             }
 
-            // Add amount to correct month bucket
             if (monthName) {
                 grouped[fullHeadCode].months[monthName] += amount;
-                grandTotalMonths[monthName] += amount; // add to grand total month
+                grandTotalMonths[monthName] += amount;
             }
 
             grouped[fullHeadCode].total += amount;
-            grandTotal += amount; // add to overall grand total
+            grandTotal += amount;
         });
 
-        // Sort by full head code alphabetically
         const result = Object.values(grouped).sort((a, b) =>
             a.headCode.localeCompare(b.headCode)
         );
@@ -2252,8 +2515,8 @@ export const getForm6Data = async (sector) => {
 
         return {
             rows: result,
-            grandTotalMonths, // { JAN: 1000, FEB: 2000, ... }
-            grandTotal,       // overall total across all months and heads
+            grandTotalMonths,
+            grandTotal,
         };
     } catch (error) {
         logger.error(`Error fetching Form 6 data: ${error.message}`);
@@ -2261,33 +2524,33 @@ export const getForm6Data = async (sector) => {
     }
 };
 
-
-
 // ─────────────────────────────────────────────────────────────
 // FORM 7 - Month wise register
-// (sector rules for challan/challanTwo/challanFromBill/stateChallan —
-// UNCHANGED, see original comments below)
 //
-// 🔸 Every row now also carries `classification`: an array of
-// { level, code, name } — resolved per source:
-//   - challan          → ChallanHeads (parent-aware, 3-level)
-//   - challanTwo       → Heads (3-level)
-//   - challanFromBill  → Heads (3-level)
-//   - stateChallan     → Heads (full 7-level chain)
+// SECTOR RULES:
+// - sector === "COUNCIL"      → Challan + ChallanFromBill, both
+//                                 filtered to majorHead IN
+//                                 (001-016, 661, 664) and sector/
+//                                 challanType IN (COUNCIL, STATE).
+// - sector === "STATE"        → StateChallan ONLY (sector=STATE),
+//                                 unfiltered by majorHead.
+// - sector === "CONSOLIDATED" → COUNCIL's rule + STATE's rule
+//                                 combined.
+// - any other sector          → no rule defined, empty result.
+//
+// 🔸 NEW: optional { from, to } date range, mirroring Form6.
+//   - Challan / ChallanFromBill / StateChallan are each filtered on
+//     their own date field (challanDate / voucharDate / challanDate)
+//     using the same inclusive whole-day range as Form6.
+//   - Filter only applies when BOTH from and to are supplied.
 // ─────────────────────────────────────────────────────────────
 
-const FORM7_ALLOWED_AMOUNT_TYPES = [
-    "Professional Tax",
-    "Forest Royalty",
-    "Monopoly",
-    "MC Forest Royalty",
-];
-
-// Amount types that must be EXCLUDED when pulling COUNCIL-sector challanFromBill rows
-const FORM7_COUNCIL_EXCLUDED_AMOUNT_TYPES = [
-    "CPF Council Share",
-    "CPF Contribution",
-    "CPF Advance",
+// Same "Amount Remitted" majorHead range as Form 4 / Form 5A:
+// 001-016, plus 661 and 664.
+const FORM7_AMOUNT_REMITTED_MAJOR_HEADS = [
+    ...Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(3, "0")), // 001..016
+    "661",
+    "664",
 ];
 
 // Initialize empty months object — all 12 months set to 0
@@ -2303,142 +2566,128 @@ const getMonthName = (date) => {
     return MONTHS[new Date(date).getMonth()];
 };
 
-// ── challanFromBill fetch strategy, split out because the rule differs per sector ──
-const getChallanFromBillRows = (sector, isCouncilOnly, isConsolidated) => {
-    if (isCouncilOnly) {
-        // (a) STATE rows restricted to the 4 allowed amount types
-        // (b) COUNCIL rows excluding the 3 CPF amount types
-        return Promise.all([
-            prisma.challanFromBill.findMany({
-                where: {
-                    isActive: true,
-                    sector: "STATE",
-                    amountType: { in: FORM7_ALLOWED_AMOUNT_TYPES },
-                },
-            }),
-            prisma.challanFromBill.findMany({
-                where: {
-                    isActive: true,
-                    sector: "COUNCIL",
-                    amountType: { notIn: FORM7_COUNCIL_EXCLUDED_AMOUNT_TYPES },
-                },
-            }),
-        ]).then(([stateTypedRows, councilRows]) => [...stateTypedRows, ...councilRows]);
-    }
+// ════════════════════════════════════════════════════════════
+// COUNCIL — Challan + ChallanFromBill, majorHead 001-016/661/664,
+// sector/challanType IN (COUNCIL, STATE)
+// 🔸 dateRange applied: Challan on challanDate, ChallanFromBill on voucharDate
+// ════════════════════════════════════════════════════════════
+const getForm7CouncilRows = async (dateRange = {}) => {
+    const { from, to } = dateRange;
+    const remittanceSectors = ["COUNCIL", "STATE"];
 
-    if (isConsolidated) {
-        // (a) every non-COUNCIL sector, restricted to the 4 allowed amount types (original rule)
-        // (b) COUNCIL sector, broader rule — excluding only the 3 CPF amount types
-        return Promise.all([
-            prisma.challanFromBill.findMany({
-                where: {
-                    isActive: true,
-                    amountType: { in: FORM7_ALLOWED_AMOUNT_TYPES },
-                    NOT: { sector: "COUNCIL" },
-                },
-            }),
-            prisma.challanFromBill.findMany({
-                where: {
-                    isActive: true,
-                    sector: "COUNCIL",
-                    amountType: { notIn: FORM7_COUNCIL_EXCLUDED_AMOUNT_TYPES },
-                },
-            }),
-        ]).then(([genericAllowedRows, councilRows]) => [...genericAllowedRows, ...councilRows]);
-    }
+    const [challanRows, challanFromBillRows] = await Promise.all([
+        prisma.challan.findMany({
+            where: {
+                isActive: true,
+                challanType: { in: remittanceSectors },
+                majorHead: { in: FORM7_AMOUNT_REMITTED_MAJOR_HEADS },
+                ...buildDateRangeWhere(from, to, "challanDate"),
+            },
+        }),
+        prisma.challanFromBill.findMany({
+            where: {
+                isActive: true,
+                sector: { in: remittanceSectors },
+                majorHead: { in: FORM7_AMOUNT_REMITTED_MAJOR_HEADS },
+                ...buildDateRangeWhere(from, to, "voucharDate"),
+            },
+        }),
+    ]);
 
-    // any other specific sector — original, unchanged behaviour
-    return prisma.challanFromBill.findMany({
-        where: {
-            isActive: true,
-            amountType: { in: FORM7_ALLOWED_AMOUNT_TYPES },
-            sector,
-        },
-    });
+    logger.info(
+        `Form7 (COUNCIL): challan(majorHead-filtered, sector IN COUNCIL,STATE)=${challanRows.length}, ` +
+        `challanFromBill(majorHead-filtered, sector IN COUNCIL,STATE)=${challanFromBillRows.length}, ` +
+        `date-filtered: ${!!(from && to)}`
+    );
+
+    return { challanRows, challanFromBillRows };
 };
 
-export const getForm7Data = async (sector) => {
+// ════════════════════════════════════════════════════════════
+// STATE — StateChallan ONLY, unfiltered by majorHead
+// 🔸 dateRange applied on challanDate
+// ════════════════════════════════════════════════════════════
+const getForm7StateRows = async (dateRange = {}) => {
+    const { from, to } = dateRange;
+
+    const stateChallanRows = await prisma.stateChallan.findMany({
+        where: {
+            sector: "STATE",
+            ...buildDateRangeWhere(from, to, "challanDate"),
+        },
+        select: {
+            id: true,
+            challanDate: true,
+            totalAmount: true,
+            majorHead: true,
+            subMajorHead: true,
+            minorHead: true,
+            subHead: true,
+            subSubHead: true,
+            detailHead: true,
+            subDetailHead: true,
+        },
+        orderBy: { challanDate: "asc" },
+    });
+
+    logger.info(
+        `Form7 (STATE): stateChallan=${stateChallanRows.length}, date-filtered: ${!!(from && to)}`
+    );
+
+    return { stateChallanRows };
+};
+
+export const getForm7Data = async (sector, dateRange = {}) => {
     try {
-        logger.info(`Fetching Form 7 data for sector: ${sector ?? "ALL"}`);
+        const { from, to } = dateRange;
+        logger.info(
+            `Fetching Form 7 data for sector: ${sector ?? "ALL"}, from: ${from ?? "ALL-TIME"}, to: ${to ?? "ALL-TIME"}`
+        );
 
-        const isStateOnly = sector === "STATE";
-        const isCouncilOnly = sector === "COUNCIL";
-        const isConsolidated = !sector || sector === "CONSOLIDATED";
+        const isStateSector = sector === "STATE";
+        const isCouncilSector = sector === "COUNCIL";
+        const isConsolidated = sector === "CONSOLIDATED";
 
-        // ── Challan ──
-        // STATE           → skipped (handled via stateChallan below)
-        // COUNCIL/CONSOLIDATED → ALL active rows, no challanType filter
-        // any other sector → filtered by challanType
-        const challanWhere = { isActive: true };
-        if (!isStateOnly && !isCouncilOnly && !isConsolidated) {
-            challanWhere.challanType = sector;
+        let challanRows = [];
+        let challanFromBillRows = [];
+        let stateChallanRows = [];
+
+        if (isStateSector) {
+            const stateData = await getForm7StateRows(dateRange);
+            stateChallanRows = stateData.stateChallanRows;
+        } else if (isCouncilSector) {
+            const councilData = await getForm7CouncilRows(dateRange);
+            challanRows = councilData.challanRows;
+            challanFromBillRows = councilData.challanFromBillRows;
+        } else if (isConsolidated) {
+            const [councilData, stateData] = await Promise.all([
+                getForm7CouncilRows(dateRange),
+                getForm7StateRows(dateRange),
+            ]);
+            challanRows = councilData.challanRows;
+            challanFromBillRows = councilData.challanFromBillRows;
+            stateChallanRows = stateData.stateChallanRows;
+        } else {
+            logger.info(
+                `Form7: no rule defined for sector "${sector}" — returning empty result`
+            );
         }
-
-        // ── ChallanTwo ──
-        // STATE / COUNCIL   → skipped
-        // CONSOLIDATED      → all rows, no filter
-        // any other sector  → filtered by sector
-        const challanTwoWhere = { isActive: true };
-        if (sector && sector !== "CONSOLIDATED" && sector !== "STATE") {
-            challanTwoWhere.sector = sector;
-        }
-
-        const includeStateChallans = isStateOnly || isConsolidated;
-
-        const [
-            challanRows,
-            challanTwoRows,
-            challanFromBillRows,
-            stateChallanRows,
-        ] = await Promise.all([
-            // Skipped entirely for sector = STATE — StateChallan is the only source
-            isStateOnly
-                ? Promise.resolve([])
-                : prisma.challan.findMany({ where: challanWhere }),
-
-            (isStateOnly || isCouncilOnly)
-                ? Promise.resolve([])
-                : prisma.challanTwo.findMany({ where: challanTwoWhere }),
-
-            isStateOnly
-                ? Promise.resolve([])
-                : getChallanFromBillRows(sector, isCouncilOnly, isConsolidated),
-
-            // StateChallan (STATE / CONSOLIDATED only)
-            // No isActive field on model — filter by sector = "STATE"
-            includeStateChallans
-                ? prisma.stateChallan.findMany({
-                    where: { sector: "STATE" },
-                    select: {
-                        id: true,
-                        challanDate: true,
-                        totalAmount: true,
-                        majorHead: true,
-                        subMajorHead: true,
-                        minorHead: true,
-                        subHead: true,
-                        subSubHead: true,
-                        detailHead: true,
-                        subDetailHead: true,
-                    },
-                    orderBy: { challanDate: "asc" },
-                })
-                : Promise.resolve([]),
-        ]);
 
         logger.info(
-            `Form7: challan=${challanRows.length}, challanTwo=${challanTwoRows.length}, ` +
+            `Form7: Rows going into grouping — challan=${challanRows.length}, ` +
             `challanFromBill=${challanFromBillRows.length}, stateChallan=${stateChallanRows.length}`
         );
 
         // 🔸 Shared name-lookup maps, loaded once per call and reused
-        // across all 4 sources below.
+        // across all sources below.
+        const needsChallanHeadsMap = challanRows.length > 0;
+        const needsHeads3LevelMap = challanFromBillRows.length > 0;
+        const needsHeadsFullChainMap = stateChallanRows.length > 0;
+
         const [challanHeadsMap, heads3LevelMap, headsFullChainMap] = await Promise.all([
-            (isStateOnly || challanRows.length === 0)
-                ? Promise.resolve(null)
-                : getChallanHeadsNameMap(),
-            getHeads3LevelMap(),
-            includeStateChallans ? getHeadsFullChainMap("STATE") : Promise.resolve(null),
+            needsChallanHeadsMap ? getChallanHeadsNameMap() : Promise.resolve(null),
+            needsHeads3LevelMap ? getHeads3LevelMap() : Promise.resolve(null),
+            needsHeadsFullChainMap ? getHeadsFullChainMap("STATE") : Promise.resolve(null),
         ]);
 
         // ── Step 1: group by full head code ─────────────────────
@@ -2446,7 +2695,7 @@ export const getForm7Data = async (sector) => {
         const grandTotalMonths = emptyMonths();
         let grandTotal = 0;
 
-        // Process Challan (no-op for sector = STATE — challanRows is [])
+        // Process Challan
         challanRows.forEach((row) => {
             const headCode = buildFullHeadCode({
                 majorHead: row.majorHead,
@@ -2489,52 +2738,7 @@ export const getForm7Data = async (sector) => {
             grandTotal += amount;
         });
 
-        // Process ChallanTwo — grantsInAid only (no-op for STATE/COUNCIL — challanTwoRows is [])
-        challanTwoRows.forEach((row) => {
-            const amount = parseFloat(row.grantsInAid ?? 0);
-            if (!amount) return;
-
-            const headCode = buildFullHeadCode({
-                majorHead: row.majorHead,
-                subMajorHead: row.subMajor,
-                minorHead: row.minorHead,
-                subHead: null,
-                subSubHead: null,
-                detailHead: null,
-                subDetailHead: null,
-            });
-
-            const key = headCode || `challanTwo-${row.id}`;
-
-            if (!grouped[key]) {
-                grouped[key] = {
-                    headCode: key,
-                    // 🔸 challanTwo → Heads (3-level)
-                    classification: buildThreeLevelClassification(
-                        row.majorHead,
-                        row.subMajor,
-                        row.minorHead,
-                        heads3LevelMap
-                    ),
-                    majorHead: row.majorHead ?? "-",
-                    subMajorHead: row.subMajor ?? "-",
-                    minorHead: row.minorHead ?? "-",
-                    detailHead: "-",
-                    months: emptyMonths(),
-                    total: 0,
-                };
-            }
-
-            const monthName = getMonthName(row.kaacChallanDate);
-            if (monthName) {
-                grouped[key].months[monthName] += amount;
-                grandTotalMonths[monthName] += amount;
-            }
-            grouped[key].total += amount;
-            grandTotal += amount;
-        });
-
-        // Process ChallanFromBill (no-op for sector = STATE — challanFromBillRows is [])
+        // Process ChallanFromBill
         challanFromBillRows.forEach((row) => {
             const amount = parseFloat(row.amount ?? 0);
 
@@ -2584,7 +2788,6 @@ export const getForm7Data = async (sector) => {
         // amount = totalAmount (already in the correct unit)
         // date   = challanDate
         // headCode uses all 7 levels available on the model
-        // For sector = STATE, this is the ONLY source contributing rows.
         // ─────────────────────────────────────────────────────────
         stateChallanRows.forEach((row) => {
             const amount =

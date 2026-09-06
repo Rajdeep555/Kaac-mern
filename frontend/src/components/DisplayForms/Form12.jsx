@@ -95,6 +95,16 @@ const structure = [
     di_sl: "(d)",
     di_particulars: "Repayment of Earnest Money Deposits",
   },
+  // 🔸 NEW — Part III (e) disbursement-only row. There is no receipt-side
+  // counterpart, so re_sl/re_particulars stay blank (renders as "-" for
+  // the amount, same as every other asymmetric row below).
+  {
+    id: "r13e",
+    re_sl: "",
+    re_particulars: "",
+    di_sl: "(e)",
+    di_particulars: "Other categories of deposits",
+  },
   {
     id: "r14",
     re_sl: "4.",

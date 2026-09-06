@@ -1,453 +1,453 @@
 import prisma from "../../config/database.js";
 import logger from "../../utils/logger.js";
-// 🔸 ADJUST THIS PATH if form5E.service.js lives elsewhere relative to this file
 import { getForm5EData } from "./forms.service.js";
 
-const RECEIPT_CFB_TYPES = [
-    "Professional Tax",
-    "Forest Royalty",
-    "MC Forest Royalty",
-    "Monopoly",
-];
+// ─────────────────────────────────────────────────────────────
+// FORM 12 - REBUILT per new spec.
+//
+// Sector scoping: CONSOLIDATED = COUNCIL + STATE combined in a
+// single query set (never two separate calls merged). COUNCIL/STATE
+// alone = that one sector only. Every rule below that says "sector =
+// COUNCIL,STATE" naturally narrows to whichever sector(s) are in
+// scope for this call — a COUNCIL-only call never sees STATE rows to
+// begin with, so no separate branching logic is needed per sector.
+//
+// 🔸 Opening Balance is now a FIXED constant, not sourced from the
+// OpeningBalance/TreasuryPla tables — same convention as Statement 3
+// / Form 11's hardcoded opening balances. Same single figure for
+// COUNCIL, STATE, and CONSOLIDATED (not doubled for CONSOLIDATED).
+// ─────────────────────────────────────────────────────────────
 
-const ALLOWED_AMOUNT_TYPES = [
-    "Earnest Money",
-    "Professional Tax",
-    "Car Loan",
-    "Building Loan",
-    "House Rent",
-    "Security Deposits",
-    "Monopoly",
-    "Forest Royalty",
-    "MC Forest Royalty",
-    "Advance Payment",
-    "Other Deductions",
-];
+const FORM12_OPENING_CASH = 20596820;
+const FORM12_OPENING_PLA = 3066481548;
 
-// ─────────────────────────────
-// DATE RANGE HELPERS
-// ─────────────────────────────
-
-// Standard gte/lte filter for models with a real DateTime column
 const buildDateFilter = (dateField, from, to) => {
     if (!from || !to) return {};
     const start = new Date(from);
     const end = new Date(to);
-    end.setHours(23, 59, 59, 999); // include the whole "to" day
+    end.setHours(23, 59, 59, 999);
     return { [dateField]: { gte: start, lte: end } };
 };
 
-// OpeningBalance / TreasuryPla only store { month, year } ints, not a date.
-// Convert the from/to range into a list of {month, year} pairs and OR them.
-const buildMonthYearFilter = (from, to) => {
-    if (!from || !to) return {};
-    const start = new Date(from);
-    const end = new Date(to);
-
-    const pairs = [];
-    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    const endCursor = new Date(end.getFullYear(), end.getMonth(), 1);
-
-    while (cursor <= endCursor) {
-        pairs.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear() });
-        cursor.setMonth(cursor.getMonth() + 1);
-    }
-
-    if (pairs.length === 0) return {};
-    return { OR: pairs };
+const safe = (v) => {
+    if (v === null || v === undefined) return 0;
+    const n = parseFloat(v.toString());
+    return isNaN(n) ? 0 : n;
 };
 
+const scAmount = (r) => (r.totalAmount != null ? parseFloat(r.totalAmount.toFixed(2)) : 0);
+
+const isMajorHeadInRange12 = (majorHead, min, max) => {
+    if (!majorHead) return false;
+    const num = parseInt(majorHead, 10);
+    return !Number.isNaN(num) && num >= min && num <= max;
+};
+
+const isMajorHeadEqual12 = (majorHead, target) => {
+    if (!majorHead) return false;
+    const num = parseInt(majorHead, 10);
+    return !Number.isNaN(num) && num === parseInt(target, 10);
+};
+
+// Revenue receipt / Form 4 majorHead sets — same convention as
+// FORM7B_AMOUNT_REMITTED_MAJOR_HEADS (001-016, 661, 664).
+const isForm4MajorHead = (majorHead) =>
+    isMajorHeadInRange12(majorHead, 1, 16) ||
+    isMajorHeadEqual12(majorHead, 661) ||
+    isMajorHeadEqual12(majorHead, 664);
+
+const sectorsForForm12 = (sector) =>
+    !sector || sector === "CONSOLIDATED" ? ["COUNCIL", "STATE"] : [sector];
+
 export const getForm12Data = async (sector, dateRange = {}) => {
-    const { from, to } = dateRange;
-
-    if (sector === "STATE") {
-        return getForm12DataState(from, to);
-    }
-
     try {
+        const { from, to } = dateRange;
+        const sectors = sectorsForForm12(sector);
+        const includeCouncil = sectors.includes("COUNCIL");
+        const includeState = sectors.includes("STATE");
+
         logger.info(
-            `Fetching Form 12 data for sector: ${sector ?? "ALL"}, range: ${from ?? "-"} to ${to ?? "-"}`
+            `Fetching Form 12 data for sector: ${sector ?? "ALL"}, sectors in scope: [${sectors.join(",")}], ` +
+            `range: ${from ?? "-"} to ${to ?? "-"}`
         );
 
-        const sectorFilter =
-            sector && sector !== "CONSOLIDATED" ? { sector } : {};
-        const challanSectorFilter =
-            sector && sector !== "CONSOLIDATED" ? { challanType: sector } : {};
-
-        const includeStateChallans =
-            !sector || sector === "CONSOLIDATED" || sector === "STATE";
-
-        const monthYearFilter = buildMonthYearFilter(from, to);
         const challanDateFilter = buildDateFilter("challanDate", from, to);
         const cfbDateFilter = buildDateFilter("voucharDate", from, to);
-        const challanTwoDateFilter = buildDateFilter("kaacChallanDate", from, to);
         const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
         const cashReceiptDateFilter = buildDateFilter("date", from, to);
         const stateChallanDateFilter = buildDateFilter("challanDate", from, to);
 
         const [
-            openingRows,
-            treasuryPlaRows,
             challanRows,
-            challanFromBillRows,
-            challanTwoRows,
+            cfbRows,
+            stateChallanRows,
             expenditureRows,
             cashReceiptRows,
-            stateChallanRows,
-            form5EStateData, // ✅ NEW — Form 5E, sector hard-locked to STATE
+            form5EStateData,
         ] = await Promise.all([
-            prisma.openingBalance.findMany({
-                where: { isActive: true, ...sectorFilter, ...monthYearFilter },
-                select: { amount: true },
-            }),
-            prisma.treasuryPla.findMany({
-                where: { isActive: true, ...sectorFilter, ...monthYearFilter },
-                select: { amount: true },
-            }),
             prisma.challan.findMany({
                 where: {
                     isActive: true,
-                    ...challanSectorFilter,
+                    challanType: { in: sectors },
                     ...challanDateFilter,
                 },
                 select: {
                     id: true,
                     amount: true,
                     challanType: true,
-                    departmentId: true,
-                    treasuryChallanNo: true,
+                    majorHead: true,
+                    subMajorHead: true,
+                    minorHead: true,
                     counterfoilNo: true,
+                    treasuryChallanNo: true,
                 },
             }),
             prisma.challanFromBill.findMany({
-                where: { isActive: true, ...sectorFilter, ...cfbDateFilter },
+                where: {
+                    isActive: true,
+                    sector: { in: sectors },
+                    ...cfbDateFilter,
+                },
                 select: {
                     id: true,
                     amount: true,
                     amountType: true,
-                    expenditureType: true,
-                    treasuryChallanNo: true,
+                    sector: true,
+                    majorHead: true,
+                    subMajor: true,
+                    minorHead: true,
                 },
             }),
-            prisma.challanTwo.findMany({
-                where: { isActive: true, ...sectorFilter, ...challanTwoDateFilter },
-                select: {
-                    id: true,
-                    grantsInAid: true,
-                    loansReceivedGovt: true,
-                    loansReceivedOther: true,
-                    amount: true,
-                    treasuryChallanNo: true,
-                },
-            }),
+            includeState
+                ? prisma.stateChallan.findMany({
+                    where: { sector: "STATE", isActive: true, ...stateChallanDateFilter },
+                    select: { id: true, totalAmount: true, majorHead: true, detailHead: true },
+                })
+                : Promise.resolve([]),
             prisma.expenditure.findMany({
-                where: { isActive: true, ...sectorFilter, ...expenditureDateFilter },
+                where: {
+                    isActive: true,
+                    sector: { in: sectors },
+                    ...expenditureDateFilter,
+                },
                 select: {
                     id: true,
-                    expenditureType: true,
+                    sector: true,
+                    majorHead: true,
+                    detailHead: true,
                     grossAmount: true,
-                    carLoanRecovery: true,
-                    houseLoanRecovery: true,
-                    advanceRecovery: true,
-                    otherDeductions: true,
-                    houseRent: true,
-                    cpfCouncil: true,
-                    cpfContribution: true,
-                    cpfRecovery: true,
-                    securityDepositsDeduction: true,
-                    earnestMoneyDeduction: true,
-                    securityDeposit: true,
-                    earnestMoney: true,
-                    transferPayment: true,
                     loanRepayGovt: true,
                     loanRepayOther: true,
                     loansAdvances: true,
+                    securityDeposit: true,
+                    earnestMoney: true,
                 },
             }),
-            prisma.cashReceipt.findMany({
-                where: { isActive: true, ...cashReceiptDateFilter },
-                select: { rupeesInCash: true },
-            }),
-            includeStateChallans
-                ? prisma.stateChallan.findMany({
-                    where: { sector: "STATE", ...stateChallanDateFilter },
-                    select: {
-                        totalAmount: true,
-                        treasuryChallanNo: true,
-                    },
+            includeCouncil
+                ? prisma.cashReceipt.findMany({
+                    where: { isActive: true, sector: "COUNCIL", ...cashReceiptDateFilter },
+                    select: { rupeesInCash: true },
                 })
                 : Promise.resolve([]),
-            // ✅ NEW — always sector="STATE" here, independent of Form12's own sector
             getForm5EData("STATE", { from, to }),
         ]);
 
-        const safe = (v) => {
-            if (v === null || v === undefined) return 0;
-            const n = parseFloat(v.toString());
-            return isNaN(n) ? 0 : n;
-        };
+        const isDetailHead3132 = (r) => r.detailHead === "31" || r.detailHead === "32";
 
-        const scAmount = (r) =>
-            r.totalAmount != null
-                ? parseFloat((r.totalAmount).toFixed(2))
-                : 0;
+        // ═══════════════════════════════════════════════════════
+        // RECEIPT — PART 1
+        // ═══════════════════════════════════════════════════════
 
-        const hasTreasuryChallanNo = (r) =>
-            r.treasuryChallanNo !== null &&
-            r.treasuryChallanNo !== undefined &&
-            r.treasuryChallanNo !== "" &&
-            r.treasuryChallanNo !== "0" &&
-            r.treasuryChallanNo !== 0;
+        // 1.a — Revenue receipt of the council: Challan + challanFromBill,
+        // majorHead 001-016, sector/challanType IN scope.
+        const revenueChallan = challanRows
+            .filter((c) => isMajorHeadInRange12(c.majorHead, 1, 16))
+            .reduce((s, c) => s + safe(c.amount), 0);
+        const revenueCfb = cfbRows
+            .filter((r) => isMajorHeadInRange12(r.majorHead, 1, 16))
+            .reduce((s, r) => s + safe(r.amount), 0);
+        const receiptRevenue = revenueChallan + revenueCfb;
 
-        // ─────────────────────────────
-        // RECEIPT SIDE VALUES
-        // ─────────────────────────────
+        // 1.b — Grants in aid: StateChallan detailHead 31/32 (naturally
+        // 0 when STATE not in scope, since stateChallanRows is []).
+        const receiptGrantsGovt = stateChallanRows
+            .filter(isDetailHead3132)
+            .reduce((s, r) => s + scAmount(r), 0);
 
-        const openingBalance = openingRows.reduce(
-            (sum, r) => sum + safe(r.amount), 0
-        );
+        // 1.c — Other misc receipt: nil, always.
+        const receiptMiscPart1 = 0;
 
-        const treasuryPla = treasuryPlaRows.reduce(
-            (sum, r) => sum + safe(r.amount), 0
-        );
+        // ═══════════════════════════════════════════════════════
+        // RECEIPT — PART 2
+        // ═══════════════════════════════════════════════════════
 
-        const totalOpeningPlusPla = openingBalance + treasuryPla;
+        // 2.a — Loan received from govt: Challan subMajorHead=66001 +
+        // StateChallan majorHead=7610.
+        const loansGovtChallan = challanRows
+            .filter((c) => (c.subMajorHead ?? "").trim() === "66001")
+            .reduce((s, c) => s + safe(c.amount), 0);
+        const loansGovtStateChallan = stateChallanRows
+            .filter((r) => isMajorHeadEqual12(r.majorHead, 7610))
+            .reduce((s, r) => s + scAmount(r), 0);
+        const loansGovt = loansGovtChallan + loansGovtStateChallan;
 
-        const challanCouncil = challanRows
-            .filter((c) => c.departmentId >= 8001 && c.departmentId <= 8016)
-            .reduce((sum, c) => sum + safe(c.amount), 0);
+        // 2.b — Loans received from other sources: Challan subMajorHead=66002.
+        const loansOther = challanRows
+            .filter((c) => (c.subMajorHead ?? "").trim() === "66002")
+            .reduce((s, c) => s + safe(c.amount), 0);
 
-        const cfbCouncil = challanFromBillRows
-            .filter((r) => RECEIPT_CFB_TYPES.includes(r.amountType))
-            .reduce((sum, r) => sum + safe(r.amount), 0);
+        // 2.c — challanFromBill, amountType IN (Car Loan, Building Loan), scope-wide.
+        const recoverLoans = cfbRows
+            .filter((r) => ["Car Loan", "Building Loan"].includes(r.amountType))
+            .reduce((s, r) => s + safe(r.amount), 0);
 
-        logger.info(`challanCouncil: ${challanCouncil} | cfbCouncil: ${cfbCouncil}`);
+        // 2.d — Other categories receipt: nil.
+        const otherCategoriesReceipt = 0;
 
-        const stateChallanRevenue = stateChallanRows.reduce(
-            (sum, r) => sum + scAmount(r), 0
-        );
+        // ═══════════════════════════════════════════════════════
+        // RECEIPT — PART 3
+        // ═══════════════════════════════════════════════════════
 
-        const receiptRevenueCouncil =
-            challanCouncil + cfbCouncil + stateChallanRevenue;
-
-        const receiptGrantsGovt = challanTwoRows.reduce(
-            (sum, r) => sum + safe(r.grantsInAid), 0
-        );
-
-        const miscChallans = challanRows
-            .filter((c) => !(c.departmentId >= 8001 && c.departmentId <= 8017))
-            .reduce((sum, c) => sum + safe(c.amount), 0);
-
-        const receiptMisc = 0;
-
-        const receiptCash = cashReceiptRows.reduce(
-            (sum, r) => sum + safe(r.rupeesInCash), 0
-        );
-
-        const loansGovt = challanTwoRows.reduce(
-            (sum, r) => sum + safe(r.loansReceivedGovt), 0
-        );
-
-        const loansOther = challanTwoRows.reduce(
-            (sum, r) => sum + safe(r.loansReceivedOther), 0
-        );
-
-        const recoverLoans = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.carLoanRecovery) + safe(r.houseLoanRecovery), 0
-        );
-
-        const otherCategories = expenditureRows.reduce(
-            (sum, r) =>
-                sum +
-                safe(r.advanceRecovery) +
-                safe(r.otherDeductions) +
-                safe(r.houseRent),
-            0
-        );
-
-        const receiptCpf = expenditureRows.reduce(
-            (sum, r) =>
-                sum +
-                safe(r.cpfCouncil) +
-                safe(r.cpfContribution) +
-                safe(r.cpfRecovery),
-            0
-        );
-
-        const receiptSecDep = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.securityDepositsDeduction), 0
-        );
-
-        const receiptEarnestDep = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.earnestMoneyDeduction), 0
-        );
-
-        // ✅ CHANGED — r18 re_amount ("To Deposits received from Govt for
-        // transferred functions") now sourced from Form 5E, sector locked
-        // to STATE, payment-side grand total — NOT the previous
-        // challanRows-based calculation.
-        const form5ETransferTotal =
-            form5EStateData?.paymentTotals?.totalPayment ?? 0;
-        const transferDeposits = form5ETransferTotal;
-
-        // ✅ dcCheques — unchanged, all expenditures (receipt side r20)
-        const dcCheques = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.grossAmount), 0
-        );
-
-        const plaChallan = challanRows
-            .filter((c) => hasTreasuryChallanNo(c))
-            .reduce((sum, c) => sum + safe(c.amount), 0);
-
-        const plaChallanTwo = challanTwoRows
-            .filter((r) => hasTreasuryChallanNo(r))
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        const plaCfb = challanFromBillRows
+        // 3.a — Recoveries of CPF: challanFromBill amountType IN the 3 CPF types.
+        const receiptCpf = cfbRows
             .filter((r) =>
-                ALLOWED_AMOUNT_TYPES.includes(r.amountType) &&
-                hasTreasuryChallanNo(r)
+                ["CPF Council Share", "CPF Contribution", "CPF Advance"].includes(r.amountType)
             )
-            .reduce((sum, r) => sum + safe(r.amount), 0);
+            .reduce((s, r) => s + safe(r.amount), 0);
 
-        logger.info(`plaChallan: ${plaChallan} | plaChallanTwo: ${plaChallanTwo} | plaCfb: ${plaCfb}`);
+        // 3.b — Security Deposit: cfb majorHead=664, amountType='Security
+        // Deposits', sector=COUNCIL + cfb majorHead=8443, amountType=
+        // 'Security Deposits', sector=STATE.
+        const receiptSecDep =
+            cfbRows
+                .filter((r) => r.sector === "COUNCIL" && isMajorHeadEqual12(r.majorHead, 664) && r.amountType === "Security Deposits")
+                .reduce((s, r) => s + safe(r.amount), 0) +
+            cfbRows
+                .filter((r) => r.sector === "STATE" && isMajorHeadEqual12(r.majorHead, 8443) && r.amountType === "Security Deposits")
+                .reduce((s, r) => s + safe(r.amount), 0);
 
-        const plaStateChallan = stateChallanRows
-            .filter((r) => hasTreasuryChallanNo(r))
-            .reduce((sum, r) => sum + scAmount(r), 0);
+        // 3.c — Earnest Money: same pattern with amountType='Earnest Money'.
+        const receiptEarnestDep =
+            cfbRows
+                .filter((r) => r.sector === "COUNCIL" && isMajorHeadEqual12(r.majorHead, 664) && r.amountType === "Earnest Money")
+                .reduce((s, r) => s + safe(r.amount), 0) +
+            cfbRows
+                .filter((r) => r.sector === "STATE" && isMajorHeadEqual12(r.majorHead, 8443) && r.amountType === "Earnest Money")
+                .reduce((s, r) => s + safe(r.amount), 0);
 
-        const receiptRemitPla =
-            plaChallan + plaChallanTwo + plaCfb + plaStateChallan;
+        // ═══════════════════════════════════════════════════════
+        // RECEIPT — PART 4 — all StateChallan excluding detailHead 31/32
+        // ═══════════════════════════════════════════════════════
+        const receiptPart4 = stateChallanRows
+            .filter((r) => !isDetailHead3132(r))
+            .reduce((s, r) => s + scAmount(r), 0);
 
-        logger.info(`receiptRemitPla: ${receiptRemitPla} (plaStateChallan: ${plaStateChallan})`);
+        // ═══════════════════════════════════════════════════════
+        // RECEIPT — PART 5
+        // ═══════════════════════════════════════════════════════
 
+        // 5.a — Form 3 total: all Expenditure grossAmount, scope-wide.
+        const form3Total = expenditureRows.reduce((s, r) => s + safe(r.grossAmount), 0);
+
+        // 5.b — Form 4 total: (Challan + cfb, majorHead IN 001-016/661/664,
+        // scope-wide) + all StateChallan.
+        const form4ChallanTotal = challanRows
+            .filter((c) => isForm4MajorHead(c.majorHead))
+            .reduce((s, c) => s + safe(c.amount), 0);
+        const form4CfbTotal = cfbRows
+            .filter((r) => isForm4MajorHead(r.majorHead))
+            .reduce((s, r) => s + safe(r.amount), 0);
+        const form4StateChallanTotal = stateChallanRows.reduce((s, r) => s + scAmount(r), 0);
+        const form4Total = form4ChallanTotal + form4CfbTotal + form4StateChallanTotal;
+
+        // ═══════════════════════════════════════════════════════
+        // RECEIPT GRAND TOTAL
+        // ═══════════════════════════════════════════════════════
         const receiptGrandTotal =
-            totalOpeningPlusPla +
-            receiptRevenueCouncil +
+            FORM12_OPENING_CASH +
+            FORM12_OPENING_PLA +
+            receiptRevenue +
             receiptGrantsGovt +
-            receiptMisc +
-            receiptCash +
+            receiptMiscPart1 +
             loansGovt +
             loansOther +
             recoverLoans +
-            otherCategories +
+            otherCategoriesReceipt +
             receiptCpf +
             receiptSecDep +
             receiptEarnestDep +
-            transferDeposits +
-            dcCheques +
-            receiptRemitPla;
+            receiptPart4 +
+            form3Total +
+            form4Total;
 
-        // ─────────────────────────────
-        // DISBURSEMENT SIDE VALUES
-        // ─────────────────────────────
-
-        // ✅ disbPartI — only REVENUE or CAPITAL expenditures
-        const disbPartI = expenditureRows
-            .filter((r) =>
-                r.expenditureType === "REVENUE" ||
-                r.expenditureType === "CAPITAL"
+        // ═══════════════════════════════════════════════════════
+        // DISBURSEMENT — PART 1
+        // Expenditure sector=COUNCIL excluding majorHead IN (661,664,662)
+        // + Expenditure sector=STATE where detailHead IN (31,32)
+        // ═══════════════════════════════════════════════════════
+        const disbPart1Council = expenditureRows
+            .filter(
+                (e) =>
+                    e.sector === "COUNCIL" &&
+                    !["661", "664", "662"].some((mh) => isMajorHeadEqual12(e.majorHead, mh))
             )
-            .reduce((sum, r) => sum + safe(r.grossAmount), 0);
+            .reduce((s, e) => s + safe(e.grossAmount), 0);
+        const disbPart1State = expenditureRows
+            .filter((e) => e.sector === "STATE" && isDetailHead3132(e))
+            .reduce((s, e) => s + safe(e.grossAmount), 0);
+        const disbPart1 = disbPart1Council + disbPart1State;
 
-        const disbLoanRepayGovt = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.loanRepayGovt), 0
-        );
+        // ═══════════════════════════════════════════════════════
+        // DISBURSEMENT — PART 2
+        // ═══════════════════════════════════════════════════════
 
-        const disbLoansAdvances = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.loansAdvances), 0
-        );
+        // 2.a — By repayment of loans received from govt: Expenditure.loanRepayGovt, scope-wide.
+        const disbLoanRepayGovt = expenditureRows.reduce((s, e) => s + safe(e.loanRepayGovt), 0);
 
-        const disbLoanRepayOther = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.loanRepayOther), 0
-        );
+        // 2.b — Payment of loans/advances made by Council: Expenditure.loansAdvances,
+        // majorHead=661, sector=COUNCIL only.
+        const disbLoansAdvances = expenditureRows
+            .filter((e) => e.sector === "COUNCIL" && isMajorHeadEqual12(e.majorHead, 661))
+            .reduce((s, e) => s + safe(e.loansAdvances), 0);
 
-        const disbPayCpf = 0;
-        const disbRemitCpf = receiptCpf;
+        // 2.c — Repayment of loans from other sources: Expenditure.loanRepayOther, scope-wide.
+        const disbLoanRepayOther = expenditureRows.reduce((s, e) => s + safe(e.loanRepayOther), 0);
 
-        const disbSecDep = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.securityDeposit), 0
-        );
+        // ═══════════════════════════════════════════════════════
+        // DISBURSEMENT — PART 3
+        // ═══════════════════════════════════════════════════════
 
-        const disbEarnest = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.earnestMoney), 0
-        );
+        // 3.a — By payment of CPF: cfb majorHead=662 sector=COUNCIL +
+        // Expenditure majorHead=662 sector=COUNCIL (grossAmount).
+        const disbCpfCfb = cfbRows
+            .filter((r) => r.sector === "COUNCIL" && isMajorHeadEqual12(r.majorHead, 662))
+            .reduce((s, r) => s + safe(r.amount), 0);
+        const disbCpfExpenditure = expenditureRows
+            .filter((e) => e.sector === "COUNCIL" && isMajorHeadEqual12(e.majorHead, 662))
+            .reduce((s, e) => s + safe(e.grossAmount), 0);
+        const disbPayCpf = disbCpfCfb + disbCpfExpenditure;
 
-        // ✅ CHANGED — r15_di di_amount ("By expenditure in respect of
-        // transferred functions") now sourced from the SAME Form 5E STATE
-        // payment total as r18 above, per spec — NOT the previous
-        // expenditureRows.transferPayment sum.
-        const disbTransferExp = form5ETransferTotal;
+        // 3.b — Remittance of contribution into Post Office: nil.
+        const disbRemitPostOffice = 0;
 
-        const disbRemitPla = receiptRemitPla;
-        const disbDcCheques = dcCheques;
+        // 3.c — Repayment of Security Deposits: Expenditure.securityDeposit
+        // majorHead=664 sector=COUNCIL + cfb majorHead=8443
+        // amountType='Security Deposits' sector=STATE.
+        const disbSecDep =
+            expenditureRows
+                .filter((e) => e.sector === "COUNCIL" && isMajorHeadEqual12(e.majorHead, 664))
+                .reduce((s, e) => s + safe(e.securityDeposit), 0) +
+            cfbRows
+                .filter((r) => r.sector === "STATE" && isMajorHeadEqual12(r.majorHead, 8443) && r.amountType === "Security Deposits")
+                .reduce((s, r) => s + safe(r.amount), 0);
 
+        // 3.d — Repayment of Earnest Money: same pattern, Expenditure.earnestMoney.
+        const disbEarnest =
+            expenditureRows
+                .filter((e) => e.sector === "COUNCIL" && isMajorHeadEqual12(e.majorHead, 664))
+                .reduce((s, e) => s + safe(e.earnestMoney), 0) +
+            cfbRows
+                .filter((r) => r.sector === "STATE" && isMajorHeadEqual12(r.majorHead, 8443) && r.amountType === "Earnest Money")
+                .reduce((s, r) => s + safe(r.amount), 0);
+
+        // ═══════════════════════════════════════════════════════
+        // DISBURSEMENT — PART 4 — Expenditure sector=STATE excluding
+        // detailHead 31/32 (transferred functions)
+        // ═══════════════════════════════════════════════════════
+        const disbTransferExp = expenditureRows
+            .filter((e) => e.sector === "STATE" && !isDetailHead3132(e))
+            .reduce((s, e) => s + safe(e.grossAmount), 0);
+
+        // ═══════════════════════════════════════════════════════
+        // DISBURSEMENT — PART 5 (mirrors receipt Part 5, swapped order)
+        // ═══════════════════════════════════════════════════════
+        const disbForm4Total = form4Total;
+        const disbForm3Total = form3Total;
+
+        // ═══════════════════════════════════════════════════════
+        // CASH COLUMN — receipt/disbursement cash sub-totals used for
+        // the closing balance below. Same convention as the earlier
+        // Cash/PLA split work: cash column = CashReceipt (receipt
+        // side) + Challan-with-counterfoilNo (disbursement side).
+        // ═══════════════════════════════════════════════════════
+        const cashReceiptsSum = cashReceiptRows.reduce((s, r) => s + safe(r.rupeesInCash), 0);
+        const challanWithCounterfoilSum = challanRows
+            .filter((c) => c.counterfoilNo && c.counterfoilNo !== "0")
+            .reduce((s, c) => s + safe(c.amount), 0);
+
+        const closingCash = FORM12_OPENING_CASH + cashReceiptsSum - challanWithCounterfoilSum;
+
+        // ═══════════════════════════════════════════════════════
+        // DISBURSEMENT — PART 3 (e) — Other categories of deposits
+        // = opening balance of cash - closing balance (current year, cash)
+        // 🔸 Rendered on the frontend as row id "r13e" (di side only,
+        // no receipt-side counterpart) — key below MUST stay "r13e_di"
+        // so Form12.jsx's generic `row.id + "_di"` lookup finds it.
+        // ═══════════════════════════════════════════════════════
+        const disbOtherDeposits = FORM12_OPENING_CASH - closingCash;
+
+        // ═══════════════════════════════════════════════════════
+        // TOTAL DISBURSEMENT
+        // ═══════════════════════════════════════════════════════
         const totalDisbursement =
-            disbPartI +
+            disbPart1 +
             disbLoanRepayGovt +
             disbLoansAdvances +
             disbLoanRepayOther +
             disbPayCpf +
-            disbRemitCpf +
+            disbRemitPostOffice +
             disbSecDep +
             disbEarnest +
+            disbOtherDeposits +
             disbTransferExp +
-            disbRemitPla +
-            disbDcCheques;
+            disbForm4Total +
+            disbForm3Total;
 
-        const challanWithCounterfoil = challanRows
-            .filter((c) => c.counterfoilNo && c.counterfoilNo !== "0")
-            .reduce((sum, c) => sum + safe(c.amount), 0);
-
-        const totalCashReceipts = receiptCash;
-        const closingCash =
-            totalCashReceipts - challanWithCounterfoil + openingBalance;
-
-        const closingTreasuryPla =
-            receiptGrandTotal - totalDisbursement - closingCash;
-
+        // ═══════════════════════════════════════════════════════
+        // CLOSING BALANCE
+        // Cash = openingCash + cashReceipts - challanWithCounterfoil (above)
+        // Treasury PLA = Form4 - Form3 + opening PLA
+        // ═══════════════════════════════════════════════════════
+        const closingTreasuryPla = form4Total - form3Total + FORM12_OPENING_PLA;
         const totalClosing = closingCash + closingTreasuryPla;
-
-        const disbGrandTotal =
-            totalDisbursement + closingCash + closingTreasuryPla;
+        const disbGrandTotal = totalDisbursement + closingCash + closingTreasuryPla;
 
         // ─────────────────────────────
         // MAP TO STRUCTURE
         // ─────────────────────────────
         const money = {
             // RECEIPTS
-            r1: { re_amount: openingBalance },
-            r2: { re_amount: treasuryPla },
-            r3: { re_amount: totalOpeningPlusPla },
-            r5: { re_amount: receiptRevenueCouncil },
-            r6: { re_amount: receiptGrantsGovt },
-            r7: { re_amount: receiptMisc },
-            r8: { re_amount: receiptCash },
-            r10: { re_amount: loansGovt },
-            r11: { re_amount: loansOther },
-            r12: { re_amount: recoverLoans },
-            r13: { re_amount: otherCategories },
-            r15: { re_amount: receiptCpf },
-            r16: { re_amount: receiptSecDep },
-            r17: { re_amount: receiptEarnestDep },
-            r18: { re_amount: transferDeposits }, // ✅ Form 5E (STATE) payment total
-            r20: { re_amount: dcCheques },
-            r21: { re_amount: receiptRemitPla },
+            r1: { re_amount: FORM12_OPENING_CASH },       // Opening Balance - Cash
+            r2: { re_amount: FORM12_OPENING_PLA },        // Opening Balance - Treasury PLA
+            r3: { re_amount: FORM12_OPENING_CASH + FORM12_OPENING_PLA },
+            r5: { re_amount: receiptRevenue },            // Part1.a
+            r6: { re_amount: receiptGrantsGovt },         // Part1.b
+            r7: { re_amount: receiptMiscPart1 },          // Part1.c
+            r10: { re_amount: loansGovt },                // Part2.a
+            r11: { re_amount: loansOther },               // Part2.b
+            r12: { re_amount: recoverLoans },             // Part2.c
+            r13: { re_amount: otherCategoriesReceipt },   // Part2.d
+            r15: { re_amount: receiptCpf },               // Part3.a
+            r16: { re_amount: receiptSecDep },            // Part3.b
+            r17: { re_amount: receiptEarnestDep },        // Part3.c
+            r14_part4: { re_amount: receiptPart4 },       // Part4 (all state challan excl 31/32)
+            r_form3: { re_amount: form3Total },           // Part5.a
+            r_form4: { re_amount: form4Total },           // Part5.b
             r22: { re_amount: receiptGrandTotal },
 
             // DISBURSEMENTS
-            r1_di: { di_amount: 0 },
-            r4_di: { di_amount: disbPartI },      // ✅ REVENUE + CAPITAL only
-            r5_di: { di_amount: disbLoanRepayGovt },
-            r6_di: { di_amount: disbLoansAdvances },
-            r7_di: { di_amount: disbLoanRepayOther },
-            r10_di: { di_amount: disbPayCpf },
-            r11_di: { di_amount: disbRemitCpf },
-            r12_di: { di_amount: disbSecDep },
-            r13_di: { di_amount: disbEarnest },
-            r15_di: { di_amount: disbTransferExp }, // ✅ same Form 5E (STATE) payment total as r18
-            r19_di: { di_amount: disbRemitPla },
-            r20_di: { di_amount: disbDcCheques },
+            r4_di: { di_amount: disbPart1 },              // Part1
+            r5_di: { di_amount: disbLoanRepayGovt },      // Part2.a
+            r6_di: { di_amount: disbLoansAdvances },      // Part2.b
+            r7_di: { di_amount: disbLoanRepayOther },     // Part2.c
+            r10_di: { di_amount: disbPayCpf },            // Part3.a
+            r11_di: { di_amount: disbRemitPostOffice },   // Part3.b
+            r12_di: { di_amount: disbSecDep },            // Part3.c
+            r13_di: { di_amount: disbEarnest },           // Part3.d
+            r13e_di: { di_amount: disbOtherDeposits },    // Part3.e — matches Form12.jsx row id "r13e"
+            r15_di: { di_amount: disbTransferExp },       // Part4
+            r_form4_di: { di_amount: disbForm4Total },    // Part5.a
+            r_form3_di: { di_amount: disbForm3Total },    // Part5.b
             r21_di: { di_amount: totalDisbursement },
 
             // Closing
@@ -460,289 +460,6 @@ export const getForm12Data = async (sector, dateRange = {}) => {
         return { money };
     } catch (err) {
         logger.error(`Form12 service error: ${err.message}`);
-        throw err;
-    }
-};
-
-// ─────────────────────────────────────────────────────────────────
-// STATE SECTOR — dedicated logic (per new spec)
-// ─────────────────────────────────────────────────────────────────
-const getForm12DataState = async (from, to) => {
-    try {
-        logger.info(
-            `Fetching Form 12 data for STATE sector (custom logic), range: ${from ?? "-"} to ${to ?? "-"}`
-        );
-
-        const monthYearFilter = buildMonthYearFilter(from, to);
-        const stateChallanDateFilter = buildDateFilter("challanDate", from, to);
-        const cfbDateFilter = buildDateFilter("voucharDate", from, to);
-        const expenditureDateFilter = buildDateFilter("voucherDate", from, to);
-
-        const [
-            openingRows,
-            treasuryPlaRows,
-            stateChallanRows,
-            challanFromBillRows,
-            expenditureRows,
-            form5EStateData, // ✅ NEW — Form 5E, sector hard-locked to STATE
-        ] = await Promise.all([
-            prisma.openingBalance.findMany({
-                where: { isActive: true, sector: "STATE", ...monthYearFilter },
-                select: { amount: true },
-            }),
-            prisma.treasuryPla.findMany({
-                where: { isActive: true, sector: "STATE", ...monthYearFilter },
-                select: { amount: true },
-            }),
-            prisma.stateChallan.findMany({
-                where: {
-                    isActive: true,
-                    sector: "STATE",
-                    ...stateChallanDateFilter,
-                },
-                select: { totalAmount: true, detailHead: true },
-            }),
-            prisma.challanFromBill.findMany({
-                where: { isActive: true, sector: "STATE", ...cfbDateFilter },
-                select: { amount: true, amountType: true },
-            }),
-            prisma.expenditure.findMany({
-                where: { isActive: true, sector: "STATE", ...expenditureDateFilter },
-                select: { majorHead: true, grossAmount: true },
-            }),
-            // ✅ NEW — always sector="STATE" here (matches this branch anyway)
-            getForm5EData("STATE", { from, to }),
-        ]);
-
-        const safe = (v) => {
-            if (v === null || v === undefined) return 0;
-            const n = parseFloat(v.toString());
-            return isNaN(n) ? 0 : n;
-        };
-
-        const scAmount = (r) =>
-            r.totalAmount != null ? parseFloat(r.totalAmount.toFixed(2)) : 0;
-
-        // detailHead 31 or 32 (stored as string on the model)
-        const isDetailHead3132 = (r) =>
-            r.detailHead === "31" || r.detailHead === "32";
-
-        // ─────────────────────────────
-        // OPENING (unchanged, from openingBalance / treasuryPla tables)
-        // ─────────────────────────────
-        const openingBalance = openingRows.reduce(
-            (sum, r) => sum + safe(r.amount), 0
-        );
-        const treasuryPla = treasuryPlaRows.reduce(
-            (sum, r) => sum + safe(r.amount), 0
-        );
-        const totalOpeningPlusPla = openingBalance + treasuryPla;
-
-        // ─────────────────────────────
-        // RECEIPT — PART I  (r5 a, r6 b, r7 c, r8 d)
-        // ─────────────────────────────
-        const receiptRevenueCouncil = 0; // (a) NIL
-
-        const receiptGrantsGovt = stateChallanRows // (b) stateChallan detailHead 31/32
-            .filter(isDetailHead3132)
-            .reduce((sum, r) => sum + scAmount(r), 0);
-
-        const cfbAdvancePayment = challanFromBillRows
-            .filter((r) => r.amountType === "Advance Payment")
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        const stateChallanExcl3132 = stateChallanRows
-            .filter((r) => !isDetailHead3132(r))
-            .reduce((sum, r) => sum + scAmount(r), 0);
-
-        // (c) all stateChallan excluding detailHead 31/32 + challanFromBill "Advance Payment"
-        const receiptMisc = stateChallanExcl3132 + cfbAdvancePayment;
-
-        const receiptCash = 0; // (d) NIL
-
-        // ─────────────────────────────
-        // DISBURSEMENT — PART I  (r4_di gross expenditure)
-        // ─────────────────────────────
-        const disbPartI = expenditureRows // expenditure with majorHead in [2011, 5999]
-            .filter((r) => {
-                const mh = parseInt(r.majorHead, 10);
-                return !isNaN(mh) && mh >= 2011 && mh <= 5999;
-            })
-            .reduce((sum, r) => sum + safe(r.grossAmount), 0);
-
-        // DISBURSEMENT — continuation of Part I (r5_di a, r6_di b, r7_di c)
-        const disbLoanRepayGovt = 0; // (a) NIL
-        const disbLoansAdvances = 0; // (b) NIL
-        const disbLoanRepayOther = 0; // (c) NIL
-
-        // ─────────────────────────────
-        // RECEIPT — PART II  (r10 a, r11 b, r12 c, r13 d)
-        // ─────────────────────────────
-        const loansGovt = 0; // (a) NIL
-        const loansOther = 0; // (b) NIL
-        const recoverLoans = 0; // (c) NIL
-
-        // (d) all challanFromBill excluding amountType "Advance Payment"
-        const otherCategories = challanFromBillRows
-            .filter((r) => r.amountType !== "Advance Payment" &&
-                r.amountType !== "Security Deposits")
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        // ─────────────────────────────
-        // RECEIPT — PART III  (r15 a, r16 b, r17 c)
-        // ─────────────────────────────
-        const receiptCpf = 0; // (a) NIL
-
-        const receiptSecDep = challanFromBillRows // (b) amountType = "Security Deposits"
-            .filter((r) => r.amountType === "Security Deposits")
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        const receiptEarnestDep = challanFromBillRows // (c) amountType = "Earnest Money"
-            .filter((r) => r.amountType === "Earnest Money")
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        // ─────────────────────────────
-        // DISBURSEMENT — PART III  (r10_di a, r11_di b, r12_di c, r13_di d)
-        // ─────────────────────────────
-        const disbPayCpf = 0; // (a) NIL
-        const disbRemitCpf = 0; // (b) NIL
-
-        // (c) all challanFromBill excluding "Advance Payment" and "Earnest Money"
-        const disbSecDep = challanFromBillRows
-            .filter(
-                (r) =>
-                    r.amountType !== "Advance Payment" &&
-                    r.amountType !== "Earnest Money"
-            )
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        // (d) challanFromBill amountType = "Earnest Money"
-        const disbEarnest = challanFromBillRows
-            .filter((r) => r.amountType === "Earnest Money")
-            .reduce((sum, r) => sum + safe(r.amount), 0);
-
-        // ─────────────────────────────
-        // SHARED UNFILTERED TOTALS
-        // ─────────────────────────────
-        const allStateChallanSum = stateChallanRows.reduce(
-            (sum, r) => sum + scAmount(r), 0
-        );
-        const allExpenditureSum = expenditureRows.reduce(
-            (sum, r) => sum + safe(r.grossAmount), 0
-        );
-
-        // ✅ CHANGED — r18 re_amount ("To Deposits received from Govt for
-        // transferred functions") now sourced from Form 5E (STATE) payment
-        // total, replacing the previous allStateChallanSum-based value.
-        const form5ETransferTotal =
-            form5EStateData?.paymentTotals?.totalPayment ?? 0;
-        const transferDeposits = form5ETransferTotal;
-
-        // ✅ CHANGED — r15_di di_amount ("By expenditure in respect of
-        // transferred functions") now sourced from the SAME Form 5E (STATE)
-        // payment total as r18 above, replacing the previous
-        // allExpenditureSum-based value.
-        const disbTransferExp = form5ETransferTotal;
-
-        // RECEIPT — PART V (r20 a = DC Cheques, r21 b = Remit PLA)
-        const dcCheques = allExpenditureSum; // (a) all expenditure sum
-        const receiptRemitPla = allStateChallanSum; // (b) all stateChallan sum
-
-        // DISBURSEMENT — PART V (r19_di a = Remit PLA, r20_di b = DC Cheques)
-        const disbRemitPla = allStateChallanSum; // (a) all stateChallan sum
-        const disbDcCheques = allExpenditureSum; // (b) all expenditure sum
-
-        // ─────────────────────────────
-        // GRAND TOTALS
-        // ─────────────────────────────
-        const receiptGrandTotal =
-            totalOpeningPlusPla +
-            receiptRevenueCouncil +
-            receiptGrantsGovt +
-            receiptMisc +
-            receiptCash +
-            loansGovt +
-            loansOther +
-            recoverLoans +
-            otherCategories +
-            receiptCpf +
-            receiptSecDep +
-            receiptEarnestDep +
-            transferDeposits +
-            dcCheques +
-            receiptRemitPla;
-
-        const totalDisbursement =
-            disbPartI +
-            disbLoanRepayGovt +
-            disbLoansAdvances +
-            disbLoanRepayOther +
-            disbPayCpf +
-            disbRemitCpf +
-            disbSecDep +
-            disbEarnest +
-            disbTransferExp +
-            disbRemitPla +
-            disbDcCheques;
-
-        // ─────────────────────────────
-        // CLOSING BALANCE = receipt total − disbursement total
-        // cash column forced to NIL, everything sits in Treasury (PLA)
-        // ─────────────────────────────
-        const closingCash = 0;
-        const closingTreasuryPla = receiptGrandTotal - totalDisbursement;
-        const totalClosing = closingCash + closingTreasuryPla;
-        const disbGrandTotal = totalDisbursement + closingCash + closingTreasuryPla;
-
-        // ─────────────────────────────
-        // MAP TO STRUCTURE
-        // ─────────────────────────────
-        const money = {
-            // RECEIPTS
-            r1: { re_amount: openingBalance },
-            r2: { re_amount: treasuryPla },
-            r3: { re_amount: totalOpeningPlusPla },
-            r5: { re_amount: receiptRevenueCouncil },
-            r6: { re_amount: receiptGrantsGovt },
-            r7: { re_amount: receiptMisc },
-            r8: { re_amount: receiptCash },
-            r10: { re_amount: loansGovt },
-            r11: { re_amount: loansOther },
-            r12: { re_amount: recoverLoans },
-            r13: { re_amount: otherCategories },
-            r15: { re_amount: receiptCpf },
-            r16: { re_amount: receiptSecDep },
-            r17: { re_amount: receiptEarnestDep },
-            r18: { re_amount: transferDeposits }, // ✅ Form 5E (STATE) payment total
-            r20: { re_amount: dcCheques },
-            r21: { re_amount: receiptRemitPla },
-            r22: { re_amount: receiptGrandTotal },
-
-            // DISBURSEMENTS
-            r1_di: { di_amount: 0 },
-            r4_di: { di_amount: disbPartI },
-            r5_di: { di_amount: disbLoanRepayGovt },
-            r6_di: { di_amount: disbLoansAdvances },
-            r7_di: { di_amount: disbLoanRepayOther },
-            r10_di: { di_amount: disbPayCpf },
-            r11_di: { di_amount: disbRemitCpf },
-            r12_di: { di_amount: disbSecDep },
-            r13_di: { di_amount: disbEarnest },
-            r15_di: { di_amount: disbTransferExp }, // ✅ same Form 5E (STATE) payment total as r18
-            r19_di: { di_amount: disbRemitPla },
-            r20_di: { di_amount: disbDcCheques },
-            r21_di: { di_amount: totalDisbursement },
-
-            // Closing
-            cashRs: { di_amount: closingCash },
-            treasuryPla: { di_amount: closingTreasuryPla },
-            totalClosing: { di_amount: totalClosing },
-            grandTotalD: { di_amount: disbGrandTotal },
-        };
-
-        return { money };
-    } catch (err) {
-        logger.error(`Form12 STATE service error: ${err.message}`);
         throw err;
     }
 };

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import Statement1 from "../../components/Statements/Statement1";
 import Statement2 from "../../components/Statements/Statement2";
@@ -8,6 +8,8 @@ import Statement5 from "../../components/Statements/Statement5";
 import Statement6 from "../../components/Statements/Statement6";
 import Statement7 from "../../components/Statements/Statement7";
 import SearchFunction from "../SearchFunction";
+import kaacLogo from "../../assets/logo.jpg";
+import azadi from "../../assets/azadi.png";
 
 const SECTOR_LABELS = {
   council: "COUNCIL",
@@ -25,13 +27,113 @@ const STATEMENT_LABELS = {
   7: "Statement",
 };
 
+// ─────────────────────────────────────────────────────────────
+// PRINT-ONLY HEADER (KAAC letterhead) — appears ONCE, at the very
+// top of the printed document (i.e. top of page 1 only), because
+// it is simply the first element in the printable flow.
+// ─────────────────────────────────────────────────────────────
+const PrintHeader = () => (
+  <div
+    className="print-header"
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "16px",
+      padding: "10px 20px 16px",
+      borderBottom: "2px solid #000",
+      marginBottom: "16px",
+    }}>
+    <img
+      src={kaacLogo}
+      alt="KAAC Logo"
+      style={{ height: "90px", width: "90px", objectFit: "contain" }}
+    />
+    <div style={{ textAlign: "center", flex: 1 }}>
+      <h2 style={{ margin: 0, fontWeight: 700, fontStyle: "italic" }}>
+        KARBI ANGLONG AUTONOMOUS COUNCIL
+      </h2>
+      <h3 style={{ margin: 0, fontWeight: 700, fontStyle: "italic" }}>
+        DEPARTMENT OF FINANCE &amp; ACCOUNTS
+      </h3>
+      <p style={{ margin: 0, fontStyle: "italic" }}>KAAC SECRETARIAT</p>
+      <p style={{ margin: 0, fontStyle: "italic" }}>DIPHU – 782460</p>
+    </div>
+    <div style={{ textAlign: "right", fontSize: "11px", minWidth: "180px" }}>
+      <img
+        src={azadi}
+        alt="Azadi Ka Amrit Mahotsav"
+        style={{ height: "86px", marginLeft: "77px", marginBottom: "4px" }}
+      />
+      <p style={{ margin: 0 }}>
+        Website:{" "}
+        <span style={{ textDecoration: "underline" }}>
+          www.karbianglong.co.in
+        </span>
+      </p>
+      <p style={{ margin: 0 }}>
+        Email:{" "}
+        <span
+          style={{
+            textDecoration: "underline",
+            color: "blue",
+            fontStyle: "italic",
+          }}>
+          ps-ka@nic.in
+        </span>
+        ,{" "}
+        <span
+          style={{
+            textDecoration: "underline",
+            color: "blue",
+            fontStyle: "italic",
+          }}>
+          pskaac1952@gmail.com
+        </span>
+      </p>
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────
+// PRINT-ONLY FOOTER (signatory block) — appears ONCE, after all
+// statement content, so it naturally lands at the bottom of the
+// last printed page.
+// ─────────────────────────────────────────────────────────────
+const PrintFooter = () => (
+  <div
+    className="print-footer"
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      marginTop: "150px",
+      padding: "0 20px",
+      fontStyle: "italic",
+      fontWeight: 600,
+    }}>
+    <div style={{ textAlign: "center" }}>
+      <p style={{ margin: 0 }}>Finance and Accounts Officer (Council)</p>
+      <p style={{ margin: "1px 0 40px" }}>KAAC, Diphu</p>
+    </div>
+    <div style={{ textAlign: "center" }}>
+      <p style={{ margin: 0 }}>Sr. Financial Adviser (State Sector)</p>
+      <p style={{ margin: "1px 0 40px" }}>KAAC, Diphu</p>
+    </div>
+    <div style={{ textAlign: "center" }}>
+      <p style={{ margin: 0 }}>Principal Secretary,</p>
+      <p style={{ margin: "1px 0 40px" }}>KAAC, Diphu</p>
+    </div>
+  </div>
+);
+
 const TrackStatements = () => {
   const { sector } = useParams();
   const [activeStep, setActiveStep] = useState("1");
-  const [dateRange, setDateRange] = useState(null); // ✅ { from, to } date filter state
+  const [dateRange, setDateRange] = useState(null); // { from, to } date filter state
 
-  // ✅ Ref for targeted print
-  const statementAreaRef = useRef(null);
+  // Points at the wrapper around the actual rendered statement table,
+  // so download can pull real cell text straight out of the DOM.
+  const statementContentRef = useRef(null);
 
   const sectorType = sector
     ? SECTOR_LABELS[sector.toLowerCase()] || null
@@ -39,57 +141,82 @@ const TrackStatements = () => {
 
   const array = ["1", "2", "3", "4", "5", "6", "7"];
 
-  // ✅ Handle date range filter from SearchFunction
+  // Handle date range filter from SearchFunction
   const handleFilter = useCallback((range) => {
     setDateRange(range); // { from, to }
   }, []);
 
-  // ✅ Print only the statement content div
+  // ✅ Print — uses the REAL page (native window.print), not a popup.
+  // Keeps every Tailwind class working (so alignment/centering in
+  // Statement1.jsx actually renders), and there is no "about:blank"
+  // browser header/footer because this is a real app page, not a
+  // blank window.
   const handlePrint = useCallback(() => {
-    if (!statementAreaRef.current) return;
-    const content = statementAreaRef.current.innerHTML;
-    const win = window.open("", "_blank", "width=900,height=700");
-    win.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Statement ${activeStep} — ${STATEMENT_LABELS[activeStep] || ""} ${sectorType ? `(${sectorType})` : ""}</title>
-          <style>
-            body { font-family: 'Merriweather', sans-serif; margin: 24px; color: #111; }
-            table { border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #ccc; padding: 6px 10px; font-size: 12px; }
-            th { background: #f3f4f6; font-weight: 700; }
-            @media print { body { margin: 0; } }
-          </style>
-        </head>
-        <body>${content}</body>
-      </html>
-    `);
-    win.document.close();
-    win.focus();
-    win.print();
-    win.close();
-  }, [activeStep, sectorType]);
+    const prevTitle = document.title;
+    document.title = `Statement ${activeStep}`; // just "Statement 1", no suffix
 
-  // ✅ Download statement metadata as CSV
+    const restoreTitle = () => {
+      document.title = prevTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+    window.addEventListener("afterprint", restoreTitle);
+
+    window.print();
+  }, [activeStep]);
+
+  // ✅ Download — reads the ACTUAL rendered statement table (every row,
+  // every label, every amount) straight out of the DOM and turns it
+  // into CSV. This is what was missing before: the old version only
+  // ever wrote out the statement's metadata (number/sector/dates),
+  // never the table itself.
+  const escapeCsvCell = (text) => {
+    const cleaned = (text ?? "").replace(/\s+/g, " ").trim();
+    return `"${cleaned.replace(/"/g, '""')}"`;
+  };
+
   const handleDownload = useCallback(() => {
-    const rows = [
-      ["Statement No", "Sector", "From", "To"],
+    const container = statementContentRef.current;
+    const tables = container ? container.querySelectorAll("table") : [];
+
+    if (!tables.length) {
+      console.warn("Download: no table found in the current statement yet.");
+      return;
+    }
+
+    const metaLines = [
       [
-        activeStep,
+        "Statement No",
         STATEMENT_LABELS[activeStep] || "",
         sectorType || "All",
         dateRange?.from || "",
         dateRange?.to || "",
-      ],
+      ]
+        .map(escapeCsvCell)
+        .join(","),
+      "",
     ];
-    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+
+    const tableBlocks = Array.from(tables).map((table) => {
+      const rows = Array.from(table.querySelectorAll("tr"));
+      return rows
+        .map((row) =>
+          Array.from(row.querySelectorAll("th, td"))
+            .map((cell) => escapeCsvCell(cell.textContent))
+            .join(","),
+        )
+        .join("\n");
+    });
+
+    // "\ufeff" (BOM) so Excel renders special characters (—, ₹, etc.) correctly.
+    const csv = "\ufeff" + [...metaLines, ...tableBlocks].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `Statement_${activeStep}_${sectorType || "ALL"}_${dateRange?.from || "all"}_${dateRange?.to || "time"}.csv`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   }, [activeStep, sectorType, dateRange]);
 
@@ -113,6 +240,31 @@ const TrackStatements = () => {
         backgroundColor: "#f0f2f5",
         fontFamily: "'Merriweather', sans-serif",
       }}>
+      {/* ── Print isolation styles ──
+          On screen: .print-container renders normally (invisible
+          print-only header/footer are simply display:none).
+          On print: everything on the page is hidden EXCEPT
+          .print-container (and its children), so only the
+          statement + header/footer get printed — not the navy
+          top bar, the statement navigator, footer action bar, etc. */}
+      <style>{`
+        @media screen {
+          .print-only { display: none; }
+        }
+        @media print {
+          body * { visibility: hidden; }
+          .print-container, .print-container * { visibility: visible; }
+          .print-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .print-only { display: block !important; }
+          @page { margin: 16mm; }
+        }
+      `}</style>
+
       {/* ── Top Government Header Bar ── */}
       <div
         style={{
@@ -317,7 +469,7 @@ const TrackStatements = () => {
             </>
           )}
         </div>
-        {/* ✅ SearchFunction wired */}
+        {/* SearchFunction wired */}
         <div style={{ flex: 1, maxWidth: "520px", marginLeft: "32px" }}>
           <SearchFunction
             onFilter={handleFilter}
@@ -593,7 +745,7 @@ const TrackStatements = () => {
           </div>
         </div>
 
-        {/* ── Statement Display Area — ref for print ── */}
+        {/* ── Statement Display Area ── */}
         <div
           style={{
             background: "#ffffff",
@@ -603,6 +755,7 @@ const TrackStatements = () => {
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
           }}>
           <div
+            className="no-print"
             style={{
               background: "#0f2744",
               padding: "12px 24px",
@@ -683,12 +836,20 @@ const TrackStatements = () => {
             </span>
           </div>
 
-          {/* ✅ ref attached here */}
-          <div ref={statementAreaRef}>{stepComponents[activeStep]}</div>
+          {/* ✅ This is what gets printed: letterhead + statement + signatures.
+              Everything else on the page is hidden by the print CSS above.
+              The same wrapper (statementContentRef) also feeds the CSV
+              download, so both features read from one source of truth. */}
+          <div className="print-container">
+            <PrintHeader />
+            <div ref={statementContentRef}>{stepComponents[activeStep]}</div>
+            <PrintFooter />
+          </div>
         </div>
 
         {/* ── Footer Action Bar ── */}
         <div
+          className="no-print"
           style={{
             marginTop: "24px",
             padding: "14px 20px",

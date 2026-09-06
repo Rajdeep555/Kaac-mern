@@ -9,8 +9,8 @@ const AmountDisplay = ({ value }) => (
   </span>
 );
 
-const Form11 = ({ sector }) => {
-  const { form11Data, loading, error } = useForm11({ sector });
+const Form11 = ({ sector, dateRange }) => {
+  const { form11Data, loading, error } = useForm11({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {

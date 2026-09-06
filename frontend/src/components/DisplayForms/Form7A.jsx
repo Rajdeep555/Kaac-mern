@@ -12,8 +12,8 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-const Form7A = ({ sector }) => {
-  const { form7AData, loading, error } = useForm7A({ sector });
+const Form7A = ({ sector, dateRange }) => {
+  const { form7AData, loading, error } = useForm7A({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {

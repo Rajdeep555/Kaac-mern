@@ -33,8 +33,8 @@ const AMOUNT_KEYS = [
   "grossAmount",
 ];
 
-const Form5C = ({ sector }) => {
-  const { form5CData, loading, error } = useForm5C({ sector });
+const Form5C = ({ sector, dateRange }) => {
+  const { form5CData, loading, error } = useForm5C({ sector, dateRange });
 
   const grandTotals = useMemo(() => {
     const totals = Object.fromEntries(AMOUNT_KEYS.map((k) => [k, 0]));

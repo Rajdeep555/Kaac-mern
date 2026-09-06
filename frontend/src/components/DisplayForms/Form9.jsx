@@ -31,8 +31,8 @@ const AmountCell = ({ value }) => (
   </span>
 );
 
-const Form9 = ({ sector }) => {
-  const { form9Data, loading, error } = useForm9({ sector });
+const Form9 = ({ sector, dateRange }) => {
+  const { form9Data, loading, error } = useForm9({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {
