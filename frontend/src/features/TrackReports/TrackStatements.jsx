@@ -261,7 +261,32 @@ const TrackStatements = () => {
             width: 100%;
           }
           .print-only { display: block !important; }
-          @page { margin: 16mm; }
+          @page { size: landscape; margin: 10mm; }
+
+          /* ── Fix for cropped/cut-off table data ──
+             On screen, wide statement tables sit inside an
+             overflow-x-auto div and/or have a fixed min-width, so
+             you scroll to see extra columns. Print has no scrolling —
+             anything past the visible edge just gets clipped at the
+             page boundary. These rules strip those constraints during
+             print so every column reflows to fit the page instead of
+             being cut off. */
+          .print-container * {
+            max-width: 100% !important;
+            overflow: visible !important;
+          }
+          .print-container table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: auto !important;
+            font-size: 9px !important;
+          }
+          .print-container th,
+          .print-container td {
+            white-space: normal !important;
+            word-break: break-word !important;
+            padding: 2px 4px !important;
+          }
         }
       `}</style>
 

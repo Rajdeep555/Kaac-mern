@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm6 } from "../../hooks/admin/useForm6";
+import { Loader } from "../ui/Loader";
 
 const MONTHS = [
   "JAN",
@@ -43,14 +44,14 @@ const HeadCodeCell = ({ classification, headCode }) => {
   ));
 };
 
-const Form6 = ({ sector,dateRange }) => {
-  const { form6Data, loading, error } = useForm6({ sector,dateRange });
+const Form6 = ({ sector, dateRange }) => {
+  const { form6Data, loading, error } = useForm6({ sector, dateRange });
   const year = new Date().getFullYear();
 
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 6 data...</p>
+        <Loader />
       </div>
     );
   }

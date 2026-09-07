@@ -180,6 +180,8 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
 
 
 
+
+
 //===========================================================
 
 // Same { from, to } Date-range builder pattern used elsewhere (Form 4).
@@ -201,6 +203,24 @@ function getStatement6DateRange(from, to) {
     }
     return range;
 }
+
+// FIX: head codes were being sorted with plain string localeCompare,
+// which puts "2029" before "203" (comparing char-by-char, "2" < "3"
+// wins before the string even finishes) — that's why 2029 - Land
+// Revenue was jumping in between 202 and 203. This comparator sorts
+// numerically first, so 201, 202, 203, 2029, 2039, 204 ... comes out
+// in the correct ascending numeric order. Falls back to string
+// comparison only for genuinely non-numeric codes.
+const compareHeadCodes = (a, b) => {
+    const na = parseInt(a, 10);
+    const nb = parseInt(b, 10);
+    const aValid = !Number.isNaN(na);
+    const bValid = !Number.isNaN(nb);
+    if (aValid && bValid) return na - nb;
+    if (aValid) return -1;
+    if (bValid) return 1;
+    return String(a || "").localeCompare(String(b || ""));
+};
 
 // Fetches Expenditure rows for a given sector (or all sectors when
 // sector is omitted, i.e. CONSOLIDATED).
@@ -247,10 +267,9 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 
     // ── Step 1: aggregate by (majorHead, subMajorHead, minorHead) ──────────
     //
-    // 🔸 CHANGED: Statement 6 always reports every rupee under Non-Plan.
+    // 🔸 Statement 6 always reports every rupee under Non-Plan.
     // COUNCIL, STATE, and CONSOLIDATED all show Plan = 0 for every row —
-    // there is no longer a planType-based split. (Previously this branched
-    // on item.planType to decide plan vs nonPlan; that branch is removed.)
+    // there is no planType-based split.
     const groupMap = new Map();
 
     for (const item of expenditures) {
@@ -388,20 +407,22 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
         });
     };
 
+    // FIX: numeric-aware sort (see compareHeadCodes above) instead of
+    // plain string localeCompare, at all three levels.
     const sortedMajors = [...majorsMap.values()].sort((a, b) =>
-        a.code.localeCompare(b.code),
+        compareHeadCodes(a.code, b.code),
     );
 
     for (const major of sortedMajors) {
         const sortedSubMajors = [...major.subMajors.values()].sort((a, b) =>
-            (a.code || "").localeCompare(b.code || ""),
+            compareHeadCodes(a.code, b.code),
         );
 
         let majorHeaderShown = false;
 
         for (const subMajor of sortedSubMajors) {
             const sortedMinors = [...subMajor.minors.values()].sort((a, b) =>
-                (a.code || "").localeCompare(b.code || ""),
+                compareHeadCodes(a.code, b.code),
             );
             let subMajorHeaderShown = false;
 
@@ -449,6 +470,8 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 
     return { rows, grandTotal: grandTotal.toFixed(2) };
 };
+
+
 
 
 // ─────────────────────────────────────────────────────────────
@@ -530,7 +553,7 @@ const CHALLAN_FROM_BILL_HEAD_CODES = {
     "CPF Advance": { major: "662", subMajor: "01", minor: "05" },
 };
 
-// 🔥 Overrides applied only when the ROW's own sector is STATE
+// Overrides applied only when the ROW's own sector is STATE
 const CHALLAN_FROM_BILL_STATE_OVERRIDES = {
     "Earnest Money": { major: "8443", subMajor: "00", minor: "120" },
     "Security Deposits": { major: "8443", subMajor: "00", minor: "120" },

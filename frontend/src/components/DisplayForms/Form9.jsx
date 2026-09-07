@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm9 } from "../../hooks/admin/useForm9";
+import { Loader } from "../ui/Loader";
 
 const COLUMNS = [
   { key: "voucherNo", label: "CASH BOOK VR NO.", number: 1 },
@@ -38,7 +39,7 @@ const Form9 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 9 data...</p>
+        <Loader />
       </div>
     );
   }

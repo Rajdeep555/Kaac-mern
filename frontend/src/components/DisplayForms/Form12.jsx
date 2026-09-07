@@ -1,5 +1,7 @@
 import React, { useMemo } from "react";
 import { useForm12 } from "../../hooks/admin/useForm12";
+import { Loader } from "../ui/Loader";
+import ErrorMessage from "../ui/ErrorMessage";
 
 // Static structure for Form 12 (your original rows)
 const structure = [
@@ -198,7 +200,7 @@ const Form12 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto bg-white border-2 p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 12 data...</p>
+        <Loader />
       </div>
     );
   }
@@ -206,9 +208,7 @@ const Form12 = ({ sector, dateRange }) => {
   if (error) {
     return (
       <div className="w-full overflow-x-auto bg-white border-2 p-8 text-center">
-        <p className="font-medium text-red-600">
-          Failed to load Form 12 data. Please try again.
-        </p>
+        <ErrorMessage title="Failed to load Form 12 data" />
       </div>
     );
   }

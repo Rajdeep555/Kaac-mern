@@ -1,5 +1,6 @@
 import React from "react";
 import { useExpenditure } from "../../hooks/admin/useExpenditure";
+import { Loader } from "../ui/Loader";
 
 const Form3 = ({ data: dataProp = [], title, sector, dateRange }) => {
   const fromDate = dateRange?.from;
@@ -104,7 +105,11 @@ const Form3 = ({ data: dataProp = [], title, sector, dateRange }) => {
   }, [data]);
 
   if (loading) {
-    return <div>Loading Form 3 data...</div>;
+    return (
+      <div className="w-full border-2 bg-white p-8 text-center">
+        <Loader />
+      </div>
+    );
   }
 
   if (error) {

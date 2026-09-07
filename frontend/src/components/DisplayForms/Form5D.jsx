@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm5D } from "../../hooks/admin/useForm5D";
+import { Loader } from "../ui/Loader";
 
 const Amt = ({ value }) => (
   <td className="border border-black px-2 py-2">
@@ -24,7 +25,7 @@ const AmtBold = ({ value }) => (
   </td>
 );
 
-const Form5D = ({ sector,dateRange }) => {
+const Form5D = ({ sector, dateRange }) => {
   const { form5DData, loading, error } = useForm5D({ sector, dateRange });
 
   // Zip receipt and payment rows side-by-side
@@ -43,7 +44,7 @@ const Form5D = ({ sector,dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 5D data...</p>
+        <Loader />
       </div>
     );
   }

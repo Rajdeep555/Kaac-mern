@@ -42,9 +42,9 @@ const Statement7 = ({ sector, dateRange }) => {
     <div className="w-full overflow-x-auto border-2 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 7</h1>
-        {sector && (
+        {/* {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
-        )}
+        )} */}
         <h2 className="py-4 font-semibold text-center px-4">
           Statement of Receipts, Disbursements and balance under heads relating
           to District Fund and Deposit Fund

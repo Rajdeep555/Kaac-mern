@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm7 } from "../../hooks/admin/useForm7";
+import { Loader } from "../ui/Loader";
 
 const MONTHS = [
   "JAN",
@@ -45,7 +46,7 @@ const Form7 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 7 data...</p>
+        <Loader />
       </div>
     );
   }

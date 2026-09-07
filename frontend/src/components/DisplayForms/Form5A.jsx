@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm5A } from "../../hooks/admin/useForm5A";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 align-top ${bold ? "font-bold" : ""}`}>
@@ -33,7 +34,7 @@ const Form5A = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 5A data...</p>
+        <Loader />
       </div>
     );
   }

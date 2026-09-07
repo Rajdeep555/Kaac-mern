@@ -48,11 +48,11 @@ const Statement2 = ({ sector, dateRange }) => {
       <div className="flex flex-col items-center py-5">
         <h1 className="font-bold text-xl tracking-wide">STATEMENT NO. 2</h1>
 
-        {sector && (
+        {/* {sector && (
           <p className="text-sm font-semibold text-gray-600 mt-1">
             Sector: {sector}
           </p>
-        )}
+        )} */}
 
         <h2 className="py-4 font-semibold text-base text-center px-4">
           Capital Outlay - Progressive Capital Outlay to end of {currentFyLabel}

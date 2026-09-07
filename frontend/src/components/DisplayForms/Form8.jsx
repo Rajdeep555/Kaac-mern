@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm8 } from "../../hooks/admin/useForm8";
+import { Loader } from "../ui/Loader";
 
 // Amount display — shows "-" if zero
 const Amt = ({ value }) =>
@@ -19,7 +20,7 @@ const Form8 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 8 data...</p>
+        <Loader />
       </div>
     );
   }

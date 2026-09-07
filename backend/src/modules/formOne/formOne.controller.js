@@ -5,8 +5,8 @@ import { getCashbookRowsByDateRange, saveCashbookSummary } from "./formOne.servi
 export const getCashbookByFy = async (req, res) => {
     try {
         const { from, to, sector } = req.query;
-        console.log("👉 req.query:", req.query); // ADD THIS
-        console.log("👉 sector:", sector);        // ADD THIS
+        // console.log("👉 req.query:", req.query); // ADD THIS
+        // console.log("👉 sector:", sector);        // ADD THIS
 
         if (!from || !to) {
             return res.status(400).json({
@@ -34,7 +34,7 @@ export const getCashbookByFy = async (req, res) => {
 export const postCashbookSummary = async (req, res) => {
     try {
         // 🔍 STEP 1 — what did we actually receive on the wire?
-        console.log("🟡 [postCashbookSummary] raw req.body:", req.body);
+        // console.log("🟡 [postCashbookSummary] raw req.body:", req.body);
 
         const {
             sector,
@@ -49,9 +49,9 @@ export const postCashbookSummary = async (req, res) => {
             disbursementTreasuryPla,
         } = req.body;
 
-        // 🔍 STEP 2 — did fromDate/toDate survive destructuring, and what type are they?
-        console.log("🟡 [postCashbookSummary] destructured fromDate:", fromDate, typeof fromDate);
-        console.log("🟡 [postCashbookSummary] destructured toDate:", toDate, typeof toDate);
+        // // 🔍 STEP 2 — did fromDate/toDate survive destructuring, and what type are they?
+        // console.log("🟡 [postCashbookSummary] destructured fromDate:", fromDate, typeof fromDate);
+        // console.log("🟡 [postCashbookSummary] destructured toDate:", toDate, typeof toDate);
 
         if (!year) {
             return res.status(400).json({
@@ -73,12 +73,12 @@ export const postCashbookSummary = async (req, res) => {
             disbursementCashColumn,
             disbursementTreasuryPla,
         };
-        console.log("🟡 [postCashbookSummary] payload sent to saveCashbookSummary:", payload);
+        // console.log("🟡 [postCashbookSummary] payload sent to saveCashbookSummary:", payload);
 
         const result = await saveCashbookSummary(payload);
 
         // 🔍 STEP 4 — what did the DB actually end up storing?
-        console.log("🟢 [postCashbookSummary] saved row returned from DB:", result);
+        // console.log("🟢 [postCashbookSummary] saved row returned from DB:", result);
 
         return res.status(200).json({
             success: true,

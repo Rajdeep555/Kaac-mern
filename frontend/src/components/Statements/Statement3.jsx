@@ -51,9 +51,9 @@ const Statement3 = ({ sector, dateRange }) => {
     <div className="w-full overflow-x-auto border-2 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 3</h1>
-        {sector && (
+        {/* {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
-        )}
+        )} */}
         {(dateRange?.from || dateRange?.to) && (
           <p className="text-xs text-gray-500">
             {dateRange?.from || "…"} to {dateRange?.to || "…"}

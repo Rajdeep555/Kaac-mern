@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm5C } from "../../hooks/admin/useForm5C";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false }) => (
   <td className={`border px-4 py-2 align-top ${bold ? "font-bold" : ""}`}>
@@ -51,7 +52,7 @@ const Form5C = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 5C data...</p>
+        <Loader />
       </div>
     );
   }

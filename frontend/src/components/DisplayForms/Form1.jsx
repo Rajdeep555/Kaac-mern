@@ -2,6 +2,8 @@ import React, { useMemo, useEffect, useRef, useState } from "react";
 import { useCashbook } from "../../hooks/admin/useCashbook";
 import { useCashbookSummary } from "../../hooks/admin/useCashbookSummary";
 import { showToast } from "../../utils/toast.js";
+import { Loader } from "../ui/Loader.jsx";
+import ErrorMessage from "../ui/ErrorMessage.jsx";
 
 // ── Helpers ──────────────────────────────────────────────────
 const splitRows = (data) => ({
@@ -261,7 +263,7 @@ const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 1 data...</p>
+        <Loader />
       </div>
     );
   }
@@ -269,9 +271,7 @@ const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
   if (error) {
     return (
       <div className="w-full border-2 bg-white p-8 text-center">
-        <p className="font-medium text-red-600">
-          Failed to load cashbook data. Please try again.
-        </p>
+        <ErrorMessage title="Failed to load cashbook data." />
       </div>
     );
   }

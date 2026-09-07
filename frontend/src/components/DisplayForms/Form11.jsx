@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm11 } from "../../hooks/admin/useForm11";
+import { Loader } from "../ui/Loader";
 
 const AmountDisplay = ({ value }) => (
   <span className="inline-flex items-center gap-1">
@@ -16,7 +17,7 @@ const Form11 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 11 data...</p>
+        <Loader />
       </div>
     );
   }

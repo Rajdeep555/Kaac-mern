@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm7A } from "../../hooks/admin/useForm7A";
+import { Loader } from "../ui/Loader";
 
 // Amount display helper
 const AmountCell = ({ value, bold = false }) => (
@@ -19,7 +20,7 @@ const Form7A = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 7A data...</p>
+        <Loader />
       </div>
     );
   }

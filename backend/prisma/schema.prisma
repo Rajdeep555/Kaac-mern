@@ -464,6 +464,7 @@ enum UserRole {
 enum Sector {
   COUNCIL
   STATE
+  CONSOLIDATED
 }
 
 enum ChallanType {

@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm5E } from "../../hooks/admin/useForm5E";
+import { Loader } from "../ui/Loader";
 
 const Amt = ({ value }) => (
   <td className="border border-black px-2 py-2 text-center">
@@ -42,7 +43,7 @@ const Form5E = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 5E data...</p>
+        <Loader />
       </div>
     );
   }

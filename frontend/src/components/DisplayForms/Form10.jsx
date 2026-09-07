@@ -1,4 +1,5 @@
 import { useForm10 } from "../../hooks/admin/useForm10";
+import { Loader } from "../ui/Loader";
 
 const COLUMNS = [
   { key: "cashBookItemNo", label: "CASH BOOK ITEM NO.", number: 1 },
@@ -24,7 +25,7 @@ const Form10 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 10 data...</p>
+        <Loader />
       </div>
     );
   }

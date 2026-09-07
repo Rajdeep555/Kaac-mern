@@ -1,5 +1,6 @@
 import React from "react";
 import { useForm4 } from "../../hooks/admin/useForm4";
+import { Loader } from "../ui/Loader";
 
 // classification is now an array of { level, code, name } from the
 // backend (see getForm4Data) instead of a "/"-joined string. Render
@@ -48,7 +49,7 @@ const Form4 = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 4 data...</p>
+        <Loader />
       </div>
     );
   }

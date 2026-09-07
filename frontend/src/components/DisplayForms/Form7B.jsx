@@ -1,6 +1,7 @@
 import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm7B } from "../../hooks/admin/useForm7B";
+import { Loader } from "../ui/Loader";
 
 const AmountCell = ({ value, bold = false, colSpan = 1 }) => (
   <td
@@ -20,7 +21,7 @@ const Form7B = ({ sector, dateRange }) => {
   if (loading) {
     return (
       <div className="w-full overflow-x-auto border-2 bg-white p-8 text-center">
-        <p className="font-medium text-gray-600">Loading Form 7B data...</p>
+        <Loader />
       </div>
     );
   }

@@ -451,16 +451,16 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
             computeCounterfoilCarryForwards(sector, from, to),
         ]);
 
-        logger.info(`[CASHBOOK] Raw fetch counts`, {
-            cashReceipts: cashReceipts.length,
-            challans: challans.length,
-            challanFromBills: challanFromBills.length,
-            challanTwoRows: challanTwoRows.length,
-            expenditures: expenditures.length,
-            stateChallans: stateChallans.length,
-            councilCrossStateTreasuryRows: councilCrossStateTreasuryRows.length,
-            counterfoilCarryForwardRows: counterfoilCarryForwardRows.length,
-        });
+        // logger.info(`[CASHBOOK] Raw fetch counts`, {
+        //     cashReceipts: cashReceipts.length,
+        //     challans: challans.length,
+        //     challanFromBills: challanFromBills.length,
+        //     challanTwoRows: challanTwoRows.length,
+        //     expenditures: expenditures.length,
+        //     stateChallans: stateChallans.length,
+        //     councilCrossStateTreasuryRows: councilCrossStateTreasuryRows.length,
+        //     counterfoilCarryForwardRows: counterfoilCarryForwardRows.length,
+        // });
 
         const challansWithoutCounterfoil = challans.filter(
             (c) => !c.counterfoilNo || c.counterfoilNo.trim() === ""
@@ -842,27 +842,27 @@ export const getCashbookRowsByDateRange = async (fromDate, toDate, sector) => {
         const drRows = rows.filter((r) => r.receiptDate);
         const crRows = rows.filter((r) => r.disbursementDate);
 
-        logger.info(`[CASHBOOK] Final summary`, {
-            totalRows: rowsWithDayTotals.length,
-            drRows: drRows.length,
-            crRows: crRows.length,
-            drCashTotal: drRows.reduce(
-                (s, r) => s + (r.receiptCashAmount ?? 0),
-                0
-            ),
-            drPlaTotal: drRows.reduce(
-                (s, r) => s + (r.receiptPlaColumn ?? 0),
-                0
-            ),
-            crCashTotal: crRows.reduce(
-                (s, r) => s + (r.disbursementCashAmount ?? 0),
-                0
-            ),
-            crPlaTotal: crRows.reduce(
-                (s, r) => s + (r.plaColumnPayment ?? 0),
-                0
-            ),
-        });
+        // logger.info(`[CASHBOOK] Final summary`, {
+        //     totalRows: rowsWithDayTotals.length,
+        //     drRows: drRows.length,
+        //     crRows: crRows.length,
+        //     drCashTotal: drRows.reduce(
+        //         (s, r) => s + (r.receiptCashAmount ?? 0),
+        //         0
+        //     ),
+        //     drPlaTotal: drRows.reduce(
+        //         (s, r) => s + (r.receiptPlaColumn ?? 0),
+        //         0
+        //     ),
+        //     crCashTotal: crRows.reduce(
+        //         (s, r) => s + (r.disbursementCashAmount ?? 0),
+        //         0
+        //     ),
+        //     crPlaTotal: crRows.reduce(
+        //         (s, r) => s + (r.plaColumnPayment ?? 0),
+        //         0
+        //     ),
+        // });
 
         return rowsWithDayTotals;
     } catch (error) {
@@ -888,8 +888,14 @@ export const saveCashbookSummary = async ({
     disbursementTreasuryPla,
 }) => {
     try {
+
+        const normalizedSector =
+            sector === "COUNCIL" || sector === "STATE" || sector === "CONSOLIDATED"
+                ? sector
+                : null;
+
         await prisma.cashbookInformations.updateMany({
-            where: { sector: sector ?? undefined, isActive: true },
+            where: { sector: normalizedSector ?? undefined, isActive: true },
             data: { isActive: false },
         });
 
@@ -897,7 +903,7 @@ export const saveCashbookSummary = async ({
         const parsedToDate = toDate ? new Date(toDate) : null;
 
         const createData = {
-            sector: sector ?? null,
+            sector: normalizedSector,
             month: month ?? null,
             year: year ?? null,
             financialYear: financialYear ?? null,
@@ -919,29 +925,3 @@ export const saveCashbookSummary = async ({
         throw error;
     }
 };
-
-// ─────────────────────────────────────────────────────────────
-// DEDUP NOTE — read before relying on CONSOLIDATED totals
-//
-// If your frontend still calls this service twice (once "COUNCIL",
-// once "STATE") and merges client-side rather than calling it once
-// with sector = "CONSOLIDATED":
-//   • The 4-type STATE treasury ChallanFromBill rows will appear
-//     TWICE when merged (see the original note this replaces) unless
-//     you filter out one prefix before combining.
-//   • The counterfoil carry-forward rows will NOT double-count in
-//     that merge scenario, because each per-sector call only sums
-//     CashReceipts/Challans belonging to that same sector — a given
-//     counterfoilNo's CashReceipt.sector determines which single call
-//     produces its carry-forward row.
-//   • Day-total rows still won't merge into one combined total per
-//     date across two separate calls — that logic would need to move
-//     to the frontend after merging, same as before.
-//
-// If instead you call this service ONCE with sector = "CONSOLIDATED",
-// all three concerns above are avoided by construction: every filter
-// in this file (including the carry-forward logic) drops its
-// sector/challanType scoping and sums across both sectors in a single
-// query, matching the pattern already used by CONSOLIDATED elsewhere
-// in this codebase.
-// ─────────────────────────────────────────────────────────────
