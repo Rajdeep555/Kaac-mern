@@ -33,9 +33,14 @@ const Statement7 = ({ sector, dateRange }) => {
     );
   }
 
-  const grandTotal = (statement7Data ?? []).reduce(
-    (sum, item) => sum + Number(item.closingBalance ?? 0),
-    0,
+  const totals = (statement7Data ?? []).reduce(
+    (acc, item) => ({
+      openingBalance: acc.openingBalance + Number(item.openingBalance ?? 0),
+      receipts: acc.receipts + Number(item.receipts ?? 0),
+      disbursement: acc.disbursement + Number(item.disbursement ?? 0),
+      closingBalance: acc.closingBalance + Number(item.closingBalance ?? 0),
+    }),
+    { openingBalance: 0, receipts: 0, disbursement: 0, closingBalance: 0 },
   );
 
   return (
@@ -100,10 +105,10 @@ const Statement7 = ({ sector, dateRange }) => {
                 <td className="border px-4 py-3 text-right font-bold tracking-wider text-sm">
                   GRAND TOTAL
                 </td>
-                <td className="border" />
-                <td className="border" />
-                <td className="border" />
-                <AmountCell value={grandTotal} bold />
+                <AmountCell value={totals.openingBalance} bold />
+                <AmountCell value={totals.receipts} bold />
+                <AmountCell value={totals.disbursement} bold />
+                <AmountCell value={totals.closingBalance} bold />
               </tr>
             )}
           </tbody>
