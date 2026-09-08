@@ -181,6 +181,7 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
 
 
 
+
 //===========================================================
 // STATEMENT 6
 //
@@ -208,6 +209,16 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
 //     from the Heads table.
 //   - Numeric-aware sort (compareHeadCodes) at all three levels, so
 //     "203" doesn't get sorted after "2029".
+//
+// FIX IN THIS PASS: the sector-total row ("Total Capital Receipt -
+// Council/State Sector") was being pushed with `level: "grandTotal"`,
+// but the frontend's LEVEL_CLASS map (in Statement6.jsx) only defines
+// major / subMajor / minor / total. That mismatch meant
+// LEVEL_CLASS[line.level] resolved to undefined and fell back to "",
+// so the sector-total label rendered with no bold class at all (even
+// though isTotal:true still correctly bolded the amount columns and
+// grayed the row). Changed to `level: "total"` so it reuses the
+// existing bold styling instead of silently falling through.
 //===========================================================
 
 // Same { from, to } Date-range builder pattern used elsewhere (Form 4).
@@ -472,8 +483,11 @@ const buildStatement6SectorResult = async (expenditures, sectorTotalLabel) => {
     const sectorTotal = groups.reduce((sum, g) => sum + g.nonPlan + g.plan, 0);
 
     if (sectorTotalLabel) {
+        // FIX: level changed from "grandTotal" to "total" so it matches a
+        // key that actually exists in the frontend's LEVEL_CLASS map,
+        // making the sector-total label render bold like the other totals.
         pushRow(
-            [{ level: "grandTotal", text: sectorTotalLabel }],
+            [{ level: "total", text: sectorTotalLabel }],
             sectorTotal,
             0,
             { isTotal: true, isGrandTotal: true },
@@ -533,6 +547,8 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 
     return { rows, grandTotal: grandTotal.toFixed(2) };
 };
+
+
 
 
 // ─────────────────────────────────────────────────────────────
