@@ -4,13 +4,19 @@ import { Loader } from "../ui/Loader";
 import ErrorMessage from "../ui/ErrorMessage";
 
 // Static structure for Form 12 (your original rows)
+// 🔸 NOTE — "r22" (the old mid-table "Grand Total" row, receipt side
+// only) is still defined here so its data still flows through
+// finalRows/moneyMap as before, but it is now SKIPPED when rendering
+// the main body (see the .filter() below) — its receipt-side total is
+// instead shown combined with the disbursement-side total in the one
+// true Grand Total row at the very bottom of the table.
 const structure = [
   {
     id: "r1",
     re_sl: "1.",
     re_particulars: "To Opening Balance Cash",
     di_sl: "1.",
-    di_particulars: "Part I",
+    di_particulars: "",
   },
   {
     id: "r2",
@@ -28,11 +34,11 @@ const structure = [
   },
   {
     id: "r4",
-    re_sl: "2",
+    re_sl: "",
     re_particulars: "Part I (To be posted from Part-I Div I of Form No 5A)",
     di_sl: "",
     di_particulars:
-      "Part II (By expenditure under all Major Heads of A/cs – Gross Expenditure)",
+      "Part I (By expenditure under all Major Heads of A/cs – Gross Expenditure)",
   },
   {
     id: "r5",
@@ -97,9 +103,6 @@ const structure = [
     di_sl: "(d)",
     di_particulars: "Repayment of Earnest Money Deposits",
   },
-  // 🔸 NEW — Part III (e) disbursement-only row. There is no receipt-side
-  // counterpart, so re_sl/re_particulars stay blank (renders as "-" for
-  // the amount, same as every other asymmetric row below).
   {
     id: "r13e",
     re_sl: "",
@@ -197,6 +200,15 @@ const Form12 = ({ sector, dateRange }) => {
     [moneyMap],
   );
 
+  // 🔸 The old mid-table "Grand Total" row (r22) is excluded from the
+  // main body here — its receipt-side value is pulled separately
+  // below and shown combined with the disbursement total in the one
+  // true Grand Total row at the bottom of the table instead.
+  const bodyRows = useMemo(
+    () => finalRows.filter((row) => row.id !== "r22"),
+    [finalRows],
+  );
+
   if (loading) {
     return (
       <div className="w-full overflow-x-auto bg-white border-2 p-8 text-center">
@@ -225,7 +237,7 @@ const Form12 = ({ sector, dateRange }) => {
           <p className="font-semibold">
             (To be appended to the Monthly Account)
           </p>
-          <p className="font-semibold">Year: 2025</p>
+          {/* <p className="font-semibold">Year: 2025</p>
           {sector && (
             <p className="text-sm font-medium text-gray-600">
               Sector: {sector}
@@ -235,7 +247,7 @@ const Form12 = ({ sector, dateRange }) => {
             <p className="text-sm font-medium text-gray-600">
               Period: {dateRange.from} to {dateRange.to}
             </p>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -248,75 +260,92 @@ const Form12 = ({ sector, dateRange }) => {
             <tr>
               <th
                 colSpan={3}
-                className="border w-1/2 py-4 text-center font-bold">
+                className="border w-1/2 py-4 px-4 text-center font-bold">
                 RECEIPTS
               </th>
-              <th colSpan={3} className="border w-1/2 text-center font-bold">
+              <th
+                colSpan={3}
+                className="border w-1/2 px-4 text-center font-bold">
                 DISBURSEMENTS
               </th>
             </tr>
             <tr>
-              <th className="border py-2">SL NO</th>
-              <th className="border">PARTICULARS</th>
-              <th className="border px-4">RS. P.</th>
+              <th className="border py-2 px-4">SL NO</th>
+              <th className="border px-4">PARTICULARS</th>
+              <th className="border px-4 text-right">RS. P.</th>
               <th className="border px-4">SL NO</th>
-              <th className="border">PARTICULARS</th>
-              <th className="border px-4">RS. P.</th>
+              <th className="border px-4">PARTICULARS</th>
+              <th className="border px-4 text-right">RS. P.</th>
             </tr>
           </thead>
 
           <tbody className="py-2 text-sm text-center">
-            {finalRows.map((row) => (
+            {bodyRows.map((row) => (
               <tr className="border" key={row.id}>
                 {/* Receipts side */}
                 <td className="border-r py-2 px-4 text-center">{row.re_sl}</td>
-                <td className="border-r py-2 text-left">
+                <td className="border-r py-2 px-4 text-left">
                   {row.re_particulars}
                 </td>
-                <td className="border-r px-4">{formatAmt(row.re_amount)}</td>
+                <td className="border-r px-4 text-right">
+                  {formatAmt(row.re_amount)}
+                </td>
 
                 {/* Disbursements side */}
-                <td className="border-r">{row.di_sl}</td>
-                <td className="border-r text-left">{row.di_particulars}</td>
-                <td>{formatAmt(row.di_amount)}</td>
+                <td className="border-r px-4 text-center">{row.di_sl}</td>
+                <td className="border-r px-4 text-left">
+                  {row.di_particulars}
+                </td>
+                <td className="px-4 text-right">{formatAmt(row.di_amount)}</td>
               </tr>
             ))}
 
-            {/* Closing section: ONLY Disbursement side (Receipt side is empty) */}
+            {/* Closing section */}
             <tr className="border font-semibold bg-gray-50">
               {/* Receipt side - EMPTY */}
               <td className="border-r py-2 px-4 text-center"></td>
-              <td className="border-r py-2 text-left"></td>
-              <td className="border-r px-4"></td>
+              <td className="border-r py-2 px-4 text-left"></td>
+              <td className="border-r px-4 text-right"></td>
 
               {/* Disbursement side - Cash Rs. */}
-              <td className="border-r"></td>
-              <td className="border-r text-left">Cash Rs.</td>
-              <td>{formatAmt(moneyMap.cashRs?.di_amount)}</td>
+              <td className="border-r px-4"></td>
+              <td className="border-r px-4 text-left">Cash Rs.</td>
+              <td className="px-4 text-right">
+                {formatAmt(moneyMap.cashRs?.di_amount)}
+              </td>
             </tr>
 
             <tr className="border font-semibold bg-gray-50">
               {/* Receipt side - EMPTY */}
               <td className="border-r py-2 px-4 text-center"></td>
-              <td className="border-r py-2 text-left"></td>
-              <td className="border-r px-4"></td>
+              <td className="border-r py-2 px-4 text-left"></td>
+              <td className="border-r px-4 text-right"></td>
 
               {/* Disbursement side - Treasury (PLA) */}
-              <td className="border-r"></td>
-              <td className="border-r text-left">Treasury (PLA)</td>
-              <td>{formatAmt(moneyMap.treasuryPla?.di_amount)}</td>
+              <td className="border-r px-4"></td>
+              <td className="border-r px-4 text-left">Treasury (PLA)</td>
+              <td className="px-4 text-right">
+                {formatAmt(moneyMap.treasuryPla?.di_amount)}
+              </td>
             </tr>
 
-            <tr className="border font-bold bg-gray-100">
-              {/* Receipt side - EMPTY */}
-              <td className="border-r py-2 px-4 text-center"></td>
-              <td className="border-r py-2 text-left"></td>
-              <td className="border-r px-4"></td>
+            {/* ── The ONE true Grand Total row — both sides, bottom, bold ──
+                Text stays left-aligned, both amount columns are
+                right-aligned. Receipt-side value is the same figure
+                that used to live in the old mid-table r22 row;
+                disbursement-side value is unchanged (moneyMap.grandTotalD). */}
+            <tr className="border font-bold bg-gray-200">
+              <td className="border-r py-3 px-4 text-center"></td>
+              <td className="border-r py-3 px-4 text-left">Grand Total</td>
+              <td className="border-r px-4 text-right">
+                {formatAmt(moneyMap.r22?.re_amount)}
+              </td>
 
-              {/* Disbursement side - Grand Total */}
-              <td className="border-r"></td>
-              <td className="border-r text-left">Grand Total</td>
-              <td>{formatAmt(moneyMap.grandTotalD?.di_amount)}</td>
+              <td className="border-r px-4"></td>
+              <td className="border-r px-4 text-left">Grand Total</td>
+              <td className="px-4 text-right">
+                {formatAmt(moneyMap.grandTotalD?.di_amount)}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -332,9 +361,9 @@ const Form12 = ({ sector, dateRange }) => {
 
       <hr className="w-full my-4 h-0.5 bg-black" />
 
-      <div className="flex justify-between">
-        <p className="text-start text-sm mb-4 px-2">Date</p>
-        <p className="text-end text-sm mb-4 px-2">Designation</p>
+      <div className="flex justify-between px-4">
+        <p className="text-start text-sm mb-4">Date</p>
+        <p className="text-end text-sm mb-4">Designation</p>
       </div>
     </div>
   );

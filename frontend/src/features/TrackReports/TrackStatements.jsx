@@ -10,6 +10,7 @@ import Statement7 from "../../components/Statements/Statement7";
 import SearchFunction from "../SearchFunction";
 import kaacLogo from "../../assets/logo.jpg";
 import azadi from "../../assets/azadi.png";
+import getFinancialYear from "../../utils/getFinancialYear";
 
 const SECTOR_LABELS = {
   council: "COUNCIL",
@@ -113,15 +114,15 @@ const PrintFooter = () => (
     }}>
     <div style={{ textAlign: "center" }}>
       <p style={{ margin: 0 }}>Finance and Accounts Officer (Council)</p>
-      <p style={{ margin: "1px 0 40px" }}>KAAC, Diphu</p>
+      <p style={{ margin: "1px 0 70px" }}>KAAC, Diphu</p>
     </div>
     <div style={{ textAlign: "center" }}>
       <p style={{ margin: 0 }}>Sr. Financial Adviser (State Sector)</p>
-      <p style={{ margin: "1px 0 40px" }}>KAAC, Diphu</p>
+      <p style={{ margin: "1px 0 70px" }}>KAAC, Diphu</p>
     </div>
     <div style={{ textAlign: "center" }}>
       <p style={{ margin: 0 }}>Principal Secretary,</p>
-      <p style={{ margin: "1px 0 40px" }}>KAAC, Diphu</p>
+      <p style={{ margin: "1px 0 70px" }}>KAAC, Diphu</p>
     </div>
   </div>
 );
@@ -286,6 +287,20 @@ const TrackStatements = () => {
             white-space: normal !important;
             word-break: break-word !important;
             padding: 2px 4px !important;
+          }
+
+          /* ── Fix for signature block getting stranded on its own
+             near-empty page ──
+             The footer's on-screen marginTop (150px) is more gap
+             than most pages have left over after the last table row,
+             so it was tipping the footer onto a whole new page by
+             itself. Shrink that gap for print specifically, and stop
+             the block from being split across a page boundary if it
+             still needs to move. */
+          .print-footer {
+            margin-top: 70px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
@@ -541,7 +556,7 @@ const TrackStatements = () => {
                       color: "#14532d",
                       fontWeight: "600",
                     }}>
-                    — {dateRange?.from || "…"} to {dateRange?.to || "…"}
+                    — {getFinancialYear(dateRange?.from, dateRange?.to)}
                   </span>
                 )}
               </p>
@@ -592,10 +607,10 @@ const TrackStatements = () => {
                   fontSize: "11px",
                   color: "#9ca3af",
                 }}>
-                Currently Viewing — {sectorType ?? "All Sectors"}
+                {/* Currently Viewing — {sectorType ?? "All Sectors"}
                 {dateRange?.from || dateRange?.to
                   ? ` — ${dateRange?.from || "…"} to ${dateRange?.to || "…"}`
-                  : ""}
+                  : ""} */}
               </p>
             </div>
           </div>

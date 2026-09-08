@@ -19,6 +19,7 @@ import Form10 from "../../components/DisplayForms/Form10";
 import Form11 from "../../components/DisplayForms/Form11";
 import Form12 from "../../components/DisplayForms/Form12";
 import SearchFunction from "../SearchFunction";
+import getFinancialYear from "../../utils/getFinancialYear";
 
 const SECTOR_LABELS = {
   council: "COUNCIL",
@@ -416,7 +417,7 @@ const TrackForms = () => {
                       color: "#14532d",
                       fontWeight: "600",
                     }}>
-                    — {dateRange.from} to {dateRange.to}
+                    — {getFinancialYear(dateRange?.from, dateRange?.to)}
                   </span>
                 )}
               </p>
@@ -467,10 +468,10 @@ const TrackForms = () => {
                   fontSize: "11px",
                   color: "#9ca3af",
                 }}>
-                Currently Viewing
+                {/* Currently Viewing
                 {dateRange?.from && dateRange?.to
                   ? ` — ${dateRange.from} to ${dateRange.to}`
-                  : ""}
+                  : ""} */}
               </p>
             </div>
           </div>

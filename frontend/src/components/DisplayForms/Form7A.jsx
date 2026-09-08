@@ -2,6 +2,7 @@ import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm7A } from "../../hooks/admin/useForm7A";
 import { Loader } from "../ui/Loader";
+import { formatDate } from "../../utils/dateFormatter";
 
 // Amount display helper
 const AmountCell = ({ value, bold = false }) => (
@@ -105,7 +106,7 @@ const Form7A = ({ sector, dateRange }) => {
                           {entryIndex === 0 ? dhGroup.detailHead : ""}
                         </td>
                         <td className="border-r">{entry.voucherNo}</td>
-                        <td className="border-r">{entry.date}</td>
+                        <td className="border-r">{formatDate(entry.date)}</td>
                         <AmountCell value={entry.amount} />
                       </tr>
                     ))}

@@ -181,7 +181,33 @@ export const getStatement7Data = async ({ sector, from, to } = {}) => {
 
 
 
-
+//===========================================================
+// STATEMENT 6
+//
+// CHANGE IN THIS PASS: COUNCIL and STATE are now each built as their
+// own independent hierarchy (own aggregation, own head-name lookup,
+// own major→subMajor→minor tree), and each ends with a
+// "Total Capital Receipt - <Sector> Sector" row summing everything
+// in that sector. CONSOLIDATED just runs both builders and
+// concatenates the results — since each already carries its own
+// sector total at the end, both totals show up with no extra
+// special-casing (same pattern used for Statement 5's per-sector
+// grand totals).
+//
+// Previously COUNCIL+STATE were merged into one flat expenditure
+// array BEFORE aggregation for CONSOLIDATED, which is why there was
+// no way to show a separate total per sector — that's fixed by
+// keeping the two sectors' pipelines separate until the very end.
+//
+// Everything else is unchanged:
+//   - COUNCIL: all Expenditure, sector = COUNCIL, reported entirely
+//     under Non-Plan (Plan stays nil).
+//   - STATE: all Expenditure, sector = STATE, same Non-Plan-only rule.
+//   - CONSOLIDATED: COUNCIL + STATE, both Non-Plan-only.
+//   - Heads shown up to major → subMajor → minor, with names resolved
+//     from the Heads table.
+//   - Numeric-aware sort (compareHeadCodes) at all three levels, so
+//     "203" doesn't get sorted after "2029".
 //===========================================================
 
 // Same { from, to } Date-range builder pattern used elsewhere (Form 4).
@@ -204,13 +230,8 @@ function getStatement6DateRange(from, to) {
     return range;
 }
 
-// FIX: head codes were being sorted with plain string localeCompare,
-// which puts "2029" before "203" (comparing char-by-char, "2" < "3"
-// wins before the string even finishes) — that's why 2029 - Land
-// Revenue was jumping in between 202 and 203. This comparator sorts
-// numerically first, so 201, 202, 203, 2029, 2039, 204 ... comes out
-// in the correct ascending numeric order. Falls back to string
-// comparison only for genuinely non-numeric codes.
+// Numeric-first comparator for head codes — "203" < "2029", not the
+// other way round like plain string localeCompare would give you.
 const compareHeadCodes = (a, b) => {
     const na = parseInt(a, 10);
     const nb = parseInt(b, 10);
@@ -222,8 +243,7 @@ const compareHeadCodes = (a, b) => {
     return String(a || "").localeCompare(String(b || ""));
 };
 
-// Fetches Expenditure rows for a given sector (or all sectors when
-// sector is omitted, i.e. CONSOLIDATED).
+// Fetches Expenditure rows for a given sector.
 const getStatement6ExpenditureRows = async ({ sector, dateRange }) => {
     const where = { isActive: true };
 
@@ -246,30 +266,14 @@ const getStatement6ExpenditureRows = async ({ sector, dateRange }) => {
     });
 };
 
-export const getStatement6Data = async ({ sector, from, to } = {}) => {
-    const isConsolidated = !sector || sector === "CONSOLIDATED";
-
-    const dateRange = getStatement6DateRange(from, to);
-
-    let expenditures = [];
-
-    if (isConsolidated) {
-        // ── CONSOLIDATED: COUNCIL + STATE rows, merged ──────────────
-        const [councilRows, stateRows] = await Promise.all([
-            getStatement6ExpenditureRows({ sector: "COUNCIL", dateRange }),
-            getStatement6ExpenditureRows({ sector: "STATE", dateRange }),
-        ]);
-        expenditures = [...councilRows, ...stateRows];
-    } else {
-        // ── COUNCIL, STATE, or any other sector: single filtered fetch ──
-        expenditures = await getStatement6ExpenditureRows({ sector, dateRange });
-    }
-
+// ─────────────────────────────────────────────────────────────
+// Builds the full major → subMajor → minor hierarchy (with head
+// names resolved) for ONE sector's expenditure rows, flattens it into
+// display rows, and appends a "Total Capital Receipt - <label>" row
+// at the end when sectorTotalLabel is provided.
+// ─────────────────────────────────────────────────────────────
+const buildStatement6SectorResult = async (expenditures, sectorTotalLabel) => {
     // ── Step 1: aggregate by (majorHead, subMajorHead, minorHead) ──────────
-    //
-    // 🔸 Statement 6 always reports every rupee under Non-Plan.
-    // COUNCIL, STATE, and CONSOLIDATED all show Plan = 0 for every row —
-    // there is no planType-based split.
     const groupMap = new Map();
 
     for (const item of expenditures) {
@@ -295,15 +299,13 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
         }
 
         const group = groupMap.get(key);
-        const amount = Number(item.grossAmount ?? 0);
-
         // Everything is Non-Plan for Statement 6; Plan stays 0.
-        group.nonPlan += amount;
+        group.nonPlan += Number(item.grossAmount ?? 0);
     }
 
     const groups = Array.from(groupMap.values());
 
-    // ── Step 2: fetch names for every code we actually need ────────────────
+    // ── Step 2: fetch names for every code this sector actually needs ──────
     const majorCodes = [...new Set(groups.map((g) => g.majorCode))];
     const subMajorCodes = [
         ...new Set(groups.map((g) => g.subMajorCode).filter(Boolean)),
@@ -312,24 +314,26 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
         ...new Set(groups.map((g) => g.minorCode).filter(Boolean)),
     ];
 
-    const headsRows = await prisma.heads.findMany({
-        where: {
-            isActive: true,
-            OR: [
-                { majorHeadCode: { in: majorCodes } },
-                { subMajorCode: { in: subMajorCodes } },
-                { minorHeadCode: { in: minorCodes } },
-            ],
-        },
-        select: {
-            majorHead: true,
-            majorHeadCode: true,
-            subMajor: true,
-            subMajorCode: true,
-            minorHead: true,
-            minorHeadCode: true,
-        },
-    });
+    const headsRows = groups.length
+        ? await prisma.heads.findMany({
+            where: {
+                isActive: true,
+                OR: [
+                    { majorHeadCode: { in: majorCodes } },
+                    { subMajorCode: { in: subMajorCodes } },
+                    { minorHeadCode: { in: minorCodes } },
+                ],
+            },
+            select: {
+                majorHead: true,
+                majorHeadCode: true,
+                subMajor: true,
+                subMajorCode: true,
+                minorHead: true,
+                minorHeadCode: true,
+            },
+        })
+        : [];
 
     const majorNameMap = new Map();
     const subMajorNameMap = new Map();
@@ -394,21 +398,20 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 
     // ── Step 4: flatten, cascading the heads text as in the mock-up ────────
     const rows = [];
-    let idCounter = 1;
+    let idCounter = 1; // renumbered sequentially by the caller after combining sectors
 
-    const pushRow = (lines, nonPlan, plan, { isTotal = false } = {}) => {
+    const pushRow = (lines, nonPlan, plan, { isTotal = false, isGrandTotal = false } = {}) => {
         rows.push({
             id: idCounter++,
             heads: lines, // array of { level, text }
             isTotal,
+            isGrandTotal,
             nonPlan: nonPlan.toFixed(2),
             plan: plan.toFixed(2),
             total: (nonPlan + plan).toFixed(2),
         });
     };
 
-    // FIX: numeric-aware sort (see compareHeadCodes above) instead of
-    // plain string localeCompare, at all three levels.
     const sortedMajors = [...majorsMap.values()].sort((a, b) =>
         compareHeadCodes(a.code, b.code),
     );
@@ -466,46 +469,108 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
         );
     }
 
-    const grandTotal = groups.reduce((sum, g) => sum + g.nonPlan + g.plan, 0);
+    const sectorTotal = groups.reduce((sum, g) => sum + g.nonPlan + g.plan, 0);
+
+    if (sectorTotalLabel) {
+        pushRow(
+            [{ level: "grandTotal", text: sectorTotalLabel }],
+            sectorTotal,
+            0,
+            { isTotal: true, isGrandTotal: true },
+        );
+    }
+
+    return { rows, sectorTotal };
+};
+
+export const getStatement6Data = async ({ sector, from, to } = {}) => {
+    const isConsolidated = !sector || sector === "CONSOLIDATED";
+
+    const dateRange = getStatement6DateRange(from, to);
+
+    let combinedRows = [];
+    let grandTotal = 0;
+
+    if (isConsolidated) {
+        // ── CONSOLIDATED: COUNCIL and STATE built independently, each
+        // ending in its own sector total, then concatenated ──────────
+        const [councilExpenditures, stateExpenditures] = await Promise.all([
+            getStatement6ExpenditureRows({ sector: "COUNCIL", dateRange }),
+            getStatement6ExpenditureRows({ sector: "STATE", dateRange }),
+        ]);
+
+        const [councilResult, stateResult] = await Promise.all([
+            buildStatement6SectorResult(
+                councilExpenditures,
+                "Total Capital Receipt - Council Sector",
+            ),
+            buildStatement6SectorResult(
+                stateExpenditures,
+                "Total Capital Receipt - State Sector",
+            ),
+        ]);
+
+        combinedRows = [...councilResult.rows, ...stateResult.rows];
+        grandTotal = councilResult.sectorTotal + stateResult.sectorTotal;
+    } else {
+        // ── COUNCIL, STATE, or any other sector: single filtered fetch ──
+        const sectorTotalLabel =
+            sector === "COUNCIL"
+                ? "Total Capital Receipt - Council Sector"
+                : sector === "STATE"
+                    ? "Total Capital Receipt - State Sector"
+                    : null;
+
+        const expenditures = await getStatement6ExpenditureRows({ sector, dateRange });
+        const result = await buildStatement6SectorResult(expenditures, sectorTotalLabel);
+
+        combinedRows = result.rows;
+        grandTotal = result.sectorTotal;
+    }
+
+    // Renumber ids sequentially across the (possibly concatenated) set.
+    const rows = combinedRows.map((r, idx) => ({ ...r, id: idx + 1 }));
 
     return { rows, grandTotal: grandTotal.toFixed(2) };
 };
-
-
 
 
 // ─────────────────────────────────────────────────────────────
 // STATEMENT 5 - Detailed Account of Revenue Receipt by Minor Heads
 // Data comes from 3 tables: challan, challanFromBill, stateChallan
 //
-// NOTHING in the data-sourcing logic changed in this pass — COUNCIL/
-// STATE/CONSOLIDATED sourcing, majorHead range filters, date fields,
-// ChallanFromBill code derivation (still code-only, no name
-// resolution), and the "matched"/Unmapped flag are all exactly as
-// before.
+// CHANGES IN THIS PASS:
 //
-// ONLY groupStatement5Rows changed: instead of returning one flat row
-// per (major,sub,minor) leaf with a breadcrumb string, it now returns
-// a flat but TAGGED list of display rows so the table can render the
-// hierarchy properly:
-//   - type: "major"  → header row, no amount, once per major head
-//   - type: "sub"    → header row, no amount, once per distinct sub
-//                       head within that major head
-//   - type: "minor"  → leaf row, has the amount + matched flag
-//   - type: "total"  → "Total under Major Head X" row, once per major
-//                       head, summing that major head's leaf amounts
-// Rows are ordered ascending by major head code (numeric), so output
-// is always 001, 002, 003 ... 011, not arbitrary DB order.
+// 1. FIX: a level whose raw code was exactly "0" was being dropped
+//    entirely (skipped from `levels`, so it never appeared as a row
+//    at all). "00" already displayed fine as "00 - Null". Now "0"
+//    behaves the same way as "00" — shown as "0 - Null" instead of
+//    vanishing. Only genuinely blank/"-" values are still skipped.
+//
+// 2. NEW: groupStatement5Rows takes an optional `grandTotalLabel`.
+//    When provided, one extra row (type: "grandTotal") is appended
+//    at the very end, summing everything passed into that call —
+//    e.g. "Total Revenue Receipt - Council Sector" / "... - State
+//    Sector". CONSOLIDATED gets both automatically, since it's still
+//    just Council's grouped result (which already carries its own
+//    grand-total row) concatenated with State's (same) — no special-
+//    casing needed there.
+//
+// Everything else — COUNCIL/STATE/CONSOLIDATED sourcing, majorHead
+// range filters, date fields, ChallanFromBill code derivation
+// (still code-only, no name resolution), and the "matched" flag —
+// is unchanged.
 //
 // COUNCIL: challan (challanType COUNCIL, majorHead 001–016) +
 //   challanFromBill (majorHead 001–016, derived from amountType via
-//   CHALLAN_FROM_BILL_HEAD_CODES) — merged into ONE grouped list.
+//   CHALLAN_FROM_BILL_HEAD_CODES, sector IN [COUNCIL, STATE]) —
+//   merged into ONE grouped list.
 //
 // STATE: stateChallan, sector STATE, majorHead 2011–3999 only.
 //
 // Heads display: TRUNCATED to major → subMajor → minor ONLY (no
 // subHead/subSubHead/detailHead/subDetailHead). A code with no
-// resolved name (e.g. "00") still displays as "<code> - Null".
+// resolved name (including "0"/"00") displays as "<code> - Null".
 //
 // CONSOLIDATED: Council's grouped result + State's grouped result,
 // concatenated.
@@ -791,14 +856,15 @@ const getStatement5StateChallanRows = async (dateRange) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// Group identical head chains together (UNCHANGED from baseline: same
-// key, same "levels"/"matched" computation), then reshape into a
-// flat, TAGGED hierarchy of display rows:
+// Group identical head chains together, then reshape into a flat,
+// TAGGED hierarchy of display rows:
 //   major header → sub header → minor leaf (amount) → ... →
-//   "Total under Major Head X" (sum of that major's leaves)
-// ordered ascending by major head code (numeric).
+//   "Total under Major Head X" (sum of that major's leaves) → ... →
+//   optional grand total row (sum of EVERYTHING passed in), when
+//   `grandTotalLabel` is given.
+// Ordered ascending by major head code (numeric).
 // ─────────────────────────────────────────────────────────────
-const groupStatement5Rows = (rows) => {
+const groupStatement5Rows = (rows, { grandTotalLabel = null } = {}) => {
     const grouped = rows.reduce((acc, row) => {
         const key = [row.majorHead, row.subMajor, row.minorHead]
             .filter((p) => p && p !== "-")
@@ -817,7 +883,11 @@ const groupStatement5Rows = (rows) => {
             const nameField = HEAD_NAME_LEVELS[idx];
             const raw = sample[codeField];
             const code = raw !== null && raw !== undefined ? String(raw).trim() : "";
-            if (!code || code === "-" || code === "0") return acc;
+            // FIX: only skip genuinely blank/"-" values now. A code of
+            // "0" used to be treated the same as "blank" and dropped
+            // entirely — now it's kept and displays as "0 - Null",
+            // same as "00" already did.
+            if (!code || code === "-") return acc;
             acc.push({ code, name: sample[nameField] || null });
             return acc;
         }, []);
@@ -853,6 +923,7 @@ const groupStatement5Rows = (rows) => {
     let currentSubCode = null;
     let majorTotal = 0;
     let majorLabel = null;
+    let overallTotal = 0;
 
     const flushMajorTotal = () => {
         if (currentMajorCode !== null) {
@@ -922,16 +993,27 @@ const groupStatement5Rows = (rows) => {
         });
 
         majorTotal += group.total;
+        overallTotal += group.total;
     }
 
     flushMajorTotal();
+
+    if (grandTotalLabel) {
+        displayRows.push({
+            type: "grandTotal",
+            heads: "grand-total",
+            headsLines: [grandTotalLabel],
+            total: parseFloat(overallTotal.toFixed(2)),
+            matched: true,
+        });
+    }
 
     return displayRows;
 };
 
 // ─────────────────────────────────────────────────────────────
 // COUNCIL — challan (majorHead 1-16) + challanFromBill (majorHead
-// 1-16), merged into a single grouped list.
+// 1-16), merged into a single grouped list, with its own grand total.
 // ─────────────────────────────────────────────────────────────
 const STATEMENT5_COUNCIL_REVENUE_HEAD_MIN = 1;
 const STATEMENT5_COUNCIL_REVENUE_HEAD_MAX = 16;
@@ -976,15 +1058,18 @@ const getStatement5CouncilRows = async (dateRange) => {
         `Statement5 [COUNCIL]: majorHead 1-16 — Challan: ${revenueRangeRows.length}, ChallanFromBill: ${cfbRangeRows.length}`
     );
 
-    return groupStatement5Rows([...revenueRangeRows, ...cfbRangeRows]);
+    return groupStatement5Rows([...revenueRangeRows, ...cfbRangeRows], {
+        grandTotalLabel: "Total Revenue Receipt - Council Sector",
+    });
 };
 
 // ─────────────────────────────────────────────────────────────
 // Main Statement 5 function.
-// COUNCIL: challan(1-16) + challanFromBill(1-16), merged.
-// STATE: stateChallan, majorHead 2011-3999.
-// CONSOLIDATED: Council's grouped result + State's grouped result,
-// concatenated.
+// COUNCIL: challan(1-16) + challanFromBill(1-16), merged, own grand total.
+// STATE: stateChallan, majorHead 2011-3999, own grand total.
+// CONSOLIDATED: Council's grouped result (already carries the Council
+// grand total) + State's grouped result (already carries the State
+// grand total), concatenated — so both totals show up automatically.
 // ─────────────────────────────────────────────────────────────
 export const getStatement5Data = async (sector, from, to) => {
     try {
@@ -1000,7 +1085,9 @@ export const getStatement5Data = async (sector, from, to) => {
 
         if (isStateSector) {
             const stateChallanRows = await getStatement5StateChallanRows(dateRange);
-            const result = groupStatement5Rows(stateChallanRows);
+            const result = groupStatement5Rows(stateChallanRows, {
+                grandTotalLabel: "Total Revenue Receipt - State Sector",
+            });
             logger.info(`Statement 5 total groups returned: ${result.length}`);
             return result;
         }
@@ -1016,7 +1103,9 @@ export const getStatement5Data = async (sector, from, to) => {
                 getStatement5CouncilRows(dateRange),
                 getStatement5StateChallanRows(dateRange),
             ]);
-            const stateResult = groupStatement5Rows(stateChallanRows);
+            const stateResult = groupStatement5Rows(stateChallanRows, {
+                grandTotalLabel: "Total Revenue Receipt - State Sector",
+            });
             const combined = [...councilResult, ...stateResult];
             logger.info(`Statement 5 total groups returned: ${combined.length}`);
             return combined;
@@ -1031,7 +1120,6 @@ export const getStatement5Data = async (sector, from, to) => {
         throw error;
     }
 };
-
 
 
 

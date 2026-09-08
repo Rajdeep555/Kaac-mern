@@ -2,6 +2,7 @@ import React from "react";
 import { LiaRupeeSignSolid } from "react-icons/lia";
 import { useForm7B } from "../../hooks/admin/useForm7B";
 import { Loader } from "../ui/Loader";
+import { formatDate } from "../../utils/dateFormatter";
 
 const AmountCell = ({ value, bold = false, colSpan = 1 }) => (
   <td
@@ -97,7 +98,7 @@ const Form7B = ({ sector, dateRange }) => {
                         {entryIndex === 0 ? mnhGroup.minorHead : ""}
                       </td>
                       <td className="border-r">{entry.cashbookNo}</td>
-                      <td className="border-r">{entry.date}</td>
+                      <td className="border-r">{formatDate(entry.date)}</td>
                       <AmountCell value={entry.amount} />
                     </tr>
                   ))}

@@ -12,13 +12,15 @@ const AmountCell = ({ value, bold = false }) => (
 // Row-type-aware Heads cell:
 // - "major": bold, no indent — top of the hierarchy
 // - "sub": indented once, medium weight
-// - "minor": indented twice, normal weight, carries the Unmapped badge
+// - "minor": indented twice, normal weight
 // - "total": bold "Total under Major Head X" line
+// - "grandTotal": bold, uppercase-ish sector-level total line
 const HEADS_CELL_STYLES = {
   major: "font-bold text-gray-900 pl-3",
   sub: "font-medium text-gray-700 pl-8",
   minor: "text-gray-800 pl-12",
   total: "font-bold text-gray-900 pl-3",
+  grandTotal: "font-bold text-gray-900 pl-3 uppercase tracking-wide",
 };
 
 const HeadsCell = ({ row }) => (
@@ -55,9 +57,10 @@ const Statement5 = ({ sector, dateRange }) => {
     );
   }
 
-  // Grand total is the sum of leaf ("minor") amounts only — "total"
-  // rows already ARE the sum of their major head's leaves, so
-  // including them here would double-count.
+  // Page-level GRAND TOTAL is the sum of leaf ("minor") amounts only —
+  // "total" rows (per major head) AND "grandTotal" rows (per sector)
+  // are both already sums of leaves, so including them here would
+  // double- (or triple-) count.
   const grandTotal = (statement5Data ?? [])
     .filter((row) => row.type === "minor")
     .reduce((sum, row) => sum + Number(row.total ?? 0), 0);
@@ -105,16 +108,23 @@ const Statement5 = ({ sector, dateRange }) => {
 
             {statement5Data?.map((row, idx) => {
               const isHeaderRow = row.type === "major" || row.type === "sub";
-              const isTotalRow = row.type === "total";
+              const isBoldTotalRow =
+                row.type === "total" || row.type === "grandTotal";
+              const rowBgClass =
+                row.type === "grandTotal"
+                  ? "bg-gray-200"
+                  : row.type === "total"
+                    ? "bg-gray-100"
+                    : "";
               return (
                 <tr
                   key={`row-${idx}-${row.heads}`}
-                  className={`border ${isTotalRow ? "bg-gray-100" : ""}`}>
+                  className={`border ${rowBgClass}`}>
                   <HeadsCell row={row} />
                   {isHeaderRow ? (
                     <td className="border px-4 py-2" />
                   ) : (
-                    <AmountCell value={row.total} bold={isTotalRow} />
+                    <AmountCell value={row.total} bold={isBoldTotalRow} />
                   )}
                 </tr>
               );

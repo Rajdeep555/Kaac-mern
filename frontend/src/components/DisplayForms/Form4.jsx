@@ -127,7 +127,11 @@ const Form4 = ({ sector, dateRange }) => {
                 <tr key={id} className="border font-small">
                   <td className="border py-1 align-top">{clnNo ?? "-"}</td>
                   <td className="border py-1 align-top">
-                    {date ? new Date(date).toLocaleDateString() : "-"}
+                    {date
+                      ? new Date(date)
+                          .toLocaleDateString("en-GB")
+                          .replace(/\//g, "-")
+                      : "-"}
                   </td>
                   <td className="border py-1 align-top">{treasury ?? "-"}</td>
                   <td className="border py-1 align-top">
