@@ -9,12 +9,6 @@ const AmountCell = ({ value, bold = false }) => (
   </td>
 );
 
-// Row-type-aware Heads cell:
-// - "major": bold, no indent — top of the hierarchy
-// - "sub": indented once, medium weight
-// - "minor": indented twice, normal weight
-// - "total": bold "Total under Major Head X" line
-// - "grandTotal": bold, uppercase-ish sector-level total line
 const HEADS_CELL_STYLES = {
   major: "font-bold text-gray-900 pl-3",
   sub: "font-medium text-gray-700 pl-8",
@@ -23,11 +17,6 @@ const HEADS_CELL_STYLES = {
   grandTotal: "font-bold text-gray-900 pl-3 uppercase tracking-wide",
 };
 
-// 🔸 NEW — safety net: if a row's text is clearly a sector-level
-// "Total Revenue Receipt" / "Total Receipt" line but the backend
-// didn't tag its `type` as "total"/"grandTotal" (e.g. the COUNCIL
-// grouping function uses a different type than the STATE one), this
-// still forces the bold treatment based on the label text itself.
 const isTotalReceiptLabel = (row) =>
   /total\s+(revenue\s+)?receipt/i.test((row.headsLines ?? []).join(" "));
 
@@ -68,41 +57,50 @@ const Statement5 = ({ sector, dateRange }) => {
     );
   }
 
-  // Page-level GRAND TOTAL is the sum of leaf ("minor") amounts only —
-  // "total" rows (per major head) AND "grandTotal" rows (per sector)
-  // are both already sums of leaves, so including them here would
-  // double- (or triple-) count.
   const grandTotal = (statement5Data ?? [])
     .filter((row) => row.type === "minor")
     .reduce((sum, row) => sum + Number(row.total ?? 0), 0);
 
   return (
     <div className="w-full overflow-x-auto border-1 bg-white">
+      {/* 🔸 Print-only rule, scoped to Statement 5 only via this
+          component-local class name. Keeps GRAND TOTAL + hr +
+          Explanatory Notes as ONE unbreakable unit. If it doesn't
+          fit on the current page, the whole group (including the
+          actual total figure) moves together onto the next page —
+          so the trailing page always shows real data instead of
+          being nearly empty. */}
+      <style>{`
+        @media print {
+          .statement5-tail-block {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+        }
+      `}</style>
+
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 5</h1>
-        {/* {sector && (
-          <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
-        )} */}
         {(dateRange?.from || dateRange?.to) && (
-          <p className="text-xs text-gray-500">
-            {dateRange?.from || "…"} to {dateRange?.to || "…"}
+          <p className="text-xs text-gray-800">
+            {(() => {
+              const date = new Date(dateRange.from || dateRange.to);
+              const year =
+                date.getMonth() >= 3
+                  ? date.getFullYear()
+                  : date.getFullYear() - 1;
+
+              return `${year} - ${year + 1}`;
+            })()}
           </p>
         )}
-        <h2 className="py-4 font-semibold">
+        <h2 className="pb-4 font-semibold">
           Detailed Account of Revenue Receipt by Minor Heads
         </h2>
       </div>
 
-      <hr className="w-full mb-4  bg-black" />
+      <hr className="w-full mb-4 bg-black" />
 
-      {/* 🔸 CHANGED — `min-w-280` removed. That min-width was carried
-          over from statements with many columns; Statement 5 only has
-          two (Heads, Actuals), so forcing a large minimum stretched
-          the table wider than the screen for no reason — that's what
-          was causing the horizontal scrollbar AND the large blank gap
-          inside the Heads column. `w-full` + explicit column
-          proportions on the two <th>s below keeps it always exactly
-          as wide as its container, no scroll needed. */}
       <div className="w-full my-8">
         <table className="w-full mx-auto border border-black text-[11px] text-center">
           <thead>
@@ -149,23 +147,37 @@ const Statement5 = ({ sector, dateRange }) => {
                 </tr>
               );
             })}
-
-            {statement5Data && statement5Data.length > 0 && (
-              <tr className="bg-gray-300 border">
-                <td className="border px-4 py-3 text-right font-bold tracking-wider text-sm">
-                  GRAND TOTAL
-                </td>
-                <AmountCell value={grandTotal} bold />
-              </tr>
-            )}
+            {/* 🔸 GRAND TOTAL row removed from here — moved below,
+                out of the main table, so it can travel together with
+                the hr + Explanatory Notes as one atomic print block. */}
           </tbody>
         </table>
       </div>
 
-      <hr className="w-full mb-4  bg-black" />
+      {/* 🔸 NEW — GRAND TOTAL + hr + Explanatory Notes, grouped so
+          they never get split apart across a page break, and never
+          left stranded alone on an otherwise-empty page. */}
+      <div className="statement5-tail-block">
+        {statement5Data && statement5Data.length > 0 && (
+          <div className="w-full mb-8">
+            <table className="w-full mx-auto border border-black text-[11px] text-center">
+              <tbody>
+                <tr className="bg-gray-300 border">
+                  <td className="border px-4 py-3 text-right font-bold tracking-wider text-sm w-3/4">
+                    GRAND TOTAL
+                  </td>
+                  <AmountCell value={grandTotal} bold />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      <div className="px-4 py-2 text-start tracking-wide">
-        <p className="font-semibold">Explanatory Notes</p>
+        <hr className="w-full mb-4 bg-black" />
+
+        <div className="px-4 py-2 text-start tracking-wide">
+          <p className="font-semibold">Explanatory Notes</p>
+        </div>
       </div>
     </div>
   );

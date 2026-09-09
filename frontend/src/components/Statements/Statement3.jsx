@@ -55,7 +55,7 @@ const Statement3 = ({ sector, dateRange }) => {
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
         )} */}
         {(dateRange?.from || dateRange?.to) && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-800">
             {(() => {
               const date = new Date(dateRange.from || dateRange.to);
               const year =
@@ -67,7 +67,7 @@ const Statement3 = ({ sector, dateRange }) => {
             })()}
           </p>
         )}
-        <h2 className="py-4 font-semibold">Debt Position</h2>
+        <h2 className="pb-4 font-semibold">Debt Position</h2>
       </div>
 
       <hr className="w-full mb-4 bg-black" />

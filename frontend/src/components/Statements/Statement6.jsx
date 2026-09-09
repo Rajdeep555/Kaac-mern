@@ -77,10 +77,20 @@ const Statement6 = ({ sector, dateRange }) => {
     <div className="w-full overflow-x-auto border-1 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 6</h1>
-        {/* {sector && (
-          <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
-        )} */}
-        <h2 className="py-4 font-semibold">
+        {(dateRange?.from || dateRange?.to) && (
+          <p className="text-xs text-gray-800">
+            {(() => {
+              const date = new Date(dateRange.from || dateRange.to);
+              const year =
+                date.getMonth() >= 3
+                  ? date.getFullYear()
+                  : date.getFullYear() - 1;
+
+              return `${year} - ${year + 1}`;
+            })()}
+          </p>
+        )}
+        <h2 className="pb-4 font-semibold">
           Detailed Account of Expenditure by Minor Heads
         </h2>
       </div>

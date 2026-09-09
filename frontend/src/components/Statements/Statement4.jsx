@@ -47,7 +47,21 @@ const Statement4 = ({ sector, dateRange }) => {
             {dateRange?.from || "…"} to {dateRange?.to || "…"}
           </p>
         )} */}
-        <h2 className="py-4 font-semibold">
+
+        {(dateRange?.from || dateRange?.to) && (
+          <p className="text-xs text-gray-800">
+            {(() => {
+              const date = new Date(dateRange.from || dateRange.to);
+              const year =
+                date.getMonth() >= 3
+                  ? date.getFullYear()
+                  : date.getFullYear() - 1;
+
+              return `${year} - ${year + 1}`;
+            })()}
+          </p>
+        )}
+        <h2 className="pb-4 font-semibold">
           Loans and Advances by the Council
         </h2>
       </div>

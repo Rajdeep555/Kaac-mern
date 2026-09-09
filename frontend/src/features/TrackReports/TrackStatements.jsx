@@ -116,11 +116,11 @@ const PrintFooter = () => (
       <p style={{ margin: "1px 0 45px" }}>KAAC, Diphu</p>
     </div>
     <div style={{ textAlign: "center" }}>
-      <p style={{ margin: 0 }}>Sr. Financial Adviser (State Sector)</p>
+      <p style={{ margin: 0 }}>Sr. Financial Adviser</p>
       <p style={{ margin: "1px 0 45px" }}>KAAC, Diphu</p>
     </div>
     <div style={{ textAlign: "center" }}>
-      <p style={{ margin: 0 }}>Principal Secretary,</p>
+      <p style={{ margin: 0 }}>Principal Secretary</p>
       <p style={{ margin: "1px 0 45px" }}>KAAC, Diphu</p>
     </div>
   </div>
@@ -572,16 +572,6 @@ const TrackStatements = () => {
                 }}>
                 Select a statement number below to view the corresponding
                 register
-                {(dateRange?.from || dateRange?.to) && (
-                  <span
-                    style={{
-                      marginLeft: "8px",
-                      color: "#14532d",
-                      fontWeight: "600",
-                    }}>
-                    — {dateRange?.from || "…"} to {dateRange?.to || "…"}
-                  </span>
-                )}
               </p>
             </div>
           </div>
@@ -632,7 +622,15 @@ const TrackStatements = () => {
                 }}>
                 Currently Viewing — {sectorType ?? "All Sectors"}
                 {dateRange?.from || dateRange?.to
-                  ? ` — ${dateRange?.from || "…"} to ${dateRange?.to || "…"}`
+                  ? ` — ${(() => {
+                      const date = new Date(dateRange.from || dateRange.to);
+                      const year =
+                        date.getMonth() >= 3
+                          ? date.getFullYear()
+                          : date.getFullYear() - 1;
+
+                      return `${year} - ${year + 1}`;
+                    })()}`
                   : ""}
               </p>
             </div>
