@@ -37,6 +37,25 @@ const Statement4 = ({ sector, dateRange }) => {
 
   return (
     <div className="w-full overflow-x-auto border-1 bg-white">
+      {/* 🔸 Print-only spacing trim, scoped to this component. The
+          my-8 / mb-4 gaps below are sized for comfortable on-screen
+          viewing, but on a short statement like this one they were
+          part of what pushed the signature footer onto its own
+          near-empty trailing page. Tightening them for print only
+          (never touching the screen look) buys back vertical room
+          so the whole statement — table + notes — sits on one page. */}
+      <style>{`
+        @media print {
+          .statement4-hr {
+            margin-bottom: 6px !important;
+          }
+          .statement4-table-wrap {
+            margin-top: 10px !important;
+            margin-bottom: 10px !important;
+          }
+        }
+      `}</style>
+
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 4</h1>
         {/* {sector && (
@@ -66,9 +85,9 @@ const Statement4 = ({ sector, dateRange }) => {
         </h2>
       </div>
 
-      <hr className="w-full mb-4  bg-black" />
+      <hr className="statement4-hr w-full mb-4 bg-black" />
 
-      <div className="w-full overflow-x-auto my-8">
+      <div className="statement4-table-wrap w-full overflow-x-auto my-8">
         <table className="min-w-280 mx-4 border border-black text-[11px] text-center">
           <thead>
             <tr>
@@ -134,7 +153,7 @@ const Statement4 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mb-4  bg-black" />
+      <hr className="statement4-hr w-full mb-4 bg-black" />
 
       <div className="px-4 py-2 text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>
