@@ -36,7 +36,7 @@ const Statement4 = ({ sector, dateRange }) => {
   const { rows, total } = statement4Data;
 
   return (
-    <div className="w-full overflow-x-auto border-2 bg-white">
+    <div className="w-full overflow-x-auto border-1 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 4</h1>
         {/* {sector && (
@@ -52,7 +52,7 @@ const Statement4 = ({ sector, dateRange }) => {
         </h2>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       <div className="w-full overflow-x-auto my-8">
         <table className="min-w-280 mx-4 border border-black text-[11px] text-center">
@@ -104,13 +104,12 @@ const Statement4 = ({ sector, dateRange }) => {
             {/* Total row */}
             {rows && rows.length > 0 && (
               <tr className="bg-gray-300 border">
-                <td
-                  colSpan={2}
-                  className="border px-3 py-3 text-left font-bold tracking-wide text-[10px] leading-snug">
+                <td className="border px-3 py-3 text-left font-bold tracking-wide text-[10px] leading-snug">
                   Total Loan disbursed to Autonomous Council Employees under
                   Major Head 661 - Loans &amp; Advances to Autonomous Council
                   Employees
                 </td>
+                <AmountCell value={total.april} bold />
                 <AmountCell value={total.amountPaid} bold />
                 <AmountCell value={total.amountRecover} bold />
                 <AmountCell value={total.march} bold />
@@ -121,7 +120,7 @@ const Statement4 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       <div className="px-4 py-2 text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>

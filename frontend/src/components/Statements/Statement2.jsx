@@ -43,7 +43,7 @@ const Statement2 = ({ sector, dateRange }) => {
     period?.previous?.split(" & ").pop()?.trim() || "Previous Period";
 
   return (
-    <div className="w-full overflow-x-auto border-2 bg-white">
+    <div className="w-full overflow-x-auto border-1 bg-white">
       {/* Header */}
       <div className="flex flex-col items-center py-5">
         <h1 className="font-bold text-xl tracking-wide">STATEMENT NO. 2</h1>
@@ -59,7 +59,7 @@ const Statement2 = ({ sector, dateRange }) => {
         </h2>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       {/* Table */}
       <div className="w-full overflow-x-auto my-8">

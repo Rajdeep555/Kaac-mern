@@ -140,7 +140,7 @@ const Statement1 = ({ sector, dateRange }) => {
   const isConsolidated = Boolean(d.sectorBreakdown);
 
   return (
-    <div className="w-full overflow-x-auto border-2 bg-white">
+    <div className="w-full overflow-x-auto border-1 bg-white">
       {/* =========================
           STATEMENT HEADER
       ========================== */}
@@ -150,7 +150,7 @@ const Statement1 = ({ sector, dateRange }) => {
         <h2 className="py-2 font-semibold">Summary of Transactions</h2>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4 bg-black" />
 
       {/* =========================
           TABLE

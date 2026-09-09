@@ -10,7 +10,6 @@ import Statement7 from "../../components/Statements/Statement7";
 import SearchFunction from "../SearchFunction";
 import kaacLogo from "../../assets/logo.jpg";
 import azadi from "../../assets/azadi.png";
-import getFinancialYear from "../../utils/getFinancialYear";
 
 const SECTOR_LABELS = {
   council: "COUNCIL",
@@ -42,7 +41,7 @@ const PrintHeader = () => (
       justifyContent: "space-between",
       gap: "16px",
       padding: "10px 20px 16px",
-      borderBottom: "2px solid #000",
+      borderBottom: "0px solid #000",
       marginBottom: "16px",
     }}>
     <img
@@ -114,15 +113,15 @@ const PrintFooter = () => (
     }}>
     <div style={{ textAlign: "center" }}>
       <p style={{ margin: 0 }}>Finance and Accounts Officer (Council)</p>
-      <p style={{ margin: "1px 0 70px" }}>KAAC, Diphu</p>
+      <p style={{ margin: "1px 0 45px" }}>KAAC, Diphu</p>
     </div>
     <div style={{ textAlign: "center" }}>
       <p style={{ margin: 0 }}>Sr. Financial Adviser (State Sector)</p>
-      <p style={{ margin: "1px 0 70px" }}>KAAC, Diphu</p>
+      <p style={{ margin: "1px 0 45px" }}>KAAC, Diphu</p>
     </div>
     <div style={{ textAlign: "center" }}>
       <p style={{ margin: 0 }}>Principal Secretary,</p>
-      <p style={{ margin: "1px 0 70px" }}>KAAC, Diphu</p>
+      <p style={{ margin: "1px 0 45px" }}>KAAC, Diphu</p>
     </div>
   </div>
 );
@@ -276,16 +275,40 @@ const TrackStatements = () => {
             max-width: 100% !important;
             overflow: visible !important;
           }
+          
+          .print-container div,
+          .print-container table {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+          }
           .print-container table {
             width: 100% !important;
             min-width: 0 !important;
-            table-layout: auto !important;
-            font-size: 9px !important;
+            table-layout: fixed !important;
+            font-size: 11px !important;
+          }
+          /* 🔸 NEW — table-layout:fixed above guarantees the table can
+             never exceed 100% width, but it does that by making every
+             cell wrap instead of stretching to fit its content. These
+             two properties together force that wrapping to actually
+             happen even for long unbroken tokens (long labels, long
+             numbers with no spaces) — word-break alone sometimes isn't
+             aggressive enough to stop a table-layout:fixed cell from
+             visually overflowing its own box. */
+          .print-container th,
+          .print-container td {
+            overflow-wrap: anywhere !important;
+            word-break: break-all !important;
+          }
+          /* 🔸 NEW — thinner table borders for print, per request */
+          .print-container table,
+          .print-container th,
+          .print-container td {
+            border-width: 0.5pt !important;
           }
           .print-container th,
           .print-container td {
             white-space: normal !important;
-            word-break: break-word !important;
             padding: 2px 4px !important;
           }
 
@@ -298,7 +321,7 @@ const TrackStatements = () => {
              the block from being split across a page boundary if it
              still needs to move. */
           .print-footer {
-            margin-top: 70px !important;
+            margin-top: 45px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
@@ -310,7 +333,7 @@ const TrackStatements = () => {
         style={{
           background:
             "linear-gradient(135deg, #0f2744 0%, #1a3a5c 60%, #1e4976 100%)",
-          borderBottom: "4px solid #c9a84c",
+          borderBottom: "1px solid #c9a84c",
         }}>
         <div
           style={{
@@ -332,7 +355,7 @@ const TrackStatements = () => {
                 width: 52,
                 height: 52,
                 borderRadius: "50%",
-                border: "2px solid #c9a84c",
+                border: "1px solid #c9a84c",
                 background: "rgba(201,168,76,0.15)",
                 display: "flex",
                 alignItems: "center",
@@ -556,7 +579,7 @@ const TrackStatements = () => {
                       color: "#14532d",
                       fontWeight: "600",
                     }}>
-                    — {getFinancialYear(dateRange?.from, dateRange?.to)}
+                    — {dateRange?.from || "…"} to {dateRange?.to || "…"}
                   </span>
                 )}
               </p>
@@ -607,10 +630,10 @@ const TrackStatements = () => {
                   fontSize: "11px",
                   color: "#9ca3af",
                 }}>
-                {/* Currently Viewing — {sectorType ?? "All Sectors"}
+                Currently Viewing — {sectorType ?? "All Sectors"}
                 {dateRange?.from || dateRange?.to
                   ? ` — ${dateRange?.from || "…"} to ${dateRange?.to || "…"}`
-                  : ""} */}
+                  : ""}
               </p>
             </div>
           </div>

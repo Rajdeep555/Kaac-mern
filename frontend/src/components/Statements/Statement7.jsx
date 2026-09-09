@@ -44,7 +44,7 @@ const Statement7 = ({ sector, dateRange }) => {
   );
 
   return (
-    <div className="w-full overflow-x-auto border-2 bg-white">
+    <div className="w-full overflow-x-auto border-1 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 7</h1>
         {/* {sector && (
@@ -56,7 +56,7 @@ const Statement7 = ({ sector, dateRange }) => {
         </h2>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       <div className="w-full overflow-x-auto my-8">
         <table className="min-w-280 mx-auto border border-black text-[11px] text-center">
@@ -115,7 +115,7 @@ const Statement7 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       <div className="px-4 py-2 text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>

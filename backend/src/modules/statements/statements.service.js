@@ -497,6 +497,20 @@ const buildStatement6SectorResult = async (expenditures, sectorTotalLabel) => {
     return { rows, sectorTotal };
 };
 
+const SECTOR_TOTAL_TEXT_RE = /^total\s+(expenditure|capital receipt|revenue receipt|receipt)/i;
+
+const getSectorNonPlanAndPlan = (rowsForSector) => {
+    const sectorTotalRow = (rowsForSector ?? []).find((r) =>
+        (r.heads ?? []).some((line) =>
+            SECTOR_TOTAL_TEXT_RE.test((line.text ?? "").trim()),
+        ),
+    );
+    return {
+        nonPlan: Number(sectorTotalRow?.nonPlan ?? 0),
+        plan: Number(sectorTotalRow?.plan ?? 0),
+    };
+};
+
 export const getStatement6Data = async ({ sector, from, to } = {}) => {
     const isConsolidated = !sector || sector === "CONSOLIDATED";
 
@@ -504,6 +518,8 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 
     let combinedRows = [];
     let grandTotal = 0;
+    let grandNonPlan = 0; // 🔸 NEW
+    let grandPlan = 0;    // 🔸 NEW
 
     if (isConsolidated) {
         // ── CONSOLIDATED: COUNCIL and STATE built independently, each
@@ -516,16 +532,24 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
         const [councilResult, stateResult] = await Promise.all([
             buildStatement6SectorResult(
                 councilExpenditures,
-                "Total Capital Receipt - Council Sector",
+                "Total Expenditure of Council Sector",
             ),
             buildStatement6SectorResult(
                 stateExpenditures,
-                "Total Capital Receipt - State Sector",
+                "Total Expenditure of State Sector",
             ),
         ]);
 
         combinedRows = [...councilResult.rows, ...stateResult.rows];
         grandTotal = councilResult.sectorTotal + stateResult.sectorTotal;
+
+        // 🔸 NEW — read Non-Plan/Plan straight off each sector's own
+        // total row instead of needing buildStatement6SectorResult to
+        // return anything extra.
+        const councilAmounts = getSectorNonPlanAndPlan(councilResult.rows);
+        const stateAmounts = getSectorNonPlanAndPlan(stateResult.rows);
+        grandNonPlan = councilAmounts.nonPlan + stateAmounts.nonPlan;
+        grandPlan = councilAmounts.plan + stateAmounts.plan;
     } else {
         // ── COUNCIL, STATE, or any other sector: single filtered fetch ──
         const sectorTotalLabel =
@@ -540,12 +564,22 @@ export const getStatement6Data = async ({ sector, from, to } = {}) => {
 
         combinedRows = result.rows;
         grandTotal = result.sectorTotal;
+
+        // 🔸 NEW
+        const amounts = getSectorNonPlanAndPlan(result.rows);
+        grandNonPlan = amounts.nonPlan;
+        grandPlan = amounts.plan;
     }
 
     // Renumber ids sequentially across the (possibly concatenated) set.
     const rows = combinedRows.map((r, idx) => ({ ...r, id: idx + 1 }));
 
-    return { rows, grandTotal: grandTotal.toFixed(2) };
+    return {
+        rows,
+        grandTotal: grandTotal.toFixed(2),
+        grandNonPlan: grandNonPlan.toFixed(2), // 🔸 NEW
+        grandPlan: grandPlan.toFixed(2),        // 🔸 NEW
+    };
 };
 
 
@@ -1075,7 +1109,7 @@ const getStatement5CouncilRows = async (dateRange) => {
     );
 
     return groupStatement5Rows([...revenueRangeRows, ...cfbRangeRows], {
-        grandTotalLabel: "Total Revenue Receipt - Council Sector",
+        grandTotalLabel: "Total Receipt of Council Sector",
     });
 };
 
@@ -1102,7 +1136,7 @@ export const getStatement5Data = async (sector, from, to) => {
         if (isStateSector) {
             const stateChallanRows = await getStatement5StateChallanRows(dateRange);
             const result = groupStatement5Rows(stateChallanRows, {
-                grandTotalLabel: "Total Revenue Receipt - State Sector",
+                grandTotalLabel: "Total Receipt of State Sector",
             });
             logger.info(`Statement 5 total groups returned: ${result.length}`);
             return result;
@@ -1422,17 +1456,19 @@ export const getStatement4Data = async (sector, from, to) => {
 
         const total = rawRows.reduce(
             (acc, r) => ({
+                april: acc.april + r.april,
                 amountPaid: acc.amountPaid + r.amountPaid,
                 amountRecover: acc.amountRecover + r.amountRecover,
                 march: acc.march + r.march,
                 increaseDecrease: acc.increaseDecrease + r.increaseDecrease,
             }),
-            { amountPaid: 0, amountRecover: 0, march: 0, increaseDecrease: 0 }
+            { april: 0, amountPaid: 0, amountRecover: 0, march: 0, increaseDecrease: 0 }
         );
 
         return {
             rows,
             total: {
+                april: total.april.toFixed(2),
                 amountPaid: total.amountPaid.toFixed(2),
                 amountRecover: total.amountRecover.toFixed(2),
                 march: total.march.toFixed(2),

@@ -48,7 +48,7 @@ const Statement3 = ({ sector, dateRange }) => {
   const { rows: debtRows, total } = debtData;
 
   return (
-    <div className="w-full overflow-x-auto border-2 bg-white">
+    <div className="w-full overflow-x-auto border-1 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 3</h1>
         {/* {sector && (
@@ -56,13 +56,21 @@ const Statement3 = ({ sector, dateRange }) => {
         )} */}
         {(dateRange?.from || dateRange?.to) && (
           <p className="text-xs text-gray-500">
-            {dateRange?.from || "…"} to {dateRange?.to || "…"}
+            {(() => {
+              const date = new Date(dateRange.from || dateRange.to);
+              const year =
+                date.getMonth() >= 3
+                  ? date.getFullYear()
+                  : date.getFullYear() - 1;
+
+              return `${year} - ${year + 1}`;
+            })()}
           </p>
         )}
         <h2 className="py-4 font-semibold">Debt Position</h2>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4 bg-black" />
 
       {/* ── Table 1: Debt Position ── */}
       <div className="w-full overflow-x-auto my-8">
@@ -127,7 +135,7 @@ const Statement3 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mt-10 h-0.5 bg-black" />
+      <hr className="w-full mt-10  bg-black" />
 
       <div className="py-6 px-4 leading-8">
         <p className="font-bold">
@@ -140,7 +148,7 @@ const Statement3 = ({ sector, dateRange }) => {
         </p>
       </div>
 
-      <hr className="w-full mb-10 h-0.5 bg-black" />
+      <hr className="w-full mb-10  bg-black" />
 
       {/* ── Table 2: Ways and Means ── */}
       <div className="w-full overflow-x-auto my-8">
@@ -200,7 +208,7 @@ const Statement3 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       <div className="px-4 py-2 text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>

@@ -23,9 +23,20 @@ const HEADS_CELL_STYLES = {
   grandTotal: "font-bold text-gray-900 pl-3 uppercase tracking-wide",
 };
 
-const HeadsCell = ({ row }) => (
+// 🔸 NEW — safety net: if a row's text is clearly a sector-level
+// "Total Revenue Receipt" / "Total Receipt" line but the backend
+// didn't tag its `type` as "total"/"grandTotal" (e.g. the COUNCIL
+// grouping function uses a different type than the STATE one), this
+// still forces the bold treatment based on the label text itself.
+const isTotalReceiptLabel = (row) =>
+  /total\s+(revenue\s+)?receipt/i.test((row.headsLines ?? []).join(" "));
+
+const HeadsCell = ({ row, forceBold }) => (
   <td className="border px-3 py-2 text-left align-top">
-    <div className={`leading-snug ${HEADS_CELL_STYLES[row.type] ?? ""}`}>
+    <div
+      className={`leading-snug ${HEADS_CELL_STYLES[row.type] ?? ""} ${
+        forceBold ? "font-bold uppercase tracking-wide" : ""
+      }`}>
       {row.headsLines.map((line, idx) => (
         <span key={idx}>{line}</span>
       ))}
@@ -66,7 +77,7 @@ const Statement5 = ({ sector, dateRange }) => {
     .reduce((sum, row) => sum + Number(row.total ?? 0), 0);
 
   return (
-    <div className="w-full overflow-x-auto border-2 bg-white">
+    <div className="w-full overflow-x-auto border-1 bg-white">
       <div className="flex flex-col items-center py-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 5</h1>
         {/* {sector && (
@@ -82,16 +93,24 @@ const Statement5 = ({ sector, dateRange }) => {
         </h2>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
-      <div className="w-full overflow-x-auto my-8">
-        <table className="min-w-280 mx-auto border border-black text-[11px] text-center">
+      {/* 🔸 CHANGED — `min-w-280` removed. That min-width was carried
+          over from statements with many columns; Statement 5 only has
+          two (Heads, Actuals), so forcing a large minimum stretched
+          the table wider than the screen for no reason — that's what
+          was causing the horizontal scrollbar AND the large blank gap
+          inside the Heads column. `w-full` + explicit column
+          proportions on the two <th>s below keeps it always exactly
+          as wide as its container, no scroll needed. */}
+      <div className="w-full my-8">
+        <table className="w-full mx-auto border border-black text-[11px] text-center">
           <thead>
             <tr>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font uppercase tracking-wide py-2 w-3/4">
                 Heads
               </th>
-              <th className="border font uppercase tracking-wide py-2">
+              <th className="border font uppercase tracking-wide py-2 w-1/4">
                 Actuals
               </th>
             </tr>
@@ -108,10 +127,11 @@ const Statement5 = ({ sector, dateRange }) => {
 
             {statement5Data?.map((row, idx) => {
               const isHeaderRow = row.type === "major" || row.type === "sub";
+              const forceBold = isTotalReceiptLabel(row);
               const isBoldTotalRow =
-                row.type === "total" || row.type === "grandTotal";
+                row.type === "total" || row.type === "grandTotal" || forceBold;
               const rowBgClass =
-                row.type === "grandTotal"
+                row.type === "grandTotal" || forceBold
                   ? "bg-gray-200"
                   : row.type === "total"
                     ? "bg-gray-100"
@@ -120,8 +140,8 @@ const Statement5 = ({ sector, dateRange }) => {
                 <tr
                   key={`row-${idx}-${row.heads}`}
                   className={`border ${rowBgClass}`}>
-                  <HeadsCell row={row} />
-                  {isHeaderRow ? (
+                  <HeadsCell row={row} forceBold={forceBold} />
+                  {isHeaderRow && !forceBold ? (
                     <td className="border px-4 py-2" />
                   ) : (
                     <AmountCell value={row.total} bold={isBoldTotalRow} />
@@ -142,7 +162,7 @@ const Statement5 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mb-4 h-0.5 bg-black" />
+      <hr className="w-full mb-4  bg-black" />
 
       <div className="px-4 py-2 text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>
