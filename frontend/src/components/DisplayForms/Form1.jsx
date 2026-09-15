@@ -69,6 +69,232 @@ const calculateTotals = (data) => {
   };
 };
 
+// ── Closing Balance section helpers ──────────────────────────
+// NOTE: These two figures are fixed opening-balance carry-overs from
+// before this system existed (i.e. not derivable from stored rows).
+// If a future financial year needs a different opening balance, these
+// constants (or their sourcing) will need to be revisited.
+const OPENING_BALANCE_CASH_COLUMN = 20596820; // ₹2,05,96,820 — COUNCIL & CONSOLIDATED only
+const OPENING_BALANCE_TREASURY_PLA_CONSOLIDATED = -2961936280; // CONSOLIDATED only, receipt side, combined (no Council/State split)
+
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const formatMonthYear = (date) => {
+  if (!date) return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  return `${monthNames[d.getUTCMonth()]}-${d.getUTCFullYear()}`;
+};
+
+// Works for any selected range — a single day filter or a full
+// financial-year range — since it just formats the month/year of
+// each end of the range (e.g. 01-04-2025 to 31-03-2026 → "April-2025
+// to March-2026").
+const formatPeriodLabel = (from, to) => {
+  if (!from || !to) return "";
+  const fromLabel = formatMonthYear(from);
+  const toLabel = formatMonthYear(to);
+  return fromLabel && toLabel ? `${fromLabel} to ${toLabel}` : "";
+};
+
+// Financial year label derived the same way the auto-save effect
+// derives it (start year of the selected range's `from` date).
+const formatFinancialYearLabel = (from) => {
+  if (!from) return "";
+  const year = new Date(from).getUTCFullYear();
+  if (isNaN(year)) return "";
+  return `${year}-${year + 1}`;
+};
+
+const inrFormatter = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 0,
+});
+
+// Indian-grouped number formatting with a "(-)" prefix for negatives,
+// to match the closing-balance sheet's display convention.
+const fmtClosing = (num) => {
+  if (num === null || num === undefined || isNaN(num)) return "-";
+  const rounded = Math.round(num);
+  const isNegative = rounded < 0;
+  const formatted = inrFormatter.format(Math.abs(rounded));
+  return isNegative ? `(-) ${formatted}` : formatted;
+};
+
+// ── Closing Balance section ──────────────────────────────────
+const ClosingBalanceSection = ({ sector, from, to, totals }) => {
+  // Cash-column opening balance: only COUNCIL & CONSOLIDATED, since
+  // there is no cash receipt under sector = STATE.
+  const showOpeningCash = sector === "COUNCIL" || sector === "CONSOLIDATED";
+  // Treasury PLA opening balance: only CONSOLIDATED, shown as one
+  // combined figure (not split into Council/State parts).
+  const showOpeningTreasury = sector === "CONSOLIDATED";
+
+  const openingCash = showOpeningCash ? OPENING_BALANCE_CASH_COLUMN : 0;
+  const openingTreasury = showOpeningTreasury
+    ? OPENING_BALANCE_TREASURY_PLA_CONSOLIDATED
+    : 0;
+
+  const totalReceiptCash = totals.receiptCashColumn;
+  const totalReceiptTreasury = totals.receiptTreasuryPla;
+  const totalReceiptTotal = totalReceiptCash + totalReceiptTreasury;
+
+  const openingTotal = openingCash + openingTreasury;
+
+  const grantReceiptCash = totalReceiptCash + openingCash;
+  const grantReceiptTreasury = totalReceiptTreasury + openingTreasury;
+  const grantReceiptTotal = grantReceiptCash + grantReceiptTreasury;
+
+  const totalExpCash = totals.disbursementCashColumn;
+  const totalExpTreasury = totals.disbursementTreasuryPla;
+  const totalExpTotal = totalExpCash + totalExpTreasury;
+
+  // Closing Balance — Cash column (FY 2025-2026 onward): Receipt-side
+  // Cash Column total − Disbursement-side Cash Column total for the
+  // period (opening balance is not added in here — it's its own row).
+  const closingCash = totalReceiptCash - totalExpCash;
+  // Closing Balance — Treasury PLA column, per spec:
+  // Receipt Treasury PLA − Expenditure/Disbursement Treasury PLA + Receipt-side Opening Treasury PLA.
+  // (Opening balance is itself typically negative, so this effectively
+  // subtracts its absolute value.)
+  const closingTreasury =
+    totalReceiptTreasury - totalExpTreasury + openingTreasury;
+  const closingTotal = closingCash + closingTreasury;
+
+  const grantExpCash = totalExpCash + closingCash;
+  const grantExpTreasury = totalExpTreasury + closingTreasury;
+  const grantExpTotal = grantExpCash + grantExpTreasury;
+
+  const periodLabel = formatPeriodLabel(from, to);
+  const fyLabel = formatFinancialYearLabel(from);
+
+  const headCellCls = "border border-black px-2 py-1 bg-gray-50 font-semibold";
+  const valCls = "border border-black px-2 py-1 text-red-600 font-semibold";
+  const rowLabelCls =
+    "border border-black px-2 py-1 text-left font-semibold bg-gray-50";
+  const totalRowLabelCls =
+    "border border-black px-2 py-1 text-left font-bold bg-gray-300";
+  const totalRowValCls =
+    "border border-black px-2 py-1 font-bold bg-gray-300 text-red-700";
+
+  return (
+    <div className="px-4 pb-6">
+      <div className="text-center font-semibold mb-3">
+        <p>Closing Balance during the Financial year {fyLabel || "—"}.</p>
+        {periodLabel && <p className="text-sm">{periodLabel}</p>}
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-4 overflow-x-auto">
+        {/* Receipt table */}
+        <table
+          className="border-collapse border border-black text-[11px] text-center flex-1"
+          style={{ minWidth: "420px" }}>
+          <thead>
+            <tr>
+              <th
+                colSpan={4}
+                className="border border-black bg-gray-50 uppercase py-2 text-sm">
+                Receipt
+              </th>
+            </tr>
+            <tr>
+              <th className={headCellCls}></th>
+              <th className={headCellCls}>Cash Column</th>
+              <th className={headCellCls}>Treasury (PLA) Column</th>
+              <th className={headCellCls}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className={rowLabelCls}>Total Receipt</td>
+              <td className={valCls}>{fmtClosing(totalReceiptCash)}</td>
+              <td className={valCls}>{fmtClosing(totalReceiptTreasury)}</td>
+              <td className={valCls}>{fmtClosing(totalReceiptTotal)}</td>
+            </tr>
+            <tr>
+              <td className={rowLabelCls}>Opening Balance</td>
+              <td className={valCls}>
+                {showOpeningCash ? fmtClosing(openingCash) : "-"}
+              </td>
+              <td className={valCls}>
+                {showOpeningTreasury ? fmtClosing(openingTreasury) : "-"}
+              </td>
+              <td className={valCls}>
+                {showOpeningCash || showOpeningTreasury
+                  ? fmtClosing(openingTotal)
+                  : "-"}
+              </td>
+            </tr>
+            <tr>
+              <td className={totalRowLabelCls}>Grant Total</td>
+              <td className={totalRowValCls}>{fmtClosing(grantReceiptCash)}</td>
+              <td className={totalRowValCls}>
+                {fmtClosing(grantReceiptTreasury)}
+              </td>
+              <td className={totalRowValCls}>
+                {fmtClosing(grantReceiptTotal)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Expenditure table */}
+        <table
+          className="border-collapse border border-black text-[11px] text-center flex-1"
+          style={{ minWidth: "420px" }}>
+          <thead>
+            <tr>
+              <th
+                colSpan={4}
+                className="border border-black bg-gray-50 uppercase py-2 text-sm">
+                Expenditure
+              </th>
+            </tr>
+            <tr>
+              <th className={headCellCls}></th>
+              <th className={headCellCls}>Cash Column</th>
+              <th className={headCellCls}>Treasury (PLA) Column</th>
+              <th className={headCellCls}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className={rowLabelCls}>Total Expenditure</td>
+              <td className={valCls}>{fmtClosing(totalExpCash)}</td>
+              <td className={valCls}>{fmtClosing(totalExpTreasury)}</td>
+              <td className={valCls}>{fmtClosing(totalExpTotal)}</td>
+            </tr>
+            <tr>
+              <td className={rowLabelCls}>Closing Balance</td>
+              <td className={valCls}>{fmtClosing(closingCash)}</td>
+              <td className={valCls}>{fmtClosing(closingTreasury)}</td>
+              <td className={valCls}>{fmtClosing(closingTotal)}</td>
+            </tr>
+            <tr>
+              <td className={totalRowLabelCls}>Grant Total</td>
+              <td className={totalRowValCls}>{fmtClosing(grantExpCash)}</td>
+              <td className={totalRowValCls}>{fmtClosing(grantExpTreasury)}</td>
+              <td className={totalRowValCls}>{fmtClosing(grantExpTotal)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────
 // dateRange: { from: "YYYY-MM-DD", to: "YYYY-MM-DD" }
 const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
@@ -235,6 +461,10 @@ const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
     cr: crRows[i] ?? emptyCr,
     key: `row-${i}`,
   }));
+
+  // Totals for the current filtered period — reused by both the main
+  // table's totals row and the Closing Balance section below.
+  const periodTotals = useMemo(() => calculateTotals(rawData), [rawData]);
 
   const getTitle = () => {
     if (title) return title;
@@ -495,40 +725,34 @@ const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
             })}
 
             {/* Totals row */}
-            {zippedRows.length > 0 &&
-              (() => {
-                const t = calculateTotals(rawData);
-                return (
-                  <tr className="font-bold bg-gray-400 border border-black">
-                    <td
-                      colSpan={4}
-                      className="border border-black px-2 py-2 text-right">
-                      TOTAL
-                    </td>
-                    <td className="border border-black px-1">
-                      {fmtAmt(t.receiptCashColumn)}
-                    </td>
-                    <td className="border border-black px-1">
-                      {fmtAmt(t.receiptTreasuryPla)}
-                    </td>
-                    <td className="border border-black px-1"></td>
-                    {/* CR totals */}
-                    <td
-                      colSpan={4}
-                      className="border border-black px-2 text-right">
-                      TOTAL
-                    </td>
-                    <td className="border border-black px-1">
-                      {fmtAmt(t.disbursementCashColumn)}
-                    </td>
-                    <td className="border border-black px-1"></td>
-                    <td className="border border-black px-1">
-                      {fmtAmt(t.disbursementTreasuryPla)}
-                    </td>
-                    <td className="border border-black px-1"></td>
-                  </tr>
-                );
-              })()}
+            {zippedRows.length > 0 && (
+              <tr className="font-bold bg-gray-400 border border-black">
+                <td
+                  colSpan={4}
+                  className="border border-black px-2 py-2 text-right">
+                  TOTAL
+                </td>
+                <td className="border border-black px-1">
+                  {fmtAmt(periodTotals.receiptCashColumn)}
+                </td>
+                <td className="border border-black px-1">
+                  {fmtAmt(periodTotals.receiptTreasuryPla)}
+                </td>
+                <td className="border border-black px-1"></td>
+                {/* CR totals */}
+                <td colSpan={4} className="border border-black px-2 text-right">
+                  TOTAL
+                </td>
+                <td className="border border-black px-1">
+                  {fmtAmt(periodTotals.disbursementCashColumn)}
+                </td>
+                <td className="border border-black px-1"></td>
+                <td className="border border-black px-1">
+                  {fmtAmt(periodTotals.disbursementTreasuryPla)}
+                </td>
+                <td className="border border-black px-1"></td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -539,6 +763,18 @@ const Form1 = ({ data: dataProp = [], title, sector, dateRange }) => {
         <p>Cashier</p>
         <p>Officer i/c of the Cash Book</p>
       </div>
+
+      <hr className="w-full mb-4 h-0.5 bg-black" />
+
+      {/* Closing Balance summary — shown for every filter (single day,
+          custom range, or full financial year) since it's derived
+          from the same period totals used above. */}
+      <ClosingBalanceSection
+        sector={sector}
+        from={from}
+        to={to}
+        totals={periodTotals}
+      />
     </div>
   );
 };
