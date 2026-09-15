@@ -41,7 +41,7 @@ const PrintHeader = () => (
       justifyContent: "space-between",
       gap: "16px",
       padding: "10px 20px 16px",
-      borderBottom: "0px solid #000",
+      borderBottom: "2px solid #000",
       marginBottom: "16px",
     }}>
     <img
@@ -333,7 +333,7 @@ const TrackStatements = () => {
         style={{
           background:
             "linear-gradient(135deg, #0f2744 0%, #1a3a5c 60%, #1e4976 100%)",
-          borderBottom: "1px solid #c9a84c",
+          borderBottom: "4px solid #c9a84c",
         }}>
         <div
           style={{
@@ -355,7 +355,7 @@ const TrackStatements = () => {
                 width: 52,
                 height: 52,
                 borderRadius: "50%",
-                border: "1px solid #c9a84c",
+                border: "2px solid #c9a84c",
                 background: "rgba(201,168,76,0.15)",
                 display: "flex",
                 alignItems: "center",

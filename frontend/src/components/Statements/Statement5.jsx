@@ -63,18 +63,46 @@ const Statement5 = ({ sector, dateRange }) => {
 
   return (
     <div className="w-full overflow-x-auto border-1 bg-white">
-      {/* 🔸 Print-only rule, scoped to Statement 5 only via this
-          component-local class name. Keeps GRAND TOTAL + hr +
-          Explanatory Notes as ONE unbreakable unit. If it doesn't
-          fit on the current page, the whole group (including the
-          actual total figure) moves together onto the next page —
-          so the trailing page always shows real data instead of
-          being nearly empty. */}
+      {/* 🔸 Print-only rules, scoped to Statement 5 only via these
+          component-local class names. .statement5-tail-block keeps
+          GRAND TOTAL + hr + Explanatory Notes as ONE unbreakable unit
+          — if it doesn't fit on the current page, the whole group
+          (including the actual total figure) moves together onto the
+          next page, so the trailing page always shows real data
+          instead of being nearly empty. The margin/padding overrides
+          below only shrink the block's height FOR PRINT, so that
+          "whole group" is small enough to actually fit on the
+          previous page's leftover space instead of needing its own
+          extra page. */}
       <style>{`
         @media print {
           .statement5-tail-block {
             break-inside: avoid;
             page-break-inside: avoid;
+          }
+          .statement5-tail-block .statement5-grand-total-wrap {
+            margin-bottom: 4px !important;
+          }
+          .statement5-tail-block hr {
+            margin-bottom: 4px !important;
+          }
+          .statement5-tail-block .statement5-notes-wrap {
+            padding-top: 2px !important;
+            padding-bottom: 2px !important;
+          }
+          /* 🔸 NEW — Statement 5-only density tightening, so the
+             signature can land with real data instead of alone on a
+             near-empty trailing page. Scoped here (not in the shared
+             TrackStatements.jsx stylesheet) because this <style> tag
+             only exists in the DOM while Statement 5 is the one
+             actually mounted inside .print-container — so it can
+             never affect what Statements 1–4, 6, or 7 look like when
+             printed, even though the selectors themselves
+             (.print-container, @page) are shared names. */
+          @page { size: landscape; margin: 6mm; }
+          .print-container th,
+          .print-container td {
+            padding: 1px 3px !important;
           }
         }
       `}</style>
@@ -154,12 +182,12 @@ const Statement5 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      {/* 🔸 NEW — GRAND TOTAL + hr + Explanatory Notes, grouped so
-          they never get split apart across a page break, and never
-          left stranded alone on an otherwise-empty page. */}
+      {/* 🔸 GRAND TOTAL + hr + Explanatory Notes, grouped so they
+          never get split apart across a page break, and never left
+          stranded alone on an otherwise-empty page. */}
       <div className="statement5-tail-block">
         {statement5Data && statement5Data.length > 0 && (
-          <div className="w-full mb-8">
+          <div className="w-full mb-8 statement5-grand-total-wrap">
             <table className="w-full mx-auto border border-black text-[11px] text-center">
               <tbody>
                 <tr className="bg-gray-300 border">
@@ -175,7 +203,7 @@ const Statement5 = ({ sector, dateRange }) => {
 
         <hr className="w-full mb-4 bg-black" />
 
-        <div className="px-4 py-2 text-start tracking-wide">
+        <div className="px-4 py-2 text-start tracking-wide statement5-notes-wrap">
           <p className="font-semibold">Explanatory Notes</p>
         </div>
       </div>
