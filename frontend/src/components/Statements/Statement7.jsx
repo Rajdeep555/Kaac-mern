@@ -45,7 +45,7 @@ const Statement7 = ({ sector, dateRange }) => {
 
   return (
     <div className="w-full overflow-x-auto border-1 bg-white">
-      <div className="flex flex-col items-center py-4">
+      <div className="flex flex-col items-center pt-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 7</h1>
         {(dateRange?.from || dateRange?.to) && (
           <p className="text-xs text-gray-800">
@@ -68,7 +68,7 @@ const Statement7 = ({ sector, dateRange }) => {
 
       <hr className="w-full mb-4  bg-black" />
 
-      <div className="w-full overflow-x-auto my-8">
+      <div className="w-full overflow-x-auto my-4">
         <table className="min-w-280 mx-auto border border-black text-[11px] text-center">
           <thead>
             <tr>
@@ -101,7 +101,7 @@ const Statement7 = ({ sector, dateRange }) => {
 
             {statement7Data?.map((item) => (
               <tr key={item.id} className="border">
-                <td className="border px-4 py-2">{item.headOfAccount}</td>
+                <td className="border px-4 py-1.5">{item.headOfAccount}</td>
                 <AmountCell value={item.openingBalance} />
                 <AmountCell value={item.receipts} />
                 <AmountCell value={item.disbursement} />
@@ -112,7 +112,7 @@ const Statement7 = ({ sector, dateRange }) => {
             {/* Grand Total */}
             {statement7Data && statement7Data.length > 0 && (
               <tr className="bg-gray-300 border">
-                <td className="border px-4 py-3 text-right font-bold tracking-wider text-sm">
+                <td className="border px-4 py-2 text-right font-bold tracking-wider text-sm">
                   GRAND TOTAL
                 </td>
                 <AmountCell value={totals.openingBalance} bold />
@@ -125,9 +125,9 @@ const Statement7 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="w-full mb-4  bg-black" />
+      {/* <hr className="w-full mb-4  bg-black" /> */}
 
-      <div className="px-4 py-2 text-start tracking-wide">
+      <div className="px-4  text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>
         <p>
           <span className="font-medium">Notes:</span> Other Statements as

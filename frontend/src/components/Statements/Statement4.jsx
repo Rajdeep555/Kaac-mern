@@ -56,7 +56,7 @@ const Statement4 = ({ sector, dateRange }) => {
         }
       `}</style>
 
-      <div className="flex flex-col items-center py-4">
+      <div className="flex flex-col items-center pt-4">
         <h1 className="font-bold text-lg">STATEMENT NO. 4</h1>
         {/* {sector && (
           <p className="text-sm font-medium text-gray-600">Sector: {sector}</p>
@@ -85,9 +85,9 @@ const Statement4 = ({ sector, dateRange }) => {
         </h2>
       </div>
 
-      <hr className="statement4-hr w-full mb-4 bg-black" />
+      {/* <hr className="statement4-hr w-full mb-4 bg-black" /> */}
 
-      <div className="statement4-table-wrap w-full overflow-x-auto my-8">
+      <div className="statement4-table-wrap w-full overflow-x-auto my-4">
         <table className="min-w-280 mx-4 border border-black text-[11px] text-center">
           <thead>
             <tr>
@@ -123,7 +123,7 @@ const Statement4 = ({ sector, dateRange }) => {
 
             {rows?.map((item) => (
               <tr key={item.id} className="border">
-                <td className="border px-4 py-2 text-left font-medium">
+                <td className="border px-4 py-1 text-left font-medium">
                   {item.loans}
                 </td>
                 <AmountCell value={item.april} />
@@ -137,7 +137,7 @@ const Statement4 = ({ sector, dateRange }) => {
             {/* Total row */}
             {rows && rows.length > 0 && (
               <tr className="bg-gray-300 border">
-                <td className="border px-3 py-3 text-left font-bold tracking-wide text-[10px] leading-snug">
+                <td className="border px-3 py-1 text-left font-bold tracking-wide text-[10px] leading-snug">
                   Total Loan disbursed to Autonomous Council Employees under
                   Major Head 661 - Loans &amp; Advances to Autonomous Council
                   Employees
@@ -153,9 +153,9 @@ const Statement4 = ({ sector, dateRange }) => {
         </table>
       </div>
 
-      <hr className="statement4-hr w-full mb-4 bg-black" />
+      {/* <hr className="statement4-hr w-full mb-4 bg-black" /> */}
 
-      <div className="px-4 py-2 text-start tracking-wide">
+      <div className="px-4  text-start tracking-wide">
         <p className="font-semibold">Explanatory Notes</p>
       </div>
     </div>

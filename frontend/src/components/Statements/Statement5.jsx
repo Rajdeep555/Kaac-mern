@@ -104,6 +104,16 @@ const Statement5 = ({ sector, dateRange }) => {
           .print-container td {
             padding: 1px 3px !important;
           }
+          /* 🔸 NEW — more breathing room between "Explanatory Notes"
+             and the signature block specifically for Statement 5.
+             Same scoping logic as above: this only overrides
+             .print-footer's margin-top while this <style> tag exists
+             in the DOM, i.e. only while Statement 5 is the one being
+             printed — Statements 1–4/6/7 keep the shared 45px value
+             from TrackStatements.jsx untouched. */
+          .print-footer {
+            margin-top: 110px !important;
+          }
         }
       `}</style>
 

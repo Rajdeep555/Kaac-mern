@@ -106,7 +106,7 @@ const PrintFooter = () => (
     style={{
       display: "flex",
       justifyContent: "space-between",
-      marginTop: "150px",
+      marginTop: "100px",
       padding: "0 20px",
       fontStyle: "italic",
       fontWeight: 600,
@@ -321,7 +321,7 @@ const TrackStatements = () => {
              the block from being split across a page boundary if it
              still needs to move. */
           .print-footer {
-            margin-top: 45px !important;
+            margin-top: 75px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
